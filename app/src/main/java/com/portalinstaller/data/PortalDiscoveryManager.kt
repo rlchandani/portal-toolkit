@@ -1,6 +1,8 @@
 package com.portalinstaller.data
 
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.LinkAddress
 import com.portalinstaller.R
 import dadb.AdbKeyPair
 import dadb.AdbStream
@@ -13,13 +15,13 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import java.io.IOException
-import java.net.InetAddress
 import java.net.InetSocketAddress
-import java.net.NetworkInterface
 import java.net.Socket
 import java.util.concurrent.atomic.AtomicInteger
 
 private const val DISCOVERY_CONNECT_TIMEOUT_MS = 500
+private const val DISCOVERY_BATCH_SIZE = 48
+private const val MAX_DISCOVERY_HOSTS = 65_534
 
 private class ReflectiveTcpDadb(
     private val connection: Any
@@ -67,30 +69,34 @@ class PortalDiscoveryManager(
     ): Result<List<DiscoveredPortal>> {
         return withContext(Dispatchers.IO) {
             runCatching {
-                val subnetPrefix = findSubnetPrefix()
+                val hosts = findLocalNetworkHosts(context)
                     ?: error(context.getString(R.string.discovery_network_unavailable))
 
                 val keyPair = AdbKeyPairProvider.getOrCreate(context)
-                val hosts = (1..254).map { "$subnetPrefix.$it" }
                 val total = hosts.size
                 val scanned = AtomicInteger(0)
                 val found = AtomicInteger(0)
                 val semaphore = Semaphore(24)
 
                 val results = coroutineScope {
-                    hosts.map { ip ->
-                        async {
-                            semaphore.withPermit {
-                                val portal = probePortal(ip, port, keyPair)
-                                val scannedNow = scanned.incrementAndGet()
-                                if (portal != null) {
-                                    found.incrementAndGet()
+                    buildList {
+                        hosts.chunked(DISCOVERY_BATCH_SIZE).forEach { batch ->
+                            val batchResults = batch.map { ip ->
+                                async {
+                                    semaphore.withPermit {
+                                        val portal = probePortal(ip, port, keyPair)
+                                        val scannedNow = scanned.incrementAndGet()
+                                        if (portal != null) {
+                                            found.incrementAndGet()
+                                        }
+                                        onProgress(scannedNow, total, found.get())
+                                        portal
+                                    }
                                 }
-                                onProgress(scannedNow, total, found.get())
-                                portal
-                            }
+                            }.awaitAll()
+                            addAll(batchResults)
                         }
-                    }.awaitAll()
+                    }
                 }
 
                 results.filterNotNull().sortedBy { it.ip }
@@ -153,25 +159,55 @@ class PortalDiscoveryManager(
         return haystack.contains("portal") || haystack.contains("facebook") || haystack.contains("meta")
     }
 
-    private fun findSubnetPrefix(): String? {
-        val interfaces = NetworkInterface.getNetworkInterfaces()?.toList().orEmpty()
-        interfaces.forEach { networkInterface ->
-            if (!networkInterface.isUp || networkInterface.isLoopback || networkInterface.isVirtual) {
-                return@forEach
-            }
-            networkInterface.inetAddresses.toList()
-                .filterIsInstance<InetAddress>()
-                .mapNotNull { address ->
-                    val host = address.hostAddress ?: return@mapNotNull null
-                    if (host.contains(":") || host.startsWith("127.")) null else host
-                }
-                .forEach { host ->
-                    val lastDot = host.lastIndexOf('.')
-                    if (lastDot > 0) {
-                        return host.substring(0, lastDot)
-                    }
-                }
+    private fun findLocalNetworkHosts(context: Context): List<String>? {
+        val connectivityManager = context.getSystemService(ConnectivityManager::class.java)
+            ?: return null
+        val linkAddresses = connectivityManager
+            .getLinkProperties(connectivityManager.activeNetwork)
+            ?.linkAddresses
+            .orEmpty()
+
+        return linkAddresses
+            .asSequence()
+            .filter { it.address.address.size == IPV4_ADDRESS_BYTES }
+            .flatMap { it.hostAddresses().asSequence() }
+            .distinct()
+            .toList()
+            .ifEmpty { null }
+    }
+
+    private fun LinkAddress.hostAddresses(): List<String> {
+        val addressBytes = address.address
+        val prefixLength = prefixLength.coerceIn(0, IPV4_ADDRESS_BITS)
+        val address = addressBytes.fold(0L) { value, byte ->
+            (value shl BYTE_BITS) or (byte.toLong() and BYTE_MASK)
         }
-        return null
+        val hostBits = IPV4_ADDRESS_BITS - prefixLength
+        val subnetMask = if (prefixLength == 0) 0L else MAX_IPV4_ADDRESS shl hostBits
+        val network = address and subnetMask
+        val broadcast = network or (MAX_IPV4_ADDRESS ushr prefixLength)
+        val hostCount = broadcast - network - 1
+
+        if (hostCount !in 1..MAX_DISCOVERY_HOSTS) return emptyList()
+
+        return ((network + 1) until broadcast)
+            .filter { it != address }
+            .map(::toIpv4Address)
+    }
+
+    private fun toIpv4Address(address: Long): String {
+        return (IPV4_OCTETS - 1 downTo 0)
+            .joinToString(".") { index ->
+                ((address shr (index * BYTE_BITS)) and BYTE_MASK).toString()
+            }
+    }
+
+    private companion object {
+        const val IPV4_ADDRESS_BYTES = 4
+        const val IPV4_ADDRESS_BITS = 32
+        const val IPV4_OCTETS = 4
+        const val BYTE_BITS = 8
+        const val BYTE_MASK = 0xffL
+        const val MAX_IPV4_ADDRESS = 0xffffffffL
     }
 }

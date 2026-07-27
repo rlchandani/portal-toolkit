@@ -11,6 +11,7 @@ import android.os.Build
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -45,9 +46,10 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Tab
@@ -67,14 +69,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.portalinstaller.R
@@ -83,10 +91,13 @@ import com.portalinstaller.data.DeviceStatus
 import com.portalinstaller.data.DiscoveredPortal
 import com.portalinstaller.data.InstalledApp
 import com.portalinstaller.data.PortalDeviceConfig
+import com.portalinstaller.data.SavedPortal
+import com.portalinstaller.data.SavedPortalStore
 import com.portalinstaller.data.UsbPortalHelper
 import com.portalinstaller.data.UsbPortalStatus
 import com.portalinstaller.util.AppLanguage
 import com.portalinstaller.util.AppLanguageManager
+import com.portalinstaller.viewmodel.BackupState
 import com.portalinstaller.viewmodel.ConnectionState
 import com.portalinstaller.viewmodel.HistoryEntry
 import com.portalinstaller.viewmodel.InstallState
@@ -138,11 +149,14 @@ fun MainScreen(viewModel: PortalViewModel = viewModel()) {
     val portalPackagesError by viewModel.portalPackagesError.collectAsStateWithLifecycle()
     val deviceStatus by viewModel.deviceStatus.collectAsStateWithLifecycle()
     val portalDiscoveryState by viewModel.portalDiscoveryState.collectAsStateWithLifecycle()
+    val backupState by viewModel.backupState.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
-    var selectedTab by remember { mutableIntStateOf(0) }
+    var selectedTab by remember { mutableIntStateOf(2) }
     var usbRefreshTrigger by remember { mutableIntStateOf(0) }
+    var showPortalScanner by remember { mutableStateOf(false) }
     var selectedLanguage by remember { mutableStateOf(AppLanguageManager.getSavedLanguage(context)) }
+    var savedPortals by remember { mutableStateOf(SavedPortalStore.load(context)) }
 
     // Pastram ultimul IP si port folosite pentru reconectare rapida.
     val prefs = remember {
@@ -166,19 +180,27 @@ fun MainScreen(viewModel: PortalViewModel = viewModel()) {
     DisposableEffect(context) {
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(ctx: Context?, intent: Intent?) {
-                if (intent?.action == UsbPortalHelper.ACTION_USB_PERMISSION) {
+                when (intent?.action) {
+                    UsbPortalHelper.ACTION_USB_PERMISSION,
+                    android.hardware.usb.UsbManager.ACTION_USB_DEVICE_ATTACHED,
+                    android.hardware.usb.UsbManager.ACTION_USB_DEVICE_DETACHED -> {
                     usbRefreshTrigger++
+                    }
                 }
             }
         }
 
-        val filter = IntentFilter(UsbPortalHelper.ACTION_USB_PERMISSION)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            @Suppress("DEPRECATION")
-            context.registerReceiver(receiver, filter)
+        val filter = IntentFilter().apply {
+            addAction(UsbPortalHelper.ACTION_USB_PERMISSION)
+            addAction(android.hardware.usb.UsbManager.ACTION_USB_DEVICE_ATTACHED)
+            addAction(android.hardware.usb.UsbManager.ACTION_USB_DEVICE_DETACHED)
         }
+        ContextCompat.registerReceiver(
+            context,
+            receiver,
+            filter,
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
 
         onDispose {
             runCatching { context.unregisterReceiver(receiver) }
@@ -197,6 +219,18 @@ fun MainScreen(viewModel: PortalViewModel = viewModel()) {
         contract = ActivityResultContracts.GetMultipleContents()
     ) { uris: List<Uri> ->
         viewModel.setSelectedPhotoUris(uris)
+    }
+
+    val backupCreateLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/zip")
+    ) { uri: Uri? ->
+        uri?.let { viewModel.createBackup(context, it) }
+    }
+
+    val backupRestoreLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        uri?.let { viewModel.restoreBackup(context, it) }
     }
 
     // Initializeaza lista de aplicatii la prima incarcare.
@@ -223,6 +257,33 @@ fun MainScreen(viewModel: PortalViewModel = viewModel()) {
     LaunchedEffect(Unit) {
         if (ipAddress.isNotBlank() && connectionState is ConnectionState.Disconnected) {
             viewModel.connect(context, ipAddress, port.toIntOrNull() ?: 5555)
+        }
+    }
+
+    LaunchedEffect(connectionState, connectionMethod) {
+        if (connectionState is ConnectionState.Connected &&
+            connectionMethod == context.getString(R.string.connection_method_wifi) &&
+            ipAddress.isNotBlank()
+        ) {
+            val connectedPort = port.toIntOrNull() ?: 5555
+            val discovered = (portalDiscoveryState as? PortalDiscoveryState.Success)
+                ?.portals
+                ?.firstOrNull { it.ip == ipAddress && it.port == connectedPort }
+            val existing = savedPortals.firstOrNull {
+                it.ip == ipAddress && it.port == connectedPort
+            }
+            savedPortals = SavedPortalStore.upsert(
+                context,
+                SavedPortal(
+                    name = discovered?.displayName
+                        ?: existing?.name
+                        ?: context.getString(R.string.saved_portal_default_name, ipAddress),
+                    ip = ipAddress,
+                    port = connectedPort,
+                    model = discovered?.model ?: existing?.model.orEmpty(),
+                    lastConnectedAt = System.currentTimeMillis()
+                )
+            )
         }
     }
 
@@ -310,37 +371,58 @@ fun MainScreen(viewModel: PortalViewModel = viewModel()) {
         }
     }
 
+    LaunchedEffect(backupState) {
+        when (val state = backupState) {
+            is BackupState.Success -> {
+                snackbarHostState.showSnackbar(state.message)
+                viewModel.clearBackupState()
+            }
+            is BackupState.Failed -> {
+                snackbarHostState.showSnackbar(state.message)
+                viewModel.clearBackupState()
+            }
+            else -> Unit
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(title = { AppBrandHeader() })
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) }
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        bottomBar = {
+            NavigationBar {
+                val destinations = listOf(
+                    Triple(R.string.tab_devices, 2, 2),
+                    Triple(R.string.tab_apps, 0, 0),
+                    Triple(R.string.tab_photos, 1, 1),
+                    Triple(R.string.tab_more, 3, 3)
+                )
+                destinations.forEach { (label, screen, glyph) ->
+                    NavigationBarItem(
+                        selected = selectedTab == screen,
+                        onClick = {
+                            selectedTab = screen
+                            if (screen == 0 &&
+                                connectionState is ConnectionState.Connected
+                            ) {
+                                viewModel.loadPortalPackages(context)
+                            }
+                        },
+                        icon = {
+                            NavigationGlyph(glyph, selectedTab == screen)
+                        },
+                        label = { Text(stringResource(label)) }
+                    )
+                }
+            }
+        }
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            // Sectiunea de conectare
-            ConnectionSection(
-                ipAddress = ipAddress,
-                port = port,
-                connectionState = connectionState,
-                connectionMethod = connectionMethod,
-                deviceStatus = deviceStatus,
-                onIpChange = { ipAddress = it },
-                onPortChange = { port = it },
-                onConnect = {
-                    prefs.edit()
-                        .putString("last_ip", ipAddress)
-                        .putString("last_port", port)
-                        .apply()
-                    viewModel.connect(context, ipAddress, port.toIntOrNull() ?: 5555)
-                },
-                onDisconnect = { viewModel.disconnect() }
-            )
-
-            // Bara de progres in timpul instalarii
             if (installState is InstallState.Installing) {
                 val state = installState as InstallState.Installing
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
@@ -356,97 +438,103 @@ fun MainScreen(viewModel: PortalViewModel = viewModel()) {
                 )
             }
 
-            // Tab-uri scrollabile orizontal pentru ecrane mici.
-            ScrollableTabRow(selectedTabIndex = selectedTab, edgePadding = 12.dp) {
-                Tab(
-                    selected = selectedTab == 0,
-                    onClick = { selectedTab = 0 },
-                    text = { Text(stringResource(R.string.tab_apps)) }
-                )
-                Tab(
-                    selected = selectedTab == 1,
-                    onClick = { selectedTab = 1 },
-                    text = { Text(stringResource(R.string.tab_photos)) }
-                )
-                Tab(
-                    selected = selectedTab == 2,
-                    onClick = { selectedTab = 2 },
-                    text = { Text(stringResource(R.string.tab_history)) }
-                )
-                Tab(
-                    selected = selectedTab == 3,
-                    onClick = { selectedTab = 3 },
-                    text = { Text(stringResource(R.string.tab_wireless_adb)) }
-                )
-                Tab(
-                    selected = selectedTab == 4,
-                    onClick = {
-                        selectedTab = 4
-                        viewModel.loadPortalPackages(context)
-                    },
-                    text = { Text(stringResource(R.string.tab_portal_apps)) }
-                )
-                Tab(
-                    selected = selectedTab == 5,
-                    onClick = { selectedTab = 5 },
-                    text = { Text(stringResource(R.string.tab_settings)) }
-                )
-            }
+            val isWifiConnected = connectionState is ConnectionState.Connected &&
+                connectionMethod == context.getString(R.string.connection_method_wifi)
+            val activePortalName = savedPortals.firstOrNull {
+                it.ip == ipAddress && it.port == (port.toIntOrNull() ?: 5555)
+            }?.name
 
-            // Continut tab-uri
             when (selectedTab) {
-                0 -> InstalledAppsTab(
+                0 -> AppsHubTab(
+                    isWifiConnected = isWifiConnected,
+                    activePortalName = activePortalName,
+                    activePortalAddress = "$ipAddress:${port.ifBlank { "5555" }}",
                     apps = installedApps,
                     connectionState = connectionState,
                     installState = installState,
                     context = context,
                     selectedUri = selectedApkUri,
+                    portalPackages = portalPackages,
+                    isLoadingPortalPackages = isLoadingPortalPackages,
+                    uninstallState = uninstallState,
+                    onOpenDevices = { selectedTab = 2 },
                     onPickFile = {
                         apkPickerLauncher.launch("application/vnd.android.package-archive")
                     },
                     onInstall = { app -> viewModel.installApp(context, app) },
-                    onInstallCustomApk = { uri -> viewModel.installApkFromUri(context, uri) }
+                    onInstallCustomApk = { uri -> viewModel.installApkFromUri(context, uri) },
+                    onRefreshPortalApps = { viewModel.loadPortalPackages(context) },
+                    onUninstall = { packageName -> viewModel.uninstallApp(context, packageName) }
                 )
                 1 -> PhotosTab(
                     selectedUris = selectedPhotoUris,
-                    connectionState = connectionState,
+                    isWifiConnected = isWifiConnected,
                     photoUploadState = photoUploadState,
+                    onOpenDevices = { selectedTab = 2 },
                     onPickPhotos = { photoPickerLauncher.launch("image/*") },
                     onUpload = { viewModel.uploadPhotos(context) }
                 )
-                2 -> HistoryTab(history = operationHistory)
-                3 -> WirelessAdbTab(
+                2 -> DevicesTab(
+                    ipAddress = ipAddress,
+                    port = port,
                     connectionState = connectionState,
+                    connectionMethod = connectionMethod,
+                    deviceStatus = deviceStatus,
+                    savedPortals = savedPortals,
                     usbStatus = usbStatus,
                     wirelessAdbState = wirelessAdbState,
-                    discoveryState = portalDiscoveryState,
-                    port = port,
+                    onIpChange = { ipAddress = it },
+                    onPortChange = { port = it },
+                    onConnectManual = {
+                        prefs.edit()
+                            .putString("last_ip", ipAddress)
+                            .putString("last_port", port)
+                            .apply()
+                        viewModel.connect(context, ipAddress, port.toIntOrNull() ?: 5555)
+                    },
+                    onConnectSaved = { saved ->
+                        ipAddress = saved.ip
+                        port = saved.port.toString()
+                        prefs.edit()
+                            .putString("last_ip", saved.ip)
+                            .putString("last_port", saved.port.toString())
+                            .apply()
+                        viewModel.connect(context, saved.ip, saved.port)
+                    },
+                    onRemoveSaved = { saved ->
+                        savedPortals = SavedPortalStore.remove(context, saved.id)
+                    },
+                    onDisconnect = { viewModel.disconnect() },
+                    onScanPortals = {
+                        showPortalScanner = true
+                        viewModel.discoverWirelessPortals(context, port.toIntOrNull() ?: 5555)
+                    },
                     onRefreshUsb = { usbRefreshTrigger++ },
                     onRequestUsbPermission = {
-                        if (UsbPortalHelper.requestPermission(context)) {
-                            // refresh will also happen via BroadcastReceiver after user response
-                        } else {
+                        if (!UsbPortalHelper.requestPermission(context)) {
                             usbRefreshTrigger++
                         }
                     },
                     onConnectUsb = { viewModel.connectUsb(context) },
-                    onEnableWirelessAdb = { viewModel.enableWirelessAdb(context, port.toIntOrNull() ?: 5555) },
-                    onDiscoverPortals = { viewModel.discoverWirelessPortals(context, port.toIntOrNull() ?: 5555) },
-                    onConnectDiscoveredPortal = { portal ->
-                        ipAddress = portal.ip
-                        prefs.edit().putString("last_ip", portal.ip).putString("last_port", portal.port.toString()).apply()
-                        viewModel.connectDiscoveredPortal(context, portal)
+                    onEnableWirelessAdb = {
+                        viewModel.enableWirelessAdb(context, port.toIntOrNull() ?: 5555)
                     }
                 )
-                4 -> PortalAppsTab(
-                    packages = portalPackages,
-                    isLoading = isLoadingPortalPackages,
-                    uninstallState = uninstallState,
-                    onRefresh = { viewModel.loadPortalPackages(context) },
-                    onUninstall = { packageName -> viewModel.uninstallApp(context, packageName) }
-                )
-                5 -> SettingsTab(
+                3 -> MoreTab(
                     context = context,
+                    history = operationHistory,
+                    isConnected = isWifiConnected,
+                    backupState = backupState,
+                    onCreateBackup = {
+                        backupCreateLauncher.launch(
+                            "portal-backup-${System.currentTimeMillis()}.zip"
+                        )
+                    },
+                    onRestoreBackup = {
+                        backupRestoreLauncher.launch(
+                            arrayOf("application/zip", "application/octet-stream")
+                        )
+                    },
                     selectedLanguage = selectedLanguage,
                     onSelectLanguage = { language ->
                         if (selectedLanguage != language) {
@@ -456,6 +544,118 @@ fun MainScreen(viewModel: PortalViewModel = viewModel()) {
                         }
                     }
                 )
+            }
+        }
+    }
+
+    if (showPortalScanner) {
+        PortalScannerDialog(
+            discoveryState = portalDiscoveryState,
+            port = port,
+            onScan = {
+                viewModel.discoverWirelessPortals(context, port.toIntOrNull() ?: 5555)
+            },
+            onConnect = { portal ->
+                ipAddress = portal.ip
+                prefs.edit()
+                    .putString("last_ip", portal.ip)
+                    .putString("last_port", portal.port.toString())
+                    .apply()
+                showPortalScanner = false
+                viewModel.connectDiscoveredPortal(context, portal)
+            },
+            onDismiss = { showPortalScanner = false }
+        )
+    }
+}
+
+@Composable
+private fun NavigationGlyph(index: Int, selected: Boolean) {
+    val color = if (selected) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
+    Canvas(modifier = Modifier.size(24.dp)) {
+        val strokeWidth = 1.8.dp.toPx()
+        val stroke = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+        val inset = 3.dp.toPx()
+
+        when (index) {
+            0 -> {
+                val cellSize = 7.dp.toPx()
+                val gap = 4.dp.toPx()
+                listOf(
+                    Offset(inset, inset),
+                    Offset(inset + cellSize + gap, inset),
+                    Offset(inset, inset + cellSize + gap),
+                    Offset(inset + cellSize + gap, inset + cellSize + gap)
+                ).forEach { topLeft ->
+                    drawRoundRect(
+                        color = color,
+                        topLeft = topLeft,
+                        size = Size(cellSize, cellSize),
+                        cornerRadius = CornerRadius(1.5.dp.toPx()),
+                        style = stroke
+                    )
+                }
+            }
+
+            1 -> {
+                drawRoundRect(
+                    color = color,
+                    topLeft = Offset(inset, 4.dp.toPx()),
+                    size = Size(18.dp.toPx(), 16.dp.toPx()),
+                    cornerRadius = CornerRadius(2.dp.toPx()),
+                    style = stroke
+                )
+                drawCircle(
+                    color = color,
+                    radius = 1.5.dp.toPx(),
+                    center = Offset(17.dp.toPx(), 8.dp.toPx())
+                )
+                drawLine(
+                    color = color,
+                    start = Offset(5.dp.toPx(), 17.dp.toPx()),
+                    end = Offset(10.dp.toPx(), 12.dp.toPx()),
+                    strokeWidth = strokeWidth,
+                    cap = StrokeCap.Round
+                )
+                drawLine(
+                    color = color,
+                    start = Offset(10.dp.toPx(), 12.dp.toPx()),
+                    end = Offset(18.dp.toPx(), 19.dp.toPx()),
+                    strokeWidth = strokeWidth,
+                    cap = StrokeCap.Round
+                )
+            }
+
+            2 -> {
+                drawRoundRect(
+                    color = color,
+                    topLeft = Offset(3.dp.toPx(), 5.dp.toPx()),
+                    size = Size(13.dp.toPx(), 15.dp.toPx()),
+                    cornerRadius = CornerRadius(2.dp.toPx()),
+                    style = stroke
+                )
+                drawRoundRect(
+                    color = color,
+                    topLeft = Offset(11.dp.toPx(), 3.dp.toPx()),
+                    size = Size(10.dp.toPx(), 13.dp.toPx()),
+                    cornerRadius = CornerRadius(2.dp.toPx()),
+                    style = stroke
+                )
+            }
+
+            else -> {
+                listOf(6.dp, 12.dp, 18.dp).forEach { x ->
+                    drawCircle(
+                        color = color,
+                        radius = 1.8.dp.toPx(),
+                        center = Offset(x.toPx(), 12.dp.toPx())
+                    )
+                }
             }
         }
     }
@@ -509,6 +709,335 @@ private fun AppBrandHeader() {
 }
 
 @Composable
+private fun AppsHubTab(
+    isWifiConnected: Boolean,
+    activePortalName: String?,
+    activePortalAddress: String,
+    apps: List<InstalledApp>,
+    connectionState: ConnectionState,
+    installState: InstallState,
+    context: Context,
+    selectedUri: Uri?,
+    portalPackages: List<String>,
+    isLoadingPortalPackages: Boolean,
+    uninstallState: UninstallState,
+    onOpenDevices: () -> Unit,
+    onPickFile: () -> Unit,
+    onInstall: (InstalledApp) -> Unit,
+    onInstallCustomApk: (Uri) -> Unit,
+    onRefreshPortalApps: () -> Unit,
+    onUninstall: (String) -> Unit
+) {
+    var selectedSection by remember { mutableIntStateOf(0) }
+
+    if (!isWifiConnected) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(24.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = stringResource(R.string.no_portal_connected_title),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = stringResource(R.string.no_portal_connected_description),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(
+                onClick = onOpenDevices,
+                shape = RoundedCornerShape(18.dp)
+            ) {
+                Text(stringResource(R.string.open_devices))
+            }
+        }
+        return
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+            )
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(9.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary)
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = activePortalName ?: stringResource(R.string.active_portal),
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = activePortalAddress,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                TextButton(onClick = onOpenDevices) {
+                    Text(stringResource(R.string.change))
+                }
+            }
+        }
+
+        TabRow(selectedTabIndex = selectedSection) {
+            Tab(
+                selected = selectedSection == 0,
+                onClick = { selectedSection = 0 },
+                text = { Text(stringResource(R.string.apps_from_phone)) }
+            )
+            Tab(
+                selected = selectedSection == 1,
+                onClick = {
+                    selectedSection = 1
+                    onRefreshPortalApps()
+                },
+                text = { Text(stringResource(R.string.apps_on_portal)) }
+            )
+        }
+
+        if (selectedSection == 0) {
+            InstalledAppsTab(
+                apps = apps,
+                connectionState = connectionState,
+                installState = installState,
+                context = context,
+                selectedUri = selectedUri,
+                onPickFile = onPickFile,
+                onInstall = onInstall,
+                onInstallCustomApk = onInstallCustomApk
+            )
+        } else {
+            PortalAppsTab(
+                packages = portalPackages,
+                isLoading = isLoadingPortalPackages,
+                uninstallState = uninstallState,
+                onRefresh = onRefreshPortalApps,
+                onUninstall = onUninstall
+            )
+        }
+    }
+}
+
+@Composable
+private fun DevicesTab(
+    ipAddress: String,
+    port: String,
+    connectionState: ConnectionState,
+    connectionMethod: String?,
+    deviceStatus: DeviceStatus?,
+    savedPortals: List<SavedPortal>,
+    usbStatus: UsbPortalStatus,
+    wirelessAdbState: WirelessAdbState,
+    onIpChange: (String) -> Unit,
+    onPortChange: (String) -> Unit,
+    onConnectManual: () -> Unit,
+    onConnectSaved: (SavedPortal) -> Unit,
+    onRemoveSaved: (SavedPortal) -> Unit,
+    onDisconnect: () -> Unit,
+    onScanPortals: () -> Unit,
+    onRefreshUsb: () -> Unit,
+    onRequestUsbPermission: () -> Unit,
+    onConnectUsb: () -> Unit,
+    onEnableWirelessAdb: () -> Unit
+) {
+    var selectedSection by remember { mutableIntStateOf(0) }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        TabRow(selectedTabIndex = selectedSection) {
+            Tab(
+                selected = selectedSection == 0,
+                onClick = { selectedSection = 0 },
+                text = { Text(stringResource(R.string.devices_wifi)) }
+            )
+            Tab(
+                selected = selectedSection == 1,
+                onClick = { selectedSection = 1 },
+                text = { Text(stringResource(R.string.devices_usb_setup)) }
+            )
+        }
+
+        if (selectedSection == 0) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                item {
+                    ConnectionSection(
+                        ipAddress = ipAddress,
+                        port = port,
+                        connectionState = connectionState,
+                        connectionMethod = connectionMethod,
+                        deviceStatus = deviceStatus,
+                        onIpChange = onIpChange,
+                        onPortChange = onPortChange,
+                        onConnect = onConnectManual,
+                        onDisconnect = onDisconnect,
+                        onScanPortals = onScanPortals
+                    )
+                }
+                item {
+                    SavedPortalsCard(
+                        portals = savedPortals,
+                        currentAddress = if (connectionState is ConnectionState.Connected) {
+                            "$ipAddress:${port.ifBlank { "5555" }}"
+                        } else {
+                            null
+                        },
+                        onConnect = onConnectSaved,
+                        onRemove = onRemoveSaved
+                    )
+                }
+            }
+        } else {
+            WirelessAdbTab(
+                connectionState = connectionState,
+                usbStatus = usbStatus,
+                wirelessAdbState = wirelessAdbState,
+                port = port,
+                onRefreshUsb = onRefreshUsb,
+                onRequestUsbPermission = onRequestUsbPermission,
+                onConnectUsb = onConnectUsb,
+                onEnableWirelessAdb = onEnableWirelessAdb
+            )
+        }
+    }
+}
+
+@Composable
+private fun SavedPortalsCard(
+    portals: List<SavedPortal>,
+    currentAddress: String?,
+    onConnect: (SavedPortal) -> Unit,
+    onRemove: (SavedPortal) -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        shape = SectionCardShape
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Text(
+                text = stringResource(R.string.saved_portals_title),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Medium
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            if (portals.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.saved_portals_empty),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                portals.forEachIndexed { index, portal ->
+                    if (index > 0) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                    val isCurrent = currentAddress == portal.id
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isCurrent) {
+                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f)
+                            } else {
+                                MaterialTheme.colorScheme.surface
+                            }
+                        )
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = portal.name,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    modifier = Modifier.weight(1f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                if (isCurrent) {
+                                    Text(
+                                        text = stringResource(R.string.active),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                            Text(
+                                text = portal.id,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            if (portal.model.isNotBlank() && portal.model != portal.name) {
+                                Text(
+                                    text = portal.model,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedButton(
+                                    onClick = { onConnect(portal) },
+                                    enabled = !isCurrent,
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(14.dp)
+                                ) {
+                                    Text(
+                                        if (isCurrent) {
+                                            stringResource(R.string.active)
+                                        } else {
+                                            stringResource(R.string.connect)
+                                        }
+                                    )
+                                }
+                                TextButton(
+                                    onClick = { onRemove(portal) },
+                                    enabled = !isCurrent
+                                ) {
+                                    Text(stringResource(R.string.remove))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun ConnectionSection(
     ipAddress: String,
     port: String,
@@ -518,7 +1047,8 @@ private fun ConnectionSection(
     onIpChange: (String) -> Unit,
     onPortChange: (String) -> Unit,
     onConnect: () -> Unit,
-    onDisconnect: () -> Unit
+    onDisconnect: () -> Unit,
+    onScanPortals: () -> Unit
 ) {
     val isConnected = connectionState is ConnectionState.Connected
     val ipSummary = ipAddress.ifBlank { "-" }
@@ -537,107 +1067,111 @@ private fun ConnectionSection(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
                 )
             ) {
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                        .padding(horizontal = 14.dp, vertical = 10.dp)
                 ) {
                     Row(
-                        modifier = Modifier.weight(1f),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(10.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primary)
-                        )
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = stringResource(R.string.connection_status_connected),
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.primary
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(10.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primary)
                             )
-                            Text(
-                                text = "$ipSummary:$portSummary",
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Medium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = stringResource(R.string.connection_status_connected),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Text(
+                                    text = "$ipSummary:$portSummary",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                        TextButton(
+                            onClick = onDisconnect,
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(stringResource(R.string.disconnect))
                         }
                     }
-                    TextButton(
-                        onClick = onDisconnect,
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        Text(stringResource(R.string.disconnect))
-                    }
-                }
-            }
 
-            if (deviceStatus != null) {
-                Spacer(modifier = Modifier.height(10.dp))
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = SectionCardShape,
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
-                    )
-                ) {
-                    Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                    if (deviceStatus != null) {
+                        Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = connectionMethod ?: stringResource(R.string.connection_method_adb),
-                            style = MaterialTheme.typography.labelLarge,
+                            style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.primary
                         )
-                        Spacer(modifier = Modifier.height(6.dp))
+                        Spacer(modifier = Modifier.height(4.dp))
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            Row(
-                                modifier = Modifier.weight(1f),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "${stringResource(R.string.storage_label)}:",
-                                    style = MaterialTheme.typography.bodySmall,
+                                    text = stringResource(R.string.storage_label),
+                                    style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 Text(
                                     text = formatStorage(deviceStatus),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Medium
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
-                            Row(
-                                modifier = Modifier.weight(1f),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "${stringResource(R.string.ram_label)}:",
-                                    style = MaterialTheme.typography.bodySmall,
+                                    text = stringResource(R.string.ram_label),
+                                    style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 Text(
                                     text = formatRam(deviceStatus.ramFreeBytes),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Medium
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }
                     }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = onScanPortals,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Text(stringResource(R.string.network_portals_title))
+                    }
                 }
             }
         } else {
+            Text(
+                text = stringResource(R.string.connect_over_wifi),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -739,6 +1273,16 @@ private fun ConnectionSection(
                     }
                 }
             }
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedButton(
+                onClick = onScanPortals,
+                modifier = Modifier.fillMaxWidth(),
+                enabled = connectionState !is ConnectionState.Connecting,
+                shape = RoundedCornerShape(18.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
+            ) {
+                Text(stringResource(R.string.network_portals_title))
+            }
         }
     }
 }
@@ -781,12 +1325,10 @@ private fun InstalledAppsTab(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
         ) {
             OutlinedTextField(
                 value = searchQuery,
@@ -810,24 +1352,34 @@ private fun InstalledAppsTab(
                     }
                 },
                 modifier = Modifier
-                    .weight(1f)
+                    .fillMaxWidth()
                     .height(56.dp)
             )
-            OutlinedButton(
-                onClick = { sortBySize = !sortBySize },
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.height(56.dp),
-                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp)
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text(sortLabel)
-            }
-            OutlinedButton(
-                onClick = onPickFile,
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.height(56.dp),
-                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp)
-            ) {
-                Text(stringResource(R.string.choose_apk_compact))
+                OutlinedButton(
+                    onClick = { sortBySize = !sortBySize },
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp)
+                ) {
+                    Text(sortLabel)
+                }
+                OutlinedButton(
+                    onClick = onPickFile,
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier
+                        .width(104.dp)
+                        .height(48.dp),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp)
+                ) {
+                    Text(stringResource(R.string.choose_apk_compact))
+                }
             }
         }
 
@@ -1006,18 +1558,14 @@ private fun WirelessAdbTab(
     connectionState: ConnectionState,
     usbStatus: UsbPortalStatus,
     wirelessAdbState: WirelessAdbState,
-    discoveryState: PortalDiscoveryState,
     port: String,
     onRefreshUsb: () -> Unit,
     onRequestUsbPermission: () -> Unit,
     onConnectUsb: () -> Unit,
-    onEnableWirelessAdb: () -> Unit,
-    onDiscoverPortals: () -> Unit,
-    onConnectDiscoveredPortal: (DiscoveredPortal) -> Unit
+    onEnableWirelessAdb: () -> Unit
 ) {
     val isConnected = connectionState is ConnectionState.Connected
     val isEnabling = wirelessAdbState is WirelessAdbState.Enabling
-    val isScanning = discoveryState is PortalDiscoveryState.Scanning
 
     LazyColumn(
         modifier = Modifier
@@ -1035,23 +1583,17 @@ private fun WirelessAdbTab(
                 )
             ) {
                 Column(modifier = Modifier.padding(14.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = stringResource(R.string.usb_portal_title),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Medium
-                        )
-                        OutlinedButton(
-                            onClick = onRefreshUsb,
-                            shape = RoundedCornerShape(18.dp)
-                        ) {
-                            Text(stringResource(R.string.refresh_usb))
-                        }
-                    }
+                    Text(
+                        text = stringResource(R.string.wireless_setup_title),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = stringResource(R.string.wireless_setup_description),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                     Spacer(modifier = Modifier.height(6.dp))
                     if (usbStatus.deviceLabel != null) {
                         Text(
@@ -1083,6 +1625,13 @@ private fun WirelessAdbTab(
                                 Text(stringResource(R.string.connect_usb))
                             }
                         }
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    TextButton(
+                        onClick = onRefreshUsb,
+                        modifier = Modifier.align(Alignment.End)
+                    ) {
+                        Text(stringResource(R.string.refresh_usb))
                     }
                 }
             }
@@ -1143,97 +1692,99 @@ private fun WirelessAdbTab(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = stringResource(R.string.wireless_setup_note),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Medium
+                    )
                 }
             }
         }
 
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = SectionCardShape,
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
-                )
-            ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = stringResource(R.string.network_portals_title),
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Text(
-                                text = stringResource(R.string.network_portals_description),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        OutlinedButton(
-                            onClick = onDiscoverPortals,
-                            enabled = !isScanning,
-                            shape = RoundedCornerShape(18.dp)
-                        ) {
-                            Text(
-                                if (isScanning) {
-                                    stringResource(R.string.searching)
-                                } else {
-                                    stringResource(R.string.search)
-                                }
-                            )
-                        }
-                    }
+    }
+}
 
-                    when (val state = discoveryState) {
-                        is PortalDiscoveryState.Idle -> Unit
-                        is PortalDiscoveryState.Scanning -> {
-                            Spacer(modifier = Modifier.height(10.dp))
-                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                text = stringResource(
-                                    R.string.discovery_progress,
-                                    state.scanned,
-                                    state.total,
-                                    state.found
-                                ),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+@Composable
+private fun PortalScannerDialog(
+    discoveryState: PortalDiscoveryState,
+    port: String,
+    onScan: () -> Unit,
+    onConnect: (DiscoveredPortal) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val isScanning = discoveryState is PortalDiscoveryState.Scanning
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.network_portals_title)) },
+        text = {
+            when (discoveryState) {
+                is PortalDiscoveryState.Idle -> {
+                    Text(stringResource(R.string.network_portals_description))
+                }
+                is PortalDiscoveryState.Scanning -> {
+                    Column {
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(
+                            stringResource(
+                                R.string.discovery_progress,
+                                discoveryState.scanned,
+                                discoveryState.total,
+                                discoveryState.found
                             )
-                        }
-                        is PortalDiscoveryState.Success -> {
-                            Spacer(modifier = Modifier.height(10.dp))
-                            if (state.portals.isEmpty()) {
-                                Text(
-                                    text = stringResource(
-                                        R.string.discovery_no_portals,
-                                        port.ifBlank { "5555" }
-                                    ),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                is PortalDiscoveryState.Success -> {
+                    if (discoveryState.portals.isEmpty()) {
+                        Text(
+                            stringResource(
+                                R.string.discovery_no_portals,
+                                port.ifBlank { "5555" }
+                            )
+                        )
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.heightIn(max = 360.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(
+                                items = discoveryState.portals,
+                                key = { "${it.ip}:${it.port}" }
+                            ) { portal ->
+                                DiscoveredPortalItem(
+                                    portal = portal,
+                                    onConnect = { onConnect(portal) }
                                 )
-                            } else {
-                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    state.portals.forEach { portal ->
-                                        DiscoveredPortalItem(
-                                            portal = portal,
-                                            onConnect = { onConnectDiscoveredPortal(portal) }
-                                        )
-                                    }
-                                }
                             }
                         }
-                        is PortalDiscoveryState.Failed -> Unit
                     }
                 }
+                is PortalDiscoveryState.Failed -> {
+                    Text(discoveryState.message)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onScan, enabled = !isScanning) {
+                Text(
+                    if (isScanning) {
+                        stringResource(R.string.searching)
+                    } else {
+                        stringResource(R.string.search)
+                    }
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
             }
         }
-    }
+    )
 }
 
 @Composable
@@ -1245,38 +1796,35 @@ private fun DiscoveredPortalItem(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp)
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(12.dp),
-            verticalAlignment = Alignment.Top
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = portal.displayName,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                text = "IP: ${portal.ip}:${portal.port}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            val subtitle = listOf(portal.brand, portal.model)
+                .filter { it.isNotBlank() && it != "unknown" }
+                .joinToString(" • ")
+            if (subtitle.isNotBlank()) {
                 Text(
-                    text = portal.displayName,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Medium
-                )
-                Text(
-                    text = "IP: ${portal.ip}:${portal.port}",
-                    style = MaterialTheme.typography.bodySmall,
+                    text = subtitle,
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                val subtitle = listOf(portal.brand, portal.model)
-                    .filter { it.isNotBlank() && it != "unknown" }
-                    .joinToString(" • ")
-                if (subtitle.isNotBlank()) {
-                    Text(
-                        text = subtitle,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
             }
-            Spacer(modifier = Modifier.width(8.dp))
             Button(
                 onClick = onConnect,
-                modifier = Modifier.width(132.dp),
+                modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
             ) {
@@ -1636,10 +2184,57 @@ private fun PortalAppsTab(
     }
 }
 
+@Composable
+private fun MoreTab(
+    context: Context,
+    history: List<HistoryEntry>,
+    isConnected: Boolean,
+    backupState: BackupState,
+    onCreateBackup: () -> Unit,
+    onRestoreBackup: () -> Unit,
+    selectedLanguage: AppLanguage,
+    onSelectLanguage: (AppLanguage) -> Unit
+) {
+    var selectedSection by remember { mutableIntStateOf(0) }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        TabRow(selectedTabIndex = selectedSection) {
+            Tab(
+                selected = selectedSection == 0,
+                onClick = { selectedSection = 0 },
+                text = { Text(stringResource(R.string.tab_history)) }
+            )
+            Tab(
+                selected = selectedSection == 1,
+                onClick = { selectedSection = 1 },
+                text = { Text(stringResource(R.string.tab_settings)) }
+            )
+        }
+
+        if (selectedSection == 0) {
+            HistoryTab(history)
+        } else {
+            SettingsTab(
+                context = context,
+                isConnected = isConnected,
+                backupState = backupState,
+                onCreateBackup = onCreateBackup,
+                onRestoreBackup = onRestoreBackup,
+                selectedLanguage = selectedLanguage,
+                onSelectLanguage = onSelectLanguage
+            )
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SettingsTab(
     context: Context,
+    isConnected: Boolean,
+    backupState: BackupState,
+    onCreateBackup: () -> Unit,
+    onRestoreBackup: () -> Unit,
     selectedLanguage: AppLanguage,
     onSelectLanguage: (AppLanguage) -> Unit
 ) {
@@ -1681,17 +2276,52 @@ private fun SettingsTab(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(12.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        AppLanguage.entries.forEach { language ->
-                            FilterChip(
-                                selected = selectedLanguage == language,
-                                onClick = { onSelectLanguage(language) },
-                                label = { Text(stringResource(language.labelRes)) }
+                    val systemLanguage = AppLanguage.SYSTEM
+                    FilterChip(
+                        selected = selectedLanguage == systemLanguage,
+                        onClick = { onSelectLanguage(systemLanguage) },
+                        label = {
+                            Text(
+                                text = stringResource(systemLanguage.labelRes),
+                                modifier = Modifier.fillMaxWidth(),
+                                maxLines = 1
                             )
-                        }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        AppLanguage.entries
+                            .filterNot { it == systemLanguage }
+                            .forEach { language ->
+                                FilterChip(
+                                    selected = selectedLanguage == language,
+                                    onClick = { onSelectLanguage(language) },
+                                    label = {
+                                        Text(
+                                            text = stringResource(language.labelRes),
+                                            modifier = Modifier.fillMaxWidth(),
+                                            maxLines = 1
+                                        )
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
                     }
                 }
             }
+        }
+
+        item {
+            BackupCard(
+                isConnected = isConnected,
+                backupState = backupState,
+                onCreateBackup = onCreateBackup,
+                onRestoreBackup = onRestoreBackup
+            )
         }
 
         item {
@@ -1727,10 +2357,100 @@ private fun SettingsTab(
 }
 
 @Composable
+private fun BackupCard(
+    isConnected: Boolean,
+    backupState: BackupState,
+    onCreateBackup: () -> Unit,
+    onRestoreBackup: () -> Unit
+) {
+    val isWorking = backupState is BackupState.Creating ||
+        backupState is BackupState.Restoring
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = SectionCardShape
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = stringResource(R.string.backup_title),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Medium
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = stringResource(R.string.backup_description),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+
+            if (isWorking) {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                Spacer(modifier = Modifier.height(8.dp))
+                val progressText = when (backupState) {
+                    is BackupState.Creating -> stringResource(
+                        R.string.backup_creating_progress,
+                        backupState.current,
+                        backupState.total,
+                        backupState.packageName
+                    )
+                    is BackupState.Restoring -> stringResource(
+                        R.string.backup_restoring_progress,
+                        backupState.current,
+                        backupState.total,
+                        backupState.packageName
+                    )
+                    else -> ""
+                }
+                Text(
+                    text = progressText,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+
+            Button(
+                onClick = onCreateBackup,
+                enabled = isConnected && !isWorking,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(stringResource(R.string.backup_create))
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+            OutlinedButton(
+                onClick = onRestoreBackup,
+                enabled = isConnected && !isWorking,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(stringResource(R.string.backup_restore))
+            }
+            if (!isConnected) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = stringResource(R.string.backup_connect_hint),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = stringResource(R.string.backup_limitations),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
 private fun PhotosTab(
     selectedUris: List<Uri>,
-    connectionState: ConnectionState,
+    isWifiConnected: Boolean,
     photoUploadState: PhotoUploadState,
+    onOpenDevices: () -> Unit,
     onPickPhotos: () -> Unit,
     onUpload: () -> Unit
 ) {
@@ -1740,7 +2460,33 @@ private fun PhotosTab(
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Spacer(modifier = Modifier.height(24.dp))
+        if (!isWifiConnected) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+                )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = stringResource(R.string.photos_connect_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.weight(1f)
+                    )
+                    TextButton(onClick = onOpenDevices) {
+                        Text(stringResource(R.string.open_devices))
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
 
         OutlinedButton(onClick = onPickPhotos) {
             Text(stringResource(R.string.select_photos))
@@ -1774,7 +2520,7 @@ private fun PhotosTab(
 
             Button(
                 onClick = onUpload,
-                enabled = connectionState is ConnectionState.Connected && !isUploading,
+                enabled = isWifiConnected && !isUploading,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 if (isUploading) {

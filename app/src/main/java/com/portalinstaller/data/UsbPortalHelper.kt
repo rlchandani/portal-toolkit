@@ -3,13 +3,15 @@ package com.portalinstaller.data
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.hardware.usb.UsbConstants
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
 import android.os.Build
 import com.portalinstaller.R
+import dadb.AdbKeyPair
 import dadb.Dadb
+import java.io.IOException
 import java.lang.reflect.InvocationTargetException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -25,10 +27,9 @@ object UsbPortalHelper {
 
     const val ACTION_USB_PERMISSION = "com.portalinstaller.USB_PERMISSION"
 
-    private const val ADB_INTERFACE_CLASS = UsbConstants.USB_CLASS_VENDOR_SPEC
-    private const val ADB_INTERFACE_SUBCLASS = 0x42
-    private const val ADB_INTERFACE_PROTOCOL = 0x01
     private const val META_VENDOR_ID = 11974
+    private const val USB_CONNECTION_ATTEMPTS = 3
+    private const val USB_RETRY_DELAY_MS = 400L
 
     fun getStatus(context: Context): UsbPortalStatus {
         val usbManager = context.getSystemService(Context.USB_SERVICE) as? UsbManager
@@ -114,11 +115,32 @@ object UsbPortalHelper {
                     error(context.getString(R.string.usb_permission_missing))
                 }
                 val keyPair = AdbKeyPairProvider.getOrCreate(context)
-                UsbAdbBridge.create(usbManager, device, keyPair)
+                connectWithRetries(usbManager, device, keyPair)
             }.recoverCatching { throwable ->
                 throw unwrapUsbError(context, throwable)
             }
         }
+    }
+
+    private suspend fun connectWithRetries(
+        usbManager: UsbManager,
+        device: UsbDevice,
+        keyPair: AdbKeyPair
+    ): Dadb {
+        var lastFailure: Throwable? = null
+
+        repeat(USB_CONNECTION_ATTEMPTS) { attempt ->
+            try {
+                return UsbAdbBridge.create(usbManager, device, keyPair)
+            } catch (error: Throwable) {
+                lastFailure = error
+                if (attempt < USB_CONNECTION_ATTEMPTS - 1) {
+                    delay(USB_RETRY_DELAY_MS)
+                }
+            }
+        }
+
+        throw lastFailure ?: IOException("USB ADB connection failed")
     }
 
     private fun unwrapUsbError(context: Context, throwable: Throwable): Throwable {
@@ -142,16 +164,7 @@ object UsbPortalHelper {
     }
 
     private fun isAdbUsbDevice(device: UsbDevice): Boolean {
-        for (index in 0 until device.interfaceCount) {
-            val usbInterface = device.getInterface(index)
-            if (usbInterface.interfaceClass == ADB_INTERFACE_CLASS &&
-                usbInterface.interfaceSubclass == ADB_INTERFACE_SUBCLASS &&
-                usbInterface.interfaceProtocol == ADB_INTERFACE_PROTOCOL
-            ) {
-                return true
-            }
-        }
-        return false
+        return UsbAdbBridge.hasAdbInterface(device)
     }
 
     private fun looksLikePortalDevice(device: UsbDevice): Boolean {

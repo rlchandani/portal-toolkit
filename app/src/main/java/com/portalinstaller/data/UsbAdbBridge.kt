@@ -39,9 +39,6 @@ private class UsbBulkSource(
                 sink.write(buffer, 0, read)
                 return read.toLong()
             }
-            if (read == 0) {
-                return 0
-            }
             if (closed) throw IOException("Source closed")
             if (attempt == USB_READ_RETRY_COUNT - 1) {
                 throw SocketTimeoutException(
@@ -112,10 +109,10 @@ private class UsbBulkSink(
             val chunkSize = minOf(remaining, 16 * 1024)
             val chunk = bytes.copyOfRange(cursor, cursor + chunkSize)
             val written = connection.bulkTransfer(endpoint, chunk, chunk.size, USB_TIMEOUT_MS)
-            if (written < 0 || written != chunk.size) {
+            if (written <= 0) {
                 throw IOException(
                     "USB bulk write failed " +
-                        "(endpoint addr=${endpoint.address} dir=${endpoint.direction} type=${endpoint.type})"
+                    "(endpoint addr=${endpoint.address} dir=${endpoint.direction} type=${endpoint.type})"
                 )
             }
             cursor += written
@@ -181,8 +178,13 @@ object UsbAdbBridge {
             connection.close()
         }
 
-        val adbConnection = createAdbConnection(source, sink, keyPair, closeable)
-        return ReflectiveUsbDadb(adbConnection)
+        return try {
+            ReflectiveUsbDadb(createAdbConnection(source, sink, keyPair, closeable))
+        } catch (error: Throwable) {
+            // The reflected dadb setup can fail before it owns the connection.
+            closeable.close()
+            throw error
+        }
     }
 
     private fun createAdbConnection(
@@ -216,14 +218,31 @@ object UsbAdbBridge {
     private fun findAdbInterface(device: UsbDevice): UsbInterface? {
         for (index in 0 until device.interfaceCount) {
             val usbInterface = device.getInterface(index)
-            if (usbInterface.interfaceClass == UsbConstants.USB_CLASS_VENDOR_SPEC &&
-                usbInterface.interfaceSubclass == 0x42 &&
-                usbInterface.interfaceProtocol == 0x01
-            ) {
+            if (isStandardAdbInterface(usbInterface)) {
                 return usbInterface
             }
         }
+        // Some Portal firmware exposes ADB with a vendor-specific subclass or
+        // protocol. The bulk endpoint pair still identifies its ADB transport.
+        for (index in 0 until device.interfaceCount) {
+            val usbInterface = device.getInterface(index)
+            if (isVendorBulkInterface(usbInterface)) return usbInterface
+        }
         return null
+    }
+
+    fun hasAdbInterface(device: UsbDevice): Boolean = findAdbInterface(device) != null
+
+    private fun isStandardAdbInterface(usbInterface: UsbInterface): Boolean {
+        return usbInterface.interfaceClass == UsbConstants.USB_CLASS_VENDOR_SPEC &&
+            usbInterface.interfaceSubclass == 0x42 &&
+            usbInterface.interfaceProtocol == 0x01
+    }
+
+    private fun isVendorBulkInterface(usbInterface: UsbInterface): Boolean {
+        if (usbInterface.interfaceClass != UsbConstants.USB_CLASS_VENDOR_SPEC) return false
+        val (input, output) = findBulkEndpoints(usbInterface)
+        return input != null && output != null
     }
 
     private fun findBulkEndpoints(adbInterface: UsbInterface): Pair<UsbEndpoint?, UsbEndpoint?> {

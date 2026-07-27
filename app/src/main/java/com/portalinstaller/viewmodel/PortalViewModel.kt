@@ -10,6 +10,7 @@ import com.portalinstaller.data.ContentUriHelper
 import com.portalinstaller.data.DeviceStatus
 import com.portalinstaller.data.DiscoveredPortal
 import com.portalinstaller.data.InstalledApp
+import com.portalinstaller.data.PortalBackupManager
 import com.portalinstaller.data.PortalConnectionManager
 import com.portalinstaller.data.PortalDiscoveryManager
 import com.portalinstaller.data.PortalDeviceConfig
@@ -68,6 +69,14 @@ sealed class PhotoUploadState {
     data class Failed(val message: String) : PhotoUploadState()
 }
 
+sealed class BackupState {
+    data object Idle : BackupState()
+    data class Creating(val current: Int, val total: Int, val packageName: String) : BackupState()
+    data class Restoring(val current: Int, val total: Int, val packageName: String) : BackupState()
+    data class Success(val message: String) : BackupState()
+    data class Failed(val message: String) : BackupState()
+}
+
 data class HistoryEntry(
     val timestamp: Long,
     val description: String,
@@ -76,7 +85,8 @@ data class HistoryEntry(
 
 class PortalViewModel(
     private val connectionManager: PortalConnectionManager = PortalConnectionManager(),
-    private val discoveryManager: PortalDiscoveryManager = PortalDiscoveryManager(connectionManager)
+    private val discoveryManager: PortalDiscoveryManager = PortalDiscoveryManager(connectionManager),
+    private val backupManager: PortalBackupManager = PortalBackupManager()
 ) : ViewModel() {
 
     private val _connectionState = MutableStateFlow<ConnectionState>(ConnectionState.Disconnected)
@@ -124,6 +134,9 @@ class PortalViewModel(
     private val _portalDiscoveryState = MutableStateFlow<PortalDiscoveryState>(PortalDiscoveryState.Idle)
     val portalDiscoveryState: StateFlow<PortalDiscoveryState> = _portalDiscoveryState.asStateFlow()
 
+    private val _backupState = MutableStateFlow<BackupState>(BackupState.Idle)
+    val backupState: StateFlow<BackupState> = _backupState.asStateFlow()
+
     private var dadb: Dadb? = null
 
     private fun addHistoryEntry(description: String, success: Boolean) {
@@ -138,17 +151,29 @@ class PortalViewModel(
 
     fun connect(context: Context, ip: String, port: Int = 5555) {
         if (_connectionState.value is ConnectionState.Connecting) return
+        val previousConnection = dadb
         viewModelScope.launch {
             _connectionState.value = ConnectionState.Connecting
             connectionManager.connect(context, ip, port)
                 .onSuccess { d ->
                     dadb = d
+                    if (previousConnection != null && previousConnection !== d) {
+                        CoroutineScope(Dispatchers.IO).launch {
+                            runCatching { previousConnection.close() }
+                        }
+                    }
                     _portalPackagesError.value = null
                     _connectionMethod.value = context.getString(R.string.connection_method_wifi)
                     _connectionState.value = ConnectionState.Connected
                     refreshDeviceStatus()
                 }
                 .onFailure { e ->
+                    if (previousConnection != null) {
+                        dadb = null
+                        CoroutineScope(Dispatchers.IO).launch {
+                            runCatching { previousConnection.close() }
+                        }
+                    }
                     _connectionState.value = ConnectionState.Error(
                         e.message ?: context.getString(R.string.error_unknown)
                     )
@@ -185,6 +210,7 @@ class PortalViewModel(
         _connectionState.value = ConnectionState.Disconnected
         _connectionMethod.value = null
         _installState.value = InstallState.Idle
+        _backupState.value = BackupState.Idle
         _photoUploadState.value = PhotoUploadState.Idle
         _portalPackagesError.value = null
         _wirelessAdbState.value = WirelessAdbState.Idle
@@ -495,6 +521,105 @@ class PortalViewModel(
 
     fun connectDiscoveredPortal(context: Context, portal: DiscoveredPortal) {
         connect(context, portal.ip, portal.port)
+    }
+
+    fun createBackup(context: Context, destination: Uri) {
+        val connection = dadb
+        if (connection == null) {
+            _backupState.value = BackupState.Failed(
+                context.getString(R.string.backup_error_connect_first)
+            )
+            return
+        }
+        if (_backupState.value is BackupState.Creating ||
+            _backupState.value is BackupState.Restoring
+        ) {
+            return
+        }
+
+        viewModelScope.launch {
+            _backupState.value = BackupState.Creating(0, 0, "")
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    backupManager.createBackup(context, connection, destination) {
+                            current, total, packageName ->
+                        _backupState.value = BackupState.Creating(current, total, packageName)
+                    }
+                }
+            }.onSuccess { summary ->
+                val message = context.getString(
+                    R.string.backup_created_success,
+                    summary.appCount,
+                    summary.settingCount
+                )
+                _backupState.value = BackupState.Success(message)
+                addHistoryEntry(message, success = true)
+            }.onFailure { error ->
+                val message = context.getString(
+                    R.string.backup_failed,
+                    error.message ?: context.getString(R.string.error_unknown)
+                )
+                _backupState.value = BackupState.Failed(message)
+                addHistoryEntry(message, success = false)
+            }
+        }
+    }
+
+    fun restoreBackup(context: Context, source: Uri) {
+        val connection = dadb
+        if (connection == null) {
+            _backupState.value = BackupState.Failed(
+                context.getString(R.string.backup_error_connect_first)
+            )
+            return
+        }
+        if (_backupState.value is BackupState.Creating ||
+            _backupState.value is BackupState.Restoring
+        ) {
+            return
+        }
+
+        viewModelScope.launch {
+            _backupState.value = BackupState.Restoring(0, 0, "")
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    backupManager.restoreBackup(context, connection, source) {
+                            current, total, packageName ->
+                        _backupState.value = BackupState.Restoring(current, total, packageName)
+                    }
+                }
+            }.onSuccess { summary ->
+                val message = if (summary.failedPackages.isEmpty()) {
+                    context.getString(
+                        R.string.backup_restored_success,
+                        summary.installedCount,
+                        summary.restoredSettingCount
+                    )
+                } else {
+                    context.getString(
+                        R.string.backup_restored_partial,
+                        summary.installedCount,
+                        summary.failedPackages.size,
+                        summary.failedPackages.joinToString()
+                    )
+                }
+                _backupState.value = BackupState.Success(message)
+                addHistoryEntry(message, success = summary.failedPackages.isEmpty())
+                loadPortalPackages(context)
+                refreshDeviceStatus()
+            }.onFailure { error ->
+                val message = context.getString(
+                    R.string.backup_restore_failed,
+                    error.message ?: context.getString(R.string.error_unknown)
+                )
+                _backupState.value = BackupState.Failed(message)
+                addHistoryEntry(message, success = false)
+            }
+        }
+    }
+
+    fun clearBackupState() {
+        _backupState.value = BackupState.Idle
     }
 
     fun clearUninstallState() {
