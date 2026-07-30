@@ -59,6 +59,16 @@ object SavedPortalStore {
         return updated
     }
 
+    fun rename(context: Context, id: String, name: String): List<SavedPortal> {
+        val trimmedName = name.trim()
+        if (trimmedName.isBlank()) return load(context)
+        val updated = load(context).map { portal ->
+            if (portal.id == id) portal.copy(name = trimmedName) else portal
+        }
+        save(context, updated)
+        return updated
+    }
+
     private fun save(context: Context, portals: List<SavedPortal>) {
         val array = JSONArray()
         portals.forEach { portal ->

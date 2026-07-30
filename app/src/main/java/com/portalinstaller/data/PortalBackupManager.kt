@@ -3,9 +3,11 @@ package com.portalinstaller.data
 import android.content.Context
 import android.net.Uri
 import android.os.Build
+import com.portalinstaller.R
 import dadb.Dadb
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.util.UUID
@@ -21,7 +23,17 @@ data class PortalBackupSummary(
 data class PortalRestoreSummary(
     val installedCount: Int,
     val failedPackages: List<String>,
-    val restoredSettingCount: Int
+    val restoredSettingCount: Int,
+    val stoppedEarlyReason: String? = null
+)
+
+data class PortalBackupPreview(
+    val createdAt: Long,
+    val manufacturer: String,
+    val model: String,
+    val sdk: String,
+    val appCount: Int,
+    val settingCount: Int
 )
 
 class PortalBackupManager {
@@ -30,7 +42,9 @@ class PortalBackupManager {
         private const val FORMAT_VERSION = 1
         private const val MANIFEST_ENTRY = "manifest.json"
         private const val MAX_ARCHIVE_ENTRIES = 500
-        private const val MAX_EXTRACTED_BYTES = 8L * 1024 * 1024 * 1024
+        private const val MAX_EXTRACTED_BYTES = 3L * 1024 * 1024 * 1024
+        private const val MAX_MANIFEST_BYTES = 1024 * 1024
+        private const val MAX_CONSECUTIVE_RESTORE_FAILURES = 3
 
         private val BACKUP_SETTINGS = listOf(
             "system" to "screen_brightness",
@@ -47,11 +61,16 @@ class PortalBackupManager {
         context: Context,
         dadb: Dadb,
         destination: Uri,
+        selectedPackages: Set<String>? = null,
         onProgress: (current: Int, total: Int, packageName: String) -> Unit
     ): PortalBackupSummary {
         val workDir = createWorkDir(context, "backup")
         try {
-            val packages = listThirdPartyPackages(dadb)
+            val packages = listThirdPartyPackages(dadb).let { installed ->
+                selectedPackages?.let { selected ->
+                    installed.filter { it in selected }
+                } ?: installed
+            }
             val appRecords = packages.map { packageName ->
                 val paths = dadb.shell("pm path ${shellQuote(packageName)}").output
                     .lineSequence()
@@ -148,10 +167,14 @@ class PortalBackupManager {
                 "Unsupported backup format"
             }
 
-            val apps = manifest.getJSONArray("apps")
+            val apps = manifest.optJSONArray("apps")
+                ?: error("Backup manifest has no apps section")
             require(apps.length() <= MAX_ARCHIVE_ENTRIES) { "Backup contains too many apps" }
             var installedCount = 0
             val failedPackages = mutableListOf<String>()
+            var consecutiveFailures = 0
+            var stoppedEarlyReason: String? = null
+            val seenPackages = mutableSetOf<String>()
 
             for (index in 0 until apps.length()) {
                 val app = apps.getJSONObject(index)
@@ -159,8 +182,15 @@ class PortalBackupManager {
                 require(packageName.matches(Regex("[A-Za-z0-9_.]+"))) {
                     "Invalid package name in backup"
                 }
+                require(seenPackages.add(packageName)) {
+                    "Duplicate package in backup: $packageName"
+                }
                 onProgress(index + 1, apps.length(), packageName)
-                val files = app.getJSONArray("files")
+                val files = app.optJSONArray("files")
+                    ?: error("Backup has no APK list for $packageName")
+                require(files.length() in 1..MAX_ARCHIVE_ENTRIES) {
+                    "Invalid APK list for $packageName"
+                }
                 val apks = buildList {
                     for (fileIndex in 0 until files.length()) {
                         val fileName = files.getString(fileIndex)
@@ -169,33 +199,118 @@ class PortalBackupManager {
                     }
                 }
 
-                val installed = runCatching {
+                val installResult = runCatching {
                     require(apks.isNotEmpty()) { "No APK files for $packageName" }
-                    val archivePackage = apks.firstNotNullOfOrNull {
-                        readArchivePackageName(context, it)
-                    }
-                    require(archivePackage == packageName) {
-                        "APK package does not match $packageName"
+                    apks.forEach { apk ->
+                        val archivePackage = readArchivePackageName(context, apk)
+                        require(archivePackage == packageName) {
+                            "APK ${apk.name} package does not match $packageName"
+                        }
                     }
                     installPackage(dadb, apks)
-                }.isSuccess
+                }
 
-                if (installed) {
+                if (installResult.isSuccess) {
                     installedCount++
+                    consecutiveFailures = 0
                 } else {
                     failedPackages += packageName
+                    consecutiveFailures++
+                    if (consecutiveFailures >= MAX_CONSECUTIVE_RESTORE_FAILURES) {
+                        val reason = installResult.exceptionOrNull()?.message
+                            ?: "Multiple restore operations failed"
+                        stoppedEarlyReason = context.getString(
+                            R.string.backup_restore_stopped_reason,
+                            consecutiveFailures,
+                            reason
+                        )
+                        break
+                    }
                 }
             }
-            onProgress(apps.length(), apps.length(), "")
+            val processedCount = if (stoppedEarlyReason == null) {
+                apps.length()
+            } else {
+                installedCount + failedPackages.size
+            }
+            onProgress(processedCount, apps.length(), "")
 
-            val restoredSettings = restoreSettings(
-                dadb,
-                manifest.optJSONObject("settings") ?: JSONObject()
+            val restoredSettings = if (stoppedEarlyReason == null) {
+                restoreSettings(
+                    dadb,
+                    manifest.optJSONObject("settings") ?: JSONObject()
+                )
+            } else {
+                0
+            }
+            return PortalRestoreSummary(
+                installedCount = installedCount,
+                failedPackages = failedPackages,
+                restoredSettingCount = restoredSettings,
+                stoppedEarlyReason = stoppedEarlyReason
             )
-            return PortalRestoreSummary(installedCount, failedPackages, restoredSettings)
         } finally {
             workDir.deleteRecursively()
         }
+    }
+
+    fun inspectBackup(context: Context, source: Uri): PortalBackupPreview {
+        val input = requireNotNull(context.contentResolver.openInputStream(source)) {
+            "Could not open the selected backup"
+        }
+        var preview: PortalBackupPreview? = null
+        input.use { stream ->
+            ZipInputStream(stream.buffered()).use { zip ->
+                var entryCount = 0
+                var manifestFound = false
+                var entry = zip.nextEntry
+                while (entry != null) {
+                    entryCount++
+                    require(entryCount <= MAX_ARCHIVE_ENTRIES) {
+                        "Backup contains too many files"
+                    }
+                    if (!entry.isDirectory && entry.name == MANIFEST_ENTRY) {
+                        val bytes = ByteArrayOutputStream()
+                        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                        var manifestBytes = 0
+                        while (true) {
+                            val read = zip.read(buffer)
+                            if (read < 0) break
+                            manifestBytes += read
+                            require(manifestBytes <= MAX_MANIFEST_BYTES) {
+                                "Backup manifest is too large"
+                            }
+                            bytes.write(buffer, 0, read)
+                        }
+
+                        val manifest = JSONObject(bytes.toString(Charsets.UTF_8.name()))
+                        require(manifest.optInt("formatVersion") == FORMAT_VERSION) {
+                            "Unsupported backup format"
+                        }
+                        require(!manifestFound) { "Backup contains multiple manifests" }
+                        manifestFound = true
+                        val apps = manifest.optJSONArray("apps")
+                            ?: error("Backup manifest has no apps section")
+                        require(apps.length() <= MAX_ARCHIVE_ENTRIES) {
+                            "Backup contains too many apps"
+                        }
+                        val settings = manifest.optJSONObject("settings") ?: JSONObject()
+                        val device = manifest.optJSONObject("device") ?: JSONObject()
+                        preview = PortalBackupPreview(
+                            createdAt = manifest.optLong("createdAt"),
+                            manufacturer = device.optString("manufacturer"),
+                            model = device.optString("model"),
+                            sdk = device.optString("sdk"),
+                            appCount = apps.length(),
+                            settingCount = settings.length()
+                        )
+                    }
+                    zip.closeEntry()
+                    entry = zip.nextEntry
+                }
+            }
+        }
+        return preview ?: error("The backup manifest is missing")
     }
 
     private fun listThirdPartyPackages(dadb: Dadb): List<String> {
@@ -275,6 +390,7 @@ class PortalBackupManager {
             ZipInputStream(stream.buffered()).use { zip ->
                 var entryCount = 0
                 var extractedBytes = 0L
+                var manifestFound = false
                 var entry = zip.nextEntry
                 while (entry != null) {
                     entryCount++
@@ -286,10 +402,23 @@ class PortalBackupManager {
                         outputFile.parentFile?.mkdirs()
                         FileOutputStream(outputFile).buffered().use { output ->
                             val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                            var manifestBytes = 0
+                            if (entry.name == MANIFEST_ENTRY) {
+                                require(!manifestFound) {
+                                    "Backup contains multiple manifests"
+                                }
+                                manifestFound = true
+                            }
                             while (true) {
                                 val read = zip.read(buffer)
                                 if (read < 0) break
                                 extractedBytes += read
+                                if (entry.name == MANIFEST_ENTRY) {
+                                    manifestBytes += read
+                                    require(manifestBytes <= MAX_MANIFEST_BYTES) {
+                                        "Backup manifest is too large"
+                                    }
+                                }
                                 require(extractedBytes <= MAX_EXTRACTED_BYTES) {
                                     "Backup is larger than the supported limit"
                                 }

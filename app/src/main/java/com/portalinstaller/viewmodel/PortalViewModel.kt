@@ -6,14 +6,18 @@ import android.os.Build
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.portalinstaller.R
+import com.portalinstaller.data.AppProfile
 import com.portalinstaller.data.ContentUriHelper
 import com.portalinstaller.data.DeviceStatus
 import com.portalinstaller.data.DiscoveredPortal
 import com.portalinstaller.data.InstalledApp
 import com.portalinstaller.data.PortalBackupManager
+import com.portalinstaller.data.PortalBackupPreview
 import com.portalinstaller.data.PortalConnectionManager
 import com.portalinstaller.data.PortalDiscoveryManager
 import com.portalinstaller.data.PortalDeviceConfig
+import com.portalinstaller.data.PortalAppInfo
+import com.portalinstaller.data.OsUpdateBlockStatus
 import com.portalinstaller.data.UsbPortalHelper
 import dadb.Dadb
 import kotlinx.coroutines.CoroutineScope
@@ -71,10 +75,34 @@ sealed class PhotoUploadState {
 
 sealed class BackupState {
     data object Idle : BackupState()
+    data object Previewing : BackupState()
+    data class ReadyToRestore(
+        val source: Uri,
+        val preview: PortalBackupPreview
+    ) : BackupState()
     data class Creating(val current: Int, val total: Int, val packageName: String) : BackupState()
     data class Restoring(val current: Int, val total: Int, val packageName: String) : BackupState()
     data class Success(val message: String) : BackupState()
     data class Failed(val message: String) : BackupState()
+}
+
+sealed class ProfileApplyState {
+    data object Idle : ProfileApplyState()
+    data class Applying(
+        val profileName: String,
+        val current: Int,
+        val total: Int,
+        val appName: String
+    ) : ProfileApplyState()
+    data class Success(val message: String) : ProfileApplyState()
+    data class Failed(val message: String) : ProfileApplyState()
+}
+
+sealed class OsUpdateState {
+    data object Idle : OsUpdateState()
+    data object Loading : OsUpdateState()
+    data class Ready(val status: OsUpdateBlockStatus) : OsUpdateState()
+    data class Failed(val message: String) : OsUpdateState()
 }
 
 data class HistoryEntry(
@@ -122,6 +150,9 @@ class PortalViewModel(
     private val _portalPackages = MutableStateFlow<List<String>>(emptyList())
     val portalPackages: StateFlow<List<String>> = _portalPackages.asStateFlow()
 
+    private val _portalApps = MutableStateFlow<List<PortalAppInfo>>(emptyList())
+    val portalApps: StateFlow<List<PortalAppInfo>> = _portalApps.asStateFlow()
+
     private val _isLoadingPortalPackages = MutableStateFlow(false)
     val isLoadingPortalPackages: StateFlow<Boolean> = _isLoadingPortalPackages.asStateFlow()
 
@@ -136,6 +167,12 @@ class PortalViewModel(
 
     private val _backupState = MutableStateFlow<BackupState>(BackupState.Idle)
     val backupState: StateFlow<BackupState> = _backupState.asStateFlow()
+
+    private val _profileApplyState = MutableStateFlow<ProfileApplyState>(ProfileApplyState.Idle)
+    val profileApplyState: StateFlow<ProfileApplyState> = _profileApplyState.asStateFlow()
+
+    private val _osUpdateState = MutableStateFlow<OsUpdateState>(OsUpdateState.Idle)
+    val osUpdateState: StateFlow<OsUpdateState> = _osUpdateState.asStateFlow()
 
     private var dadb: Dadb? = null
 
@@ -211,16 +248,75 @@ class PortalViewModel(
         _connectionMethod.value = null
         _installState.value = InstallState.Idle
         _backupState.value = BackupState.Idle
+        _profileApplyState.value = ProfileApplyState.Idle
         _photoUploadState.value = PhotoUploadState.Idle
         _portalPackagesError.value = null
         _wirelessAdbState.value = WirelessAdbState.Idle
         _deviceStatus.value = null
+        _osUpdateState.value = OsUpdateState.Idle
     }
 
     private fun refreshDeviceStatus() {
         val d = dadb ?: return
         viewModelScope.launch {
             _deviceStatus.value = connectionManager.getDeviceStatus(d)
+        }
+    }
+
+    fun refreshOsUpdateStatus(context: Context) {
+        val connection = dadb
+        if (connection == null) {
+            _osUpdateState.value = OsUpdateState.Failed(
+                context.getString(R.string.update_block_connect_first)
+            )
+            return
+        }
+        viewModelScope.launch {
+            _osUpdateState.value = OsUpdateState.Loading
+            runCatching {
+                connectionManager.getOsUpdateBlockStatus(connection)
+            }.onSuccess { status ->
+                _osUpdateState.value = OsUpdateState.Ready(status)
+            }.onFailure { error ->
+                _osUpdateState.value = OsUpdateState.Failed(
+                    error.message ?: context.getString(R.string.error_unknown)
+                )
+            }
+        }
+    }
+
+    fun setOsUpdatesBlocked(context: Context, blocked: Boolean) {
+        val connection = dadb
+        if (connection == null) {
+            _osUpdateState.value = OsUpdateState.Failed(
+                context.getString(R.string.update_block_connect_first)
+            )
+            return
+        }
+        viewModelScope.launch {
+            _osUpdateState.value = OsUpdateState.Loading
+            connectionManager.setOsUpdatesBlocked(connection, blocked)
+                .onSuccess { status ->
+                    _osUpdateState.value = OsUpdateState.Ready(status)
+                    addHistoryEntry(
+                        context.getString(
+                            if (status.isBlocked) {
+                                R.string.update_block_enabled_history
+                            } else {
+                                R.string.update_block_disabled_history
+                            }
+                        ),
+                        success = true
+                    )
+                }
+                .onFailure { error ->
+                    val message = error.message ?: context.getString(R.string.error_unknown)
+                    _osUpdateState.value = OsUpdateState.Failed(message)
+                    addHistoryEntry(
+                        context.getString(R.string.update_block_failed_history, message),
+                        success = false
+                    )
+                }
         }
     }
 
@@ -239,6 +335,12 @@ class PortalViewModel(
 
     fun installApp(context: Context, app: InstalledApp) {
         val d = dadb ?: return
+        if (_profileApplyState.value is ProfileApplyState.Applying) {
+            _installState.value = InstallState.Failed(
+                context.getString(R.string.profile_install_busy)
+            )
+            return
+        }
         viewModelScope.launch {
             val compatibilityError = validatePortalApp(
                 context = context,
@@ -294,6 +396,12 @@ class PortalViewModel(
 
     fun installApkFromUri(context: Context, uri: Uri) {
         val d = dadb ?: return
+        if (_profileApplyState.value is ProfileApplyState.Applying) {
+            _installState.value = InstallState.Failed(
+                context.getString(R.string.profile_install_busy)
+            )
+            return
+        }
         viewModelScope.launch {
             _installState.value = InstallState.Installing()
 
@@ -440,14 +548,24 @@ class PortalViewModel(
             _portalPackagesError.value = null
             connectionManager.listPortalPackages(context, d)
                 .onSuccess {
+                    _portalApps.value = emptyList()
                     _portalPackages.value = it
                     _portalPackagesError.value = null
+                    _isLoadingPortalPackages.value = false
+
+                    // Enrichment is deliberately separate: the package list must
+                    // appear even if metadata for one application is slow or unavailable.
+                    viewModelScope.launch {
+                        connectionManager.listPortalApps(context, d)
+                            .onSuccess { details -> _portalApps.value = details }
+                    }
                 }
                 .onFailure { e ->
+                    _portalApps.value = emptyList()
                     _portalPackages.value = emptyList()
                     _portalPackagesError.value = e.message ?: context.getString(R.string.error_load_portal_apps_failed)
+                    _isLoadingPortalPackages.value = false
                 }
-            _isLoadingPortalPackages.value = false
         }
     }
 
@@ -523,7 +641,11 @@ class PortalViewModel(
         connect(context, portal.ip, portal.port)
     }
 
-    fun createBackup(context: Context, destination: Uri) {
+    fun createBackup(
+        context: Context,
+        destination: Uri,
+        selectedPackages: Set<String>? = null
+    ) {
         val connection = dadb
         if (connection == null) {
             _backupState.value = BackupState.Failed(
@@ -541,7 +663,12 @@ class PortalViewModel(
             _backupState.value = BackupState.Creating(0, 0, "")
             runCatching {
                 withContext(Dispatchers.IO) {
-                    backupManager.createBackup(context, connection, destination) {
+                    backupManager.createBackup(
+                        context,
+                        connection,
+                        destination,
+                        selectedPackages
+                    ) {
                             current, total, packageName ->
                         _backupState.value = BackupState.Creating(current, total, packageName)
                     }
@@ -565,6 +692,126 @@ class PortalViewModel(
         }
     }
 
+    fun applyProfile(
+        context: Context,
+        profile: AppProfile,
+        availableApps: List<InstalledApp>
+    ) {
+        val connection = dadb
+        if (connection == null) {
+            _profileApplyState.value = ProfileApplyState.Failed(
+                context.getString(R.string.profile_connect_first)
+            )
+            return
+        }
+        if (_profileApplyState.value is ProfileApplyState.Applying ||
+            _installState.value is InstallState.Installing
+        ) {
+            _profileApplyState.value = ProfileApplyState.Failed(
+                context.getString(R.string.profile_install_busy)
+            )
+            return
+        }
+
+        viewModelScope.launch {
+            val appsByPackage = availableApps.associateBy { it.packageName }
+            var installedCount = 0
+            val failedPackages = mutableListOf<String>()
+            val packages = profile.packageNames.sorted()
+
+            packages.forEachIndexed { index, packageName ->
+                val app = appsByPackage[packageName]
+                _profileApplyState.value = ProfileApplyState.Applying(
+                    profileName = profile.name,
+                    current = index + 1,
+                    total = packages.size,
+                    appName = app?.name ?: packageName
+                )
+
+                if (app == null) {
+                    failedPackages += packageName
+                    return@forEachIndexed
+                }
+
+                val compatibilityError = validatePortalApp(
+                    context = context,
+                    label = app.name,
+                    minSdkVersion = app.minSdkVersion
+                )
+                if (compatibilityError != null) {
+                    failedPackages += packageName
+                    return@forEachIndexed
+                }
+
+                val baseApk = File(app.sourceDir)
+                val splits = app.splitSourceDirs?.map(::File).orEmpty()
+                val result = if (splits.isEmpty()) {
+                    connectionManager.installApk(context, connection, baseApk)
+                } else {
+                    connectionManager.installMultipleApks(
+                        context,
+                        connection,
+                        listOf(baseApk) + splits
+                    )
+                }
+                if (result.isSuccess) {
+                    installedCount++
+                } else {
+                    failedPackages += packageName
+                }
+            }
+
+            val message = if (failedPackages.isEmpty()) {
+                context.getString(
+                    R.string.profile_apply_success,
+                    profile.name,
+                    installedCount
+                )
+            } else {
+                context.getString(
+                    R.string.profile_apply_partial,
+                    profile.name,
+                    installedCount,
+                    failedPackages.size
+                )
+            }
+            _profileApplyState.value = ProfileApplyState.Success(message)
+            addHistoryEntry(message, success = failedPackages.isEmpty())
+            loadPortalPackages(context)
+        }
+    }
+
+    fun clearProfileApplyState() {
+        _profileApplyState.value = ProfileApplyState.Idle
+    }
+
+    fun inspectBackup(context: Context, source: Uri) {
+        if (_backupState.value is BackupState.Creating ||
+            _backupState.value is BackupState.Restoring ||
+            _backupState.value is BackupState.Previewing
+        ) {
+            return
+        }
+
+        viewModelScope.launch {
+            _backupState.value = BackupState.Previewing
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    backupManager.inspectBackup(context, source)
+                }
+            }.onSuccess { preview ->
+                _backupState.value = BackupState.ReadyToRestore(source, preview)
+            }.onFailure { error ->
+                _backupState.value = BackupState.Failed(
+                    context.getString(
+                        R.string.backup_preview_failed,
+                        error.message ?: context.getString(R.string.error_unknown)
+                    )
+                )
+            }
+        }
+    }
+
     fun restoreBackup(context: Context, source: Uri) {
         val connection = dadb
         if (connection == null) {
@@ -574,7 +821,8 @@ class PortalViewModel(
             return
         }
         if (_backupState.value is BackupState.Creating ||
-            _backupState.value is BackupState.Restoring
+            _backupState.value is BackupState.Restoring ||
+            _backupState.value is BackupState.Previewing
         ) {
             return
         }
@@ -589,7 +837,14 @@ class PortalViewModel(
                     }
                 }
             }.onSuccess { summary ->
-                val message = if (summary.failedPackages.isEmpty()) {
+                val message = if (summary.stoppedEarlyReason != null) {
+                    context.getString(
+                        R.string.backup_restored_stopped,
+                        summary.installedCount,
+                        summary.failedPackages.size,
+                        summary.stoppedEarlyReason
+                    )
+                } else if (summary.failedPackages.isEmpty()) {
                     context.getString(
                         R.string.backup_restored_success,
                         summary.installedCount,
@@ -604,9 +859,14 @@ class PortalViewModel(
                     )
                 }
                 _backupState.value = BackupState.Success(message)
-                addHistoryEntry(message, success = summary.failedPackages.isEmpty())
-                loadPortalPackages(context)
-                refreshDeviceStatus()
+                addHistoryEntry(
+                    message,
+                    success = summary.failedPackages.isEmpty() && summary.stoppedEarlyReason == null
+                )
+                if (summary.stoppedEarlyReason == null) {
+                    loadPortalPackages(context)
+                    refreshDeviceStatus()
+                }
             }.onFailure { error ->
                 val message = context.getString(
                     R.string.backup_restore_failed,

@@ -107,19 +107,17 @@ class PortalDiscoveryManager(
     private fun probePortal(ip: String, port: Int, keyPair: AdbKeyPair): DiscoveredPortal? {
         val dadb = connectForDiscovery(ip, port, keyPair) ?: return null
         return try {
-            val model = dadb.shell("getprop ro.product.model").output.trim().ifBlank { "unknown" }
-            val manufacturer = dadb.shell("getprop ro.product.manufacturer").output.trim().ifBlank { "unknown" }
-            val brand = dadb.shell("getprop ro.product.brand").output.trim().ifBlank { "unknown" }
+            val identity = connectionManager.readPortalIdentity(dadb)
 
-            if (!looksLikePortal(model, manufacturer, brand)) {
+            if (!connectionManager.looksLikePortal(identity)) {
                 null
             } else {
                 DiscoveredPortal(
                     ip = ip,
                     port = port,
-                    model = model,
-                    manufacturer = manufacturer,
-                    brand = brand
+                    model = identity.model,
+                    manufacturer = identity.manufacturer,
+                    brand = identity.brand
                 )
             }
         } catch (_: Exception) {
@@ -152,11 +150,6 @@ class PortalDiscoveryManager(
             runCatching { socket.close() }
             null
         }
-    }
-
-    private fun looksLikePortal(model: String, manufacturer: String, brand: String): Boolean {
-        val haystack = listOf(model, manufacturer, brand).joinToString(" ").lowercase()
-        return haystack.contains("portal") || haystack.contains("facebook") || haystack.contains("meta")
     }
 
     private fun findLocalNetworkHosts(context: Context): List<String>? {

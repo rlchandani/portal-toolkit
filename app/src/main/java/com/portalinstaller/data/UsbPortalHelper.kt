@@ -6,11 +6,14 @@ import android.content.Intent
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
 import android.os.Build
+import android.os.SystemClock
+import android.util.Log
 import com.portalinstaller.R
 import dadb.AdbKeyPair
 import dadb.Dadb
 import java.io.IOException
 import java.lang.reflect.InvocationTargetException
+import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -28,8 +31,11 @@ object UsbPortalHelper {
     const val ACTION_USB_PERMISSION = "com.portalinstaller.USB_PERMISSION"
 
     private const val META_VENDOR_ID = 11974
-    private const val USB_CONNECTION_ATTEMPTS = 3
-    private const val USB_RETRY_DELAY_MS = 400L
+    private const val USB_CONNECTION_ATTEMPTS = 6
+    private const val USB_DEVICE_READY_TIMEOUT_MS = 12_000L
+    private const val USB_PERMISSION_TIMEOUT_MS = 20_000L
+    private const val USB_POLL_DELAY_MS = 250L
+    private val USB_RETRY_DELAYS_MS = longArrayOf(350L, 700L, 1_200L, 1_800L, 2_500L)
 
     fun getStatus(context: Context): UsbPortalStatus {
         val usbManager = context.getSystemService(Context.USB_SERVICE) as? UsbManager
@@ -42,8 +48,9 @@ object UsbPortalHelper {
             )
 
         val allDevices = usbManager.deviceList.values.toList()
-        val adbDevice = allDevices.firstOrNull(::isAdbUsbDevice)
-        val portalDevice = adbDevice ?: allDevices.firstOrNull(::looksLikePortalDevice)
+        val adbDevice = findAdbDevice(allDevices)
+        val portalDevice = adbDevice
+            ?: allDevices.firstOrNull(::looksLikePortalDevice)
 
         if (portalDevice == null) {
             return UsbPortalStatus(
@@ -56,12 +63,23 @@ object UsbPortalHelper {
         }
 
         val deviceLabel = buildString {
-            if (!portalDevice.productName.isNullOrBlank()) append(portalDevice.productName)
-            if (!portalDevice.manufacturerName.isNullOrBlank()) {
+            val productName = runCatching { portalDevice.productName }.getOrNull()
+            val manufacturerName = runCatching { portalDevice.manufacturerName }.getOrNull()
+            if (!productName.isNullOrBlank()) append(productName)
+            if (!manufacturerName.isNullOrBlank()) {
                 if (isNotBlank()) append(" ")
-                append(portalDevice.manufacturerName)
+                append(manufacturerName)
             }
-            if (isBlank()) append(portalDevice.deviceName)
+            if (isBlank()) {
+                append(
+                    String.format(
+                        Locale.US,
+                        "USB %04X:%04X",
+                        portalDevice.vendorId,
+                        portalDevice.productId
+                    )
+                )
+            }
         }
 
         val hasPermission = usbManager.hasPermission(portalDevice)
@@ -85,10 +103,19 @@ object UsbPortalHelper {
 
     fun requestPermission(context: Context): Boolean {
         val usbManager = context.getSystemService(Context.USB_SERVICE) as? UsbManager ?: return false
-        val device = usbManager.deviceList.values.firstOrNull(::isAdbUsbDevice)
+        val device = findAdbDevice(usbManager.deviceList.values)
             ?: usbManager.deviceList.values.firstOrNull(::looksLikePortalDevice)
             ?: return false
 
+        requestPermission(context, usbManager, device)
+        return true
+    }
+
+    private fun requestPermission(
+        context: Context,
+        usbManager: UsbManager,
+        device: UsbDevice
+    ) {
         val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         } else {
@@ -102,20 +129,16 @@ object UsbPortalHelper {
             flags
         )
         usbManager.requestPermission(device, permissionIntent)
-        return true
     }
 
     suspend fun connect(context: Context): Result<Dadb> {
         return withContext(Dispatchers.IO) {
             runCatching {
                 val usbManager = context.getSystemService(Context.USB_SERVICE) as UsbManager
-                val device = usbManager.deviceList.values.firstOrNull(::isAdbUsbDevice)
-                    ?: error(context.getString(R.string.usb_portal_no_longer_detected))
-                if (!usbManager.hasPermission(device)) {
-                    error(context.getString(R.string.usb_permission_missing))
-                }
                 val keyPair = AdbKeyPairProvider.getOrCreate(context)
-                connectWithRetries(usbManager, device, keyPair)
+                waitForAdbDevice(usbManager, USB_DEVICE_READY_TIMEOUT_MS)
+                    ?: error(context.getString(R.string.usb_adb_interface_not_ready))
+                connectWithRetries(context, usbManager, keyPair)
             }.recoverCatching { throwable ->
                 throw unwrapUsbError(context, throwable)
             }
@@ -123,24 +146,95 @@ object UsbPortalHelper {
     }
 
     private suspend fun connectWithRetries(
+        context: Context,
         usbManager: UsbManager,
-        device: UsbDevice,
         keyPair: AdbKeyPair
     ): Dadb {
         var lastFailure: Throwable? = null
 
         repeat(USB_CONNECTION_ATTEMPTS) { attempt ->
+            val device = waitForAdbDevice(
+                usbManager,
+                if (attempt == 0) 0L else 2_500L
+            )
+            if (device == null) {
+                lastFailure = IOException(context.getString(R.string.usb_adb_interface_not_ready))
+                delayBeforeRetry(attempt)
+                return@repeat
+            }
+
+            val permittedDevice = ensurePermission(context, usbManager, device)
+            if (permittedDevice == null) {
+                lastFailure = IOException(context.getString(R.string.usb_permission_missing))
+                delayBeforeRetry(attempt)
+                return@repeat
+            }
+
+            var connection: Dadb? = null
             try {
-                return UsbAdbBridge.create(usbManager, device, keyPair)
+                connection = UsbAdbBridge.create(usbManager, permittedDevice, keyPair)
+                val response = connection.shell("echo portal_usb_ready").output.trim()
+                require(response.contains("portal_usb_ready")) {
+                    "USB ADB validation failed"
+                }
+                return connection
             } catch (error: Throwable) {
                 lastFailure = error
+                runCatching { connection?.close() }
+                Log.w(
+                    "PortalUsb",
+                    "USB ADB attempt ${attempt + 1}/$USB_CONNECTION_ATTEMPTS failed " +
+                        "for ${permittedDevice.deviceName}",
+                    error
+                )
                 if (attempt < USB_CONNECTION_ATTEMPTS - 1) {
-                    delay(USB_RETRY_DELAY_MS)
+                    delayBeforeRetry(attempt)
                 }
             }
         }
 
         throw lastFailure ?: IOException("USB ADB connection failed")
+    }
+
+    private suspend fun ensurePermission(
+        context: Context,
+        usbManager: UsbManager,
+        device: UsbDevice
+    ): UsbDevice? {
+        if (usbManager.hasPermission(device)) return device
+        requestPermission(context, usbManager, device)
+
+        val deadline = SystemClock.elapsedRealtime() + USB_PERMISSION_TIMEOUT_MS
+        while (SystemClock.elapsedRealtime() < deadline) {
+            val current = findAdbDevice(usbManager.deviceList.values)
+            if (current != null && usbManager.hasPermission(current)) return current
+            delay(USB_POLL_DELAY_MS)
+        }
+        return null
+    }
+
+    private suspend fun waitForAdbDevice(
+        usbManager: UsbManager,
+        timeoutMs: Long
+    ): UsbDevice? {
+        val deadline = SystemClock.elapsedRealtime() + timeoutMs
+        do {
+            findAdbDevice(usbManager.deviceList.values)?.let { return it }
+            if (timeoutMs <= 0L) break
+            delay(USB_POLL_DELAY_MS)
+        } while (SystemClock.elapsedRealtime() < deadline)
+        return null
+    }
+
+    private suspend fun delayBeforeRetry(attempt: Int) {
+        if (attempt < USB_CONNECTION_ATTEMPTS - 1) {
+            delay(USB_RETRY_DELAYS_MS.getOrElse(attempt) { USB_RETRY_DELAYS_MS.last() })
+        }
+    }
+
+    private fun findAdbDevice(devices: Collection<UsbDevice>): UsbDevice? {
+        return devices.firstOrNull { isAdbUsbDevice(it) && looksLikePortalDevice(it) }
+            ?: devices.firstOrNull(::isAdbUsbDevice)
     }
 
     private fun unwrapUsbError(context: Context, throwable: Throwable): Throwable {
@@ -170,8 +264,10 @@ object UsbPortalHelper {
     private fun looksLikePortalDevice(device: UsbDevice): Boolean {
         if (device.vendorId == META_VENDOR_ID) return true
 
-        val product = device.productName?.lowercase().orEmpty()
-        val manufacturer = device.manufacturerName?.lowercase().orEmpty()
+        val product = runCatching { device.productName?.lowercase().orEmpty() }.getOrDefault("")
+        val manufacturer = runCatching {
+            device.manufacturerName?.lowercase().orEmpty()
+        }.getOrDefault("")
         val deviceName = device.deviceName.lowercase()
         return listOf(product, manufacturer, deviceName).any {
             it.contains("portal") || it.contains("facebook") || it.contains("meta")

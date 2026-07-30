@@ -18,3 +18,12 @@ data class InstalledApp(
     val apkSize: Long,
     val minSdkVersion: Int
 )
+
+data class PortalAppInfo(
+    val packageName: String,
+    val name: String,
+    val versionName: String,
+    val versionCode: Long,
+    val sizeBytes: Long,
+    val iconApkPath: String?
+)

@@ -40,6 +40,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -52,6 +53,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
@@ -86,11 +88,14 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.portalinstaller.R
+import com.portalinstaller.data.AppProfile
+import com.portalinstaller.data.AppProfileStore
 import com.portalinstaller.data.ContentUriHelper
 import com.portalinstaller.data.DeviceStatus
 import com.portalinstaller.data.DiscoveredPortal
 import com.portalinstaller.data.InstalledApp
 import com.portalinstaller.data.PortalDeviceConfig
+import com.portalinstaller.data.PortalAppInfo
 import com.portalinstaller.data.SavedPortal
 import com.portalinstaller.data.SavedPortalStore
 import com.portalinstaller.data.UsbPortalHelper
@@ -101,13 +106,19 @@ import com.portalinstaller.viewmodel.BackupState
 import com.portalinstaller.viewmodel.ConnectionState
 import com.portalinstaller.viewmodel.HistoryEntry
 import com.portalinstaller.viewmodel.InstallState
+import com.portalinstaller.viewmodel.OsUpdateState
 import com.portalinstaller.viewmodel.PhotoUploadState
 import com.portalinstaller.viewmodel.PortalDiscoveryState
 import com.portalinstaller.viewmodel.PortalViewModel
+import com.portalinstaller.viewmodel.ProfileApplyState
 import com.portalinstaller.viewmodel.UninstallState
 import com.portalinstaller.viewmodel.WirelessAdbState
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
+import java.text.DateFormat
+import java.util.Date
 
 /**
  * Cuvinte-cheie care semnaleaza split APK-uri dependente de dispozitivul sursa.
@@ -145,18 +156,25 @@ fun MainScreen(viewModel: PortalViewModel = viewModel()) {
     val selectedPhotoUris by viewModel.selectedPhotoUris.collectAsStateWithLifecycle()
     val operationHistory by viewModel.operationHistory.collectAsStateWithLifecycle()
     val portalPackages by viewModel.portalPackages.collectAsStateWithLifecycle()
+    val portalApps by viewModel.portalApps.collectAsStateWithLifecycle()
     val isLoadingPortalPackages by viewModel.isLoadingPortalPackages.collectAsStateWithLifecycle()
     val portalPackagesError by viewModel.portalPackagesError.collectAsStateWithLifecycle()
     val deviceStatus by viewModel.deviceStatus.collectAsStateWithLifecycle()
     val portalDiscoveryState by viewModel.portalDiscoveryState.collectAsStateWithLifecycle()
     val backupState by viewModel.backupState.collectAsStateWithLifecycle()
+    val profileApplyState by viewModel.profileApplyState.collectAsStateWithLifecycle()
+    val osUpdateState by viewModel.osUpdateState.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
     var selectedTab by remember { mutableIntStateOf(2) }
     var usbRefreshTrigger by remember { mutableIntStateOf(0) }
     var showPortalScanner by remember { mutableStateOf(false) }
+    var showBackupAppSelector by remember { mutableStateOf(false) }
+    var showProfileEditor by remember { mutableStateOf(false) }
+    var selectedBackupPackages by remember { mutableStateOf<Set<String>?>(null) }
     var selectedLanguage by remember { mutableStateOf(AppLanguageManager.getSavedLanguage(context)) }
     var savedPortals by remember { mutableStateOf(SavedPortalStore.load(context)) }
+    var appProfiles by remember { mutableStateOf(AppProfileStore.load(context)) }
 
     // Pastram ultimul IP si port folosite pentru reconectare rapida.
     val prefs = remember {
@@ -174,7 +192,10 @@ fun MainScreen(viewModel: PortalViewModel = viewModel()) {
         ),
         key1 = usbRefreshTrigger
     ) {
-        value = UsbPortalHelper.getStatus(context)
+        while (isActive) {
+            value = UsbPortalHelper.getStatus(context)
+            delay(750L)
+        }
     }
 
     DisposableEffect(context) {
@@ -224,13 +245,13 @@ fun MainScreen(viewModel: PortalViewModel = viewModel()) {
     val backupCreateLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/zip")
     ) { uri: Uri? ->
-        uri?.let { viewModel.createBackup(context, it) }
+        uri?.let { viewModel.createBackup(context, it, selectedBackupPackages) }
     }
 
     val backupRestoreLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
-        uri?.let { viewModel.restoreBackup(context, it) }
+        uri?.let { viewModel.inspectBackup(context, it) }
     }
 
     // Initializeaza lista de aplicatii la prima incarcare.
@@ -260,7 +281,7 @@ fun MainScreen(viewModel: PortalViewModel = viewModel()) {
         }
     }
 
-    LaunchedEffect(connectionState, connectionMethod) {
+    LaunchedEffect(connectionState, connectionMethod, deviceStatus) {
         if (connectionState is ConnectionState.Connected &&
             connectionMethod == context.getString(R.string.connection_method_wifi) &&
             ipAddress.isNotBlank()
@@ -275,15 +296,23 @@ fun MainScreen(viewModel: PortalViewModel = viewModel()) {
             savedPortals = SavedPortalStore.upsert(
                 context,
                 SavedPortal(
-                    name = discovered?.displayName
-                        ?: existing?.name
+                    name = existing?.name
+                        ?: discovered?.displayName
                         ?: context.getString(R.string.saved_portal_default_name, ipAddress),
                     ip = ipAddress,
                     port = connectedPort,
-                    model = discovered?.model ?: existing?.model.orEmpty(),
+                    model = deviceStatus?.model?.takeIf { it.isNotBlank() }
+                        ?: discovered?.model
+                        ?: existing?.model.orEmpty(),
                     lastConnectedAt = System.currentTimeMillis()
                 )
             )
+        }
+    }
+
+    LaunchedEffect(ipAddress, connectionState) {
+        if (connectionState is ConnectionState.Connected) {
+            selectedBackupPackages = null
         }
     }
 
@@ -385,6 +414,20 @@ fun MainScreen(viewModel: PortalViewModel = viewModel()) {
         }
     }
 
+    LaunchedEffect(profileApplyState) {
+        when (val state = profileApplyState) {
+            is ProfileApplyState.Success -> {
+                snackbarHostState.showSnackbar(state.message)
+                viewModel.clearProfileApplyState()
+            }
+            is ProfileApplyState.Failed -> {
+                snackbarHostState.showSnackbar(state.message)
+                viewModel.clearProfileApplyState()
+            }
+            else -> Unit
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(title = { AppBrandHeader() })
@@ -455,8 +498,11 @@ fun MainScreen(viewModel: PortalViewModel = viewModel()) {
                     context = context,
                     selectedUri = selectedApkUri,
                     portalPackages = portalPackages,
+                    portalApps = portalApps,
                     isLoadingPortalPackages = isLoadingPortalPackages,
                     uninstallState = uninstallState,
+                    profiles = appProfiles,
+                    profileApplyState = profileApplyState,
                     onOpenDevices = { selectedTab = 2 },
                     onPickFile = {
                         apkPickerLauncher.launch("application/vnd.android.package-archive")
@@ -464,7 +510,14 @@ fun MainScreen(viewModel: PortalViewModel = viewModel()) {
                     onInstall = { app -> viewModel.installApp(context, app) },
                     onInstallCustomApk = { uri -> viewModel.installApkFromUri(context, uri) },
                     onRefreshPortalApps = { viewModel.loadPortalPackages(context) },
-                    onUninstall = { packageName -> viewModel.uninstallApp(context, packageName) }
+                    onUninstall = { packageName -> viewModel.uninstallApp(context, packageName) },
+                    onCreateProfile = { showProfileEditor = true },
+                    onApplyProfile = { profile ->
+                        viewModel.applyProfile(context, profile, installedApps)
+                    },
+                    onDeleteProfile = { profile ->
+                        appProfiles = AppProfileStore.remove(context, profile.id)
+                    }
                 )
                 1 -> PhotosTab(
                     selectedUris = selectedPhotoUris,
@@ -483,6 +536,11 @@ fun MainScreen(viewModel: PortalViewModel = viewModel()) {
                     savedPortals = savedPortals,
                     usbStatus = usbStatus,
                     wirelessAdbState = wirelessAdbState,
+                    osUpdateState = osUpdateState,
+                    backupState = backupState,
+                    portalPackages = portalPackages,
+                    isLoadingPortalPackages = isLoadingPortalPackages,
+                    selectedBackupPackages = selectedBackupPackages,
                     onIpChange = { ipAddress = it },
                     onPortChange = { port = it },
                     onConnectManual = {
@@ -504,6 +562,9 @@ fun MainScreen(viewModel: PortalViewModel = viewModel()) {
                     onRemoveSaved = { saved ->
                         savedPortals = SavedPortalStore.remove(context, saved.id)
                     },
+                    onRenameSaved = { saved, name ->
+                        savedPortals = SavedPortalStore.rename(context, saved.id, name)
+                    },
                     onDisconnect = { viewModel.disconnect() },
                     onScanPortals = {
                         showPortalScanner = true
@@ -518,13 +579,15 @@ fun MainScreen(viewModel: PortalViewModel = viewModel()) {
                     onConnectUsb = { viewModel.connectUsb(context) },
                     onEnableWirelessAdb = {
                         viewModel.enableWirelessAdb(context, port.toIntOrNull() ?: 5555)
-                    }
-                )
-                3 -> MoreTab(
-                    context = context,
-                    history = operationHistory,
-                    isConnected = isWifiConnected,
-                    backupState = backupState,
+                    },
+                    onRefreshOsUpdateStatus = { viewModel.refreshOsUpdateStatus(context) },
+                    onSetOsUpdatesBlocked = { blocked ->
+                        viewModel.setOsUpdatesBlocked(context, blocked)
+                    },
+                    onChooseBackupApps = {
+                        viewModel.loadPortalPackages(context)
+                        showBackupAppSelector = true
+                    },
                     onCreateBackup = {
                         backupCreateLauncher.launch(
                             "portal-backup-${System.currentTimeMillis()}.zip"
@@ -534,7 +597,11 @@ fun MainScreen(viewModel: PortalViewModel = viewModel()) {
                         backupRestoreLauncher.launch(
                             arrayOf("application/zip", "application/octet-stream")
                         )
-                    },
+                    }
+                )
+                3 -> MoreTab(
+                    context = context,
+                    history = operationHistory,
                     selectedLanguage = selectedLanguage,
                     onSelectLanguage = { language ->
                         if (selectedLanguage != language) {
@@ -565,6 +632,42 @@ fun MainScreen(viewModel: PortalViewModel = viewModel()) {
                 viewModel.connectDiscoveredPortal(context, portal)
             },
             onDismiss = { showPortalScanner = false }
+        )
+    }
+
+    (backupState as? BackupState.ReadyToRestore)?.let { ready ->
+        BackupRestoreConfirmationDialog(
+            ready = ready,
+            onDismiss = { viewModel.clearBackupState() },
+            onConfirm = { viewModel.restoreBackup(context, ready.source) }
+        )
+    }
+
+    if (showBackupAppSelector) {
+        BackupAppSelectionDialog(
+            packages = portalPackages,
+            isLoading = isLoadingPortalPackages,
+            selectedPackages = selectedBackupPackages,
+            onUseAll = {
+                selectedBackupPackages = null
+                showBackupAppSelector = false
+            },
+            onConfirm = { selected ->
+                selectedBackupPackages = selected
+                showBackupAppSelector = false
+            },
+            onDismiss = { showBackupAppSelector = false }
+        )
+    }
+
+    if (showProfileEditor) {
+        AppProfileEditorDialog(
+            apps = installedApps,
+            onSave = { name, packageNames ->
+                appProfiles = AppProfileStore.saveProfile(context, name, packageNames)
+                showProfileEditor = false
+            },
+            onDismiss = { showProfileEditor = false }
         )
     }
 }
@@ -719,84 +822,62 @@ private fun AppsHubTab(
     context: Context,
     selectedUri: Uri?,
     portalPackages: List<String>,
+    portalApps: List<PortalAppInfo>,
     isLoadingPortalPackages: Boolean,
     uninstallState: UninstallState,
+    profiles: List<AppProfile>,
+    profileApplyState: ProfileApplyState,
     onOpenDevices: () -> Unit,
     onPickFile: () -> Unit,
     onInstall: (InstalledApp) -> Unit,
     onInstallCustomApk: (Uri) -> Unit,
     onRefreshPortalApps: () -> Unit,
-    onUninstall: (String) -> Unit
+    onUninstall: (String) -> Unit,
+    onCreateProfile: () -> Unit,
+    onApplyProfile: (AppProfile) -> Unit,
+    onDeleteProfile: (AppProfile) -> Unit
 ) {
     var selectedSection by remember { mutableIntStateOf(0) }
 
-    if (!isWifiConnected) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(24.dp),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = stringResource(R.string.no_portal_connected_title),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = stringResource(R.string.no_portal_connected_description),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-            Button(
-                onClick = onOpenDevices,
-                shape = RoundedCornerShape(18.dp)
-            ) {
-                Text(stringResource(R.string.open_devices))
-            }
-        }
-        return
-    }
-
     Column(modifier = Modifier.fillMaxSize()) {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
-            )
-        ) {
-            Row(
+        if (isWifiConnected) {
+            Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(9.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary)
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
                 )
-                Spacer(modifier = Modifier.width(10.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = activePortalName ?: stringResource(R.string.active_portal),
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Medium
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(9.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary)
                     )
-                    Text(
-                        text = activePortalAddress,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                TextButton(onClick = onOpenDevices) {
-                    Text(stringResource(R.string.change))
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = activePortalName ?: stringResource(R.string.active_portal),
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = activePortalAddress,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    TextButton(onClick = onOpenDevices) {
+                        Text(stringResource(R.string.change))
+                    }
                 }
             }
         }
@@ -815,28 +896,226 @@ private fun AppsHubTab(
                 },
                 text = { Text(stringResource(R.string.apps_on_portal)) }
             )
+            Tab(
+                selected = selectedSection == 2,
+                onClick = { selectedSection = 2 },
+                text = { Text(stringResource(R.string.apps_profiles)) }
+            )
         }
 
-        if (selectedSection == 0) {
+        if (!isWifiConnected && selectedSection != 2) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(24.dp),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = stringResource(R.string.no_portal_connected_title),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = stringResource(R.string.no_portal_connected_description),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Button(
+                    onClick = onOpenDevices,
+                    shape = RoundedCornerShape(18.dp)
+                ) {
+                    Text(stringResource(R.string.open_devices))
+                }
+            }
+        } else if (selectedSection == 0) {
             InstalledAppsTab(
                 apps = apps,
                 connectionState = connectionState,
                 installState = installState,
+                externalInstallBusy = profileApplyState is ProfileApplyState.Applying,
                 context = context,
                 selectedUri = selectedUri,
                 onPickFile = onPickFile,
                 onInstall = onInstall,
                 onInstallCustomApk = onInstallCustomApk
             )
-        } else {
+        } else if (selectedSection == 1) {
             PortalAppsTab(
                 packages = portalPackages,
+                apps = portalApps,
                 isLoading = isLoadingPortalPackages,
                 uninstallState = uninstallState,
                 onRefresh = onRefreshPortalApps,
                 onUninstall = onUninstall
             )
+        } else {
+            ProfilesTab(
+                profiles = profiles,
+                applyState = profileApplyState,
+                isConnected = isWifiConnected,
+                onCreate = onCreateProfile,
+                onApply = onApplyProfile,
+                onDelete = onDeleteProfile
+            )
         }
+    }
+}
+
+@Composable
+private fun ProfilesTab(
+    profiles: List<AppProfile>,
+    applyState: ProfileApplyState,
+    isConnected: Boolean,
+    onCreate: () -> Unit,
+    onApply: (AppProfile) -> Unit,
+    onDelete: (AppProfile) -> Unit
+) {
+    val applying = applyState as? ProfileApplyState.Applying
+    var pendingDelete by remember { mutableStateOf<AppProfile?>(null) }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        item {
+            Button(
+                onClick = onCreate,
+                enabled = applying == null,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp)
+            ) {
+                Text(stringResource(R.string.profile_create))
+            }
+        }
+
+        if (!isConnected) {
+            item {
+                Text(
+                    text = stringResource(R.string.profile_connect_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        if (applying != null) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text(
+                            text = stringResource(
+                                R.string.profile_applying_title,
+                                applying.profileName
+                            ),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = stringResource(
+                                R.string.profile_applying_progress,
+                                applying.current,
+                                applying.total,
+                                applying.appName
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+        }
+
+        if (profiles.isEmpty()) {
+            item {
+                Text(
+                    text = stringResource(R.string.profiles_empty),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        } else {
+            items(profiles, key = { it.id }) { profile ->
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(18.dp)
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text(
+                            text = profile.name,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = stringResource(
+                                R.string.profile_app_count,
+                                profile.packageNames.size
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = { onApply(profile) },
+                                enabled = isConnected && applying == null,
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(14.dp)
+                            ) {
+                                Text(stringResource(R.string.profile_apply))
+                            }
+                            TextButton(
+                                onClick = { pendingDelete = profile },
+                                enabled = applying == null
+                            ) {
+                                Text(stringResource(R.string.remove))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    pendingDelete?.let { profile ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text(stringResource(R.string.profile_delete_title)) },
+            text = {
+                Text(stringResource(R.string.profile_delete_message, profile.name))
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDelete(profile)
+                        pendingDelete = null
+                    }
+                ) {
+                    Text(stringResource(R.string.remove))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDelete = null }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        )
     }
 }
 
@@ -850,17 +1129,28 @@ private fun DevicesTab(
     savedPortals: List<SavedPortal>,
     usbStatus: UsbPortalStatus,
     wirelessAdbState: WirelessAdbState,
+    osUpdateState: OsUpdateState,
+    backupState: BackupState,
+    portalPackages: List<String>,
+    isLoadingPortalPackages: Boolean,
+    selectedBackupPackages: Set<String>?,
     onIpChange: (String) -> Unit,
     onPortChange: (String) -> Unit,
     onConnectManual: () -> Unit,
     onConnectSaved: (SavedPortal) -> Unit,
     onRemoveSaved: (SavedPortal) -> Unit,
+    onRenameSaved: (SavedPortal, String) -> Unit,
     onDisconnect: () -> Unit,
     onScanPortals: () -> Unit,
     onRefreshUsb: () -> Unit,
     onRequestUsbPermission: () -> Unit,
     onConnectUsb: () -> Unit,
-    onEnableWirelessAdb: () -> Unit
+    onEnableWirelessAdb: () -> Unit,
+    onRefreshOsUpdateStatus: () -> Unit,
+    onSetOsUpdatesBlocked: (Boolean) -> Unit,
+    onChooseBackupApps: () -> Unit,
+    onCreateBackup: () -> Unit,
+    onRestoreBackup: () -> Unit
 ) {
     var selectedSection by remember { mutableIntStateOf(0) }
 
@@ -874,7 +1164,12 @@ private fun DevicesTab(
             Tab(
                 selected = selectedSection == 1,
                 onClick = { selectedSection = 1 },
-                text = { Text(stringResource(R.string.devices_usb_setup)) }
+                text = { Text(stringResource(R.string.devices_backup)) }
+            )
+            Tab(
+                selected = selectedSection == 2,
+                onClick = { selectedSection = 2 },
+                text = { Text(stringResource(R.string.devices_usb)) }
             )
         }
 
@@ -899,6 +1194,14 @@ private fun DevicesTab(
                     )
                 }
                 item {
+                    OsUpdateBlockCard(
+                        connectionState = connectionState,
+                        state = osUpdateState,
+                        onRefresh = onRefreshOsUpdateStatus,
+                        onSetBlocked = onSetOsUpdatesBlocked
+                    )
+                }
+                item {
                     SavedPortalsCard(
                         portals = savedPortals,
                         currentAddress = if (connectionState is ConnectionState.Connected) {
@@ -907,13 +1210,33 @@ private fun DevicesTab(
                             null
                         },
                         onConnect = onConnectSaved,
-                        onRemove = onRemoveSaved
+                        onRemove = onRemoveSaved,
+                        onRename = onRenameSaved
+                    )
+                }
+            }
+        } else if (selectedSection == 1) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(16.dp)
+            ) {
+                item {
+                    BackupCard(
+                        isConnected = connectionState is ConnectionState.Connected,
+                        backupState = backupState,
+                        availablePackageCount = portalPackages.size,
+                        isLoadingPackages = isLoadingPortalPackages,
+                        selectedPackages = selectedBackupPackages,
+                        onChooseApps = onChooseBackupApps,
+                        onCreateBackup = onCreateBackup,
+                        onRestoreBackup = onRestoreBackup
                     )
                 }
             }
         } else {
-            WirelessAdbTab(
+            WirelessAdbGuideTab(
                 connectionState = connectionState,
+                connectionMethod = connectionMethod,
                 usbStatus = usbStatus,
                 wirelessAdbState = wirelessAdbState,
                 port = port,
@@ -931,8 +1254,11 @@ private fun SavedPortalsCard(
     portals: List<SavedPortal>,
     currentAddress: String?,
     onConnect: (SavedPortal) -> Unit,
-    onRemove: (SavedPortal) -> Unit
+    onRemove: (SavedPortal) -> Unit,
+    onRename: (SavedPortal, String) -> Unit
 ) {
+    var portalToRename by remember { mutableStateOf<SavedPortal?>(null) }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -1006,7 +1332,8 @@ private fun SavedPortalsCard(
                             Spacer(modifier = Modifier.height(8.dp))
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
                                 OutlinedButton(
                                     onClick = { onConnect(portal) },
@@ -1022,6 +1349,15 @@ private fun SavedPortalsCard(
                                         }
                                     )
                                 }
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                TextButton(onClick = { portalToRename = portal }) {
+                                    Text(stringResource(R.string.rename))
+                                }
                                 TextButton(
                                     onClick = { onRemove(portal) },
                                     enabled = !isCurrent
@@ -1035,6 +1371,60 @@ private fun SavedPortalsCard(
             }
         }
     }
+
+    portalToRename?.let { portal ->
+        RenamePortalDialog(
+            portal = portal,
+            onDismiss = { portalToRename = null },
+            onSave = { name ->
+                onRename(portal, name)
+                portalToRename = null
+            }
+        )
+    }
+}
+
+@Composable
+private fun RenamePortalDialog(
+    portal: SavedPortal,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit
+) {
+    var name by remember(portal.id) { mutableStateOf(portal.name) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.portal_rename_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text(stringResource(R.string.portal_name)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    text = portal.id,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onSave(name) },
+                enabled = name.isNotBlank()
+            ) {
+                Text(stringResource(R.string.profile_save))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(android.R.string.cancel))
+            }
+        }
+    )
 }
 
 @Composable
@@ -1293,12 +1683,14 @@ private fun InstalledAppsTab(
     apps: List<InstalledApp>,
     connectionState: ConnectionState,
     installState: InstallState,
+    externalInstallBusy: Boolean,
     context: Context,
     selectedUri: Uri?,
     onPickFile: () -> Unit,
     onInstall: (InstalledApp) -> Unit,
     onInstallCustomApk: (Uri) -> Unit
 ) {
+    val installBusy = installState is InstallState.Installing || externalInstallBusy
     var searchQuery by remember { mutableStateOf("") }
     var pendingConfirmation by remember { mutableStateOf<InstalledApp?>(null) }
     var sortBySize by remember { mutableStateOf(false) }
@@ -1421,10 +1813,10 @@ private fun InstalledAppsTab(
                     Button(
                         onClick = { onInstallCustomApk(selectedUri) },
                         enabled = connectionState is ConnectionState.Connected &&
-                            installState !is InstallState.Installing,
+                            !installBusy,
                         shape = RoundedCornerShape(16.dp)
                     ) {
-                        if (installState is InstallState.Installing) {
+                        if (installBusy) {
                             CircularProgressIndicator(
                                 modifier = Modifier.size(18.dp),
                                 strokeWidth = 2.dp,
@@ -1474,7 +1866,7 @@ private fun InstalledAppsTab(
                         app = app,
                         context = context,
                         isConnected = connectionState is ConnectionState.Connected,
-                        isInstalling = installState is InstallState.Installing,
+                        isInstalling = installBusy,
                         onInstall = {
                             val totalSize = app.apkSize +
                                 (app.splitSourceDirs?.sumOf { java.io.File(it).length() } ?: 0L)
@@ -1515,10 +1907,13 @@ private fun InstalledAppsTab(
                 )
             },
             confirmButton = {
-                TextButton(onClick = {
-                    onInstall(app)
-                    pendingConfirmation = null
-                }) {
+                TextButton(
+                    onClick = {
+                        onInstall(app)
+                        pendingConfirmation = null
+                    },
+                    enabled = !installBusy
+                ) {
                     Text(stringResource(R.string.install))
                 }
             },
@@ -1565,6 +1960,7 @@ private fun WirelessAdbTab(
     onEnableWirelessAdb: () -> Unit
 ) {
     val isConnected = connectionState is ConnectionState.Connected
+    val isUsbConnecting = connectionState is ConnectionState.Connecting
     val isEnabling = wirelessAdbState is WirelessAdbState.Enabling
 
     LazyColumn(
@@ -1595,6 +1991,13 @@ private fun WirelessAdbTab(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = stringResource(R.string.usb_otg_recommendation),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
                     if (usbStatus.deviceLabel != null) {
                         Text(
                             text = usbStatus.deviceLabel,
@@ -1620,15 +2023,26 @@ private fun WirelessAdbTab(
                             Spacer(modifier = Modifier.height(8.dp))
                             OutlinedButton(
                                 onClick = onConnectUsb,
+                                enabled = !isUsbConnecting,
                                 shape = RoundedCornerShape(16.dp)
                             ) {
-                                Text(stringResource(R.string.connect_usb))
+                                if (isUsbConnecting) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(18.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(stringResource(R.string.usb_connecting))
+                                } else {
+                                    Text(stringResource(R.string.connect_usb))
+                                }
                             }
                         }
                     }
                     Spacer(modifier = Modifier.height(4.dp))
                     TextButton(
                         onClick = onRefreshUsb,
+                        enabled = !isUsbConnecting,
                         modifier = Modifier.align(Alignment.End)
                     ) {
                         Text(stringResource(R.string.refresh_usb))
@@ -1703,6 +2117,219 @@ private fun WirelessAdbTab(
             }
         }
 
+    }
+}
+
+@Composable
+private fun WirelessAdbGuideTab(
+    connectionState: ConnectionState,
+    connectionMethod: String?,
+    usbStatus: UsbPortalStatus,
+    wirelessAdbState: WirelessAdbState,
+    port: String,
+    onRefreshUsb: () -> Unit,
+    onRequestUsbPermission: () -> Unit,
+    onConnectUsb: () -> Unit,
+    onEnableWirelessAdb: () -> Unit
+) {
+    val context = LocalContext.current
+    var showDiagnostics by remember { mutableStateOf(false) }
+    val isUsbConnected = connectionState is ConnectionState.Connected &&
+        connectionMethod == context.getString(R.string.connection_method_usb)
+    val isConnecting = connectionState is ConnectionState.Connecting
+    val isEnabling = wirelessAdbState is WirelessAdbState.Enabling
+    val currentStep = when {
+        isUsbConnected || isEnabling -> 4
+        !usbStatus.portalDeviceDetected -> 1
+        !usbStatus.adbCapableDeviceDetected -> 2
+        else -> 3
+    }
+    val stepTitle = when (currentStep) {
+        1 -> stringResource(R.string.usb_step_connect_title)
+        2 -> stringResource(R.string.usb_step_enable_adb_title)
+        3 -> stringResource(R.string.usb_step_authorize_title)
+        else -> stringResource(R.string.usb_step_wireless_title)
+    }
+    val stepDescription = when (currentStep) {
+        1 -> stringResource(R.string.usb_step_connect_description)
+        2 -> stringResource(R.string.usb_step_enable_adb_description)
+        3 -> stringResource(
+            if (usbStatus.hasPermission) {
+                R.string.usb_step_connect_app_description
+            } else {
+                R.string.usb_step_authorize_description
+            }
+        )
+        else -> stringResource(R.string.usb_step_wireless_description)
+    }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp),
+        contentPadding = PaddingValues(vertical = 16.dp)
+    ) {
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = SectionCardShape,
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+                )
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = stringResource(R.string.wireless_setup_title),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(R.string.usb_step_counter, currentStep),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = stepTitle,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = stepDescription,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    if (currentStep == 1) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = stringResource(R.string.usb_otg_recommendation),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+                    when {
+                        currentStep == 3 && !usbStatus.hasPermission -> {
+                            Button(
+                                onClick = onRequestUsbPermission,
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(18.dp)
+                            ) {
+                                Text(stringResource(R.string.grant_usb_permission))
+                            }
+                        }
+                        currentStep == 3 -> {
+                            Button(
+                                onClick = onConnectUsb,
+                                enabled = !isConnecting,
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(18.dp)
+                            ) {
+                                if (isConnecting) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(18.dp),
+                                        strokeWidth = 2.dp,
+                                        color = MaterialTheme.colorScheme.onPrimary
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(stringResource(R.string.usb_connecting))
+                                } else {
+                                    Text(stringResource(R.string.connect_usb))
+                                }
+                            }
+                        }
+                        currentStep == 4 -> {
+                            Button(
+                                onClick = onEnableWirelessAdb,
+                                enabled = isUsbConnected && !isEnabling,
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(18.dp)
+                            ) {
+                                if (isEnabling) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(18.dp),
+                                        strokeWidth = 2.dp,
+                                        color = MaterialTheme.colorScheme.onPrimary
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(stringResource(R.string.enabling))
+                                } else {
+                                    Text(stringResource(R.string.enable_wireless_adb))
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = stringResource(R.string.wireless_setup_note),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TextButton(
+                        onClick = { showDiagnostics = !showDiagnostics },
+                        modifier = Modifier.align(Alignment.End)
+                    ) {
+                        Text(
+                            stringResource(
+                                if (showDiagnostics) {
+                                    R.string.usb_hide_diagnostics
+                                } else {
+                                    R.string.usb_show_diagnostics
+                                }
+                            )
+                        )
+                    }
+                    if (showDiagnostics) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surface
+                            )
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                usbStatus.deviceLabel?.let { label ->
+                                    Text(
+                                        text = label,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                                Text(
+                                    text = usbStatus.details,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = stringResource(
+                                        R.string.wireless_adb_port,
+                                        port.ifBlank { "5555" }
+                                    ),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                TextButton(
+                                    onClick = onRefreshUsb,
+                                    enabled = !isConnecting,
+                                    modifier = Modifier.align(Alignment.End)
+                                ) {
+                                    Text(stringResource(R.string.refresh_usb))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -2085,6 +2712,7 @@ private fun HistoryTab(history: List<HistoryEntry>) {
 @Composable
 private fun PortalAppsTab(
     packages: List<String>,
+    apps: List<PortalAppInfo>,
     isLoading: Boolean,
     uninstallState: UninstallState,
     onRefresh: () -> Unit,
@@ -2134,6 +2762,13 @@ private fun PortalAppsTab(
                 )
             }
         } else {
+            val displayApps = if (apps.isNotEmpty()) {
+                apps
+            } else {
+                packages.map {
+                    PortalAppInfo(it, it, "-", 0L, 0L, null)
+                }
+            }
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
@@ -2141,10 +2776,10 @@ private fun PortalAppsTab(
                 contentPadding = PaddingValues(bottom = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(packages, key = { it }) { packageName ->
+                items(displayApps, key = { it.packageName }) { app ->
+                    val packageName = app.packageName
                     val uninstallInProgress = uninstallState as? UninstallState.InProgress
                     val isThisUninstalling = uninstallInProgress?.packageName == packageName
-
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(18.dp)
@@ -2155,13 +2790,42 @@ private fun PortalAppsTab(
                                 .padding(12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = packageName,
-                                style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.weight(1f),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
+                            Box(
+                                modifier = Modifier.size(44.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = app.name.take(1).uppercase(),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = app.name,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = packageName,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = stringResource(
+                                        R.string.portal_app_details,
+                                        app.versionName,
+                                        formatFileSize(app.sizeBytes)
+                                    ),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                             Spacer(modifier = Modifier.width(8.dp))
                             OutlinedButton(
                                 onClick = { onUninstall(packageName) },
@@ -2188,10 +2852,6 @@ private fun PortalAppsTab(
 private fun MoreTab(
     context: Context,
     history: List<HistoryEntry>,
-    isConnected: Boolean,
-    backupState: BackupState,
-    onCreateBackup: () -> Unit,
-    onRestoreBackup: () -> Unit,
     selectedLanguage: AppLanguage,
     onSelectLanguage: (AppLanguage) -> Unit
 ) {
@@ -2216,10 +2876,6 @@ private fun MoreTab(
         } else {
             SettingsTab(
                 context = context,
-                isConnected = isConnected,
-                backupState = backupState,
-                onCreateBackup = onCreateBackup,
-                onRestoreBackup = onRestoreBackup,
                 selectedLanguage = selectedLanguage,
                 onSelectLanguage = onSelectLanguage
             )
@@ -2231,10 +2887,6 @@ private fun MoreTab(
 @Composable
 private fun SettingsTab(
     context: Context,
-    isConnected: Boolean,
-    backupState: BackupState,
-    onCreateBackup: () -> Unit,
-    onRestoreBackup: () -> Unit,
     selectedLanguage: AppLanguage,
     onSelectLanguage: (AppLanguage) -> Unit
 ) {
@@ -2249,8 +2901,8 @@ private fun SettingsTab(
                 @Suppress("DEPRECATION")
                 context.packageManager.getPackageInfo(context.packageName, 0)
             }
-            pkgInfo.versionName ?: "1.0"
-        }.getOrDefault("1.0")
+            pkgInfo.versionName ?: "1.1.0"
+        }.getOrDefault("1.1.0")
     }
 
     LazyColumn(
@@ -2316,15 +2968,6 @@ private fun SettingsTab(
         }
 
         item {
-            BackupCard(
-                isConnected = isConnected,
-                backupState = backupState,
-                onCreateBackup = onCreateBackup,
-                onRestoreBackup = onRestoreBackup
-            )
-        }
-
-        item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = SectionCardShape
@@ -2357,14 +3000,332 @@ private fun SettingsTab(
 }
 
 @Composable
+private fun OsUpdateBlockCard(
+    connectionState: ConnectionState,
+    state: OsUpdateState,
+    onRefresh: () -> Unit,
+    onSetBlocked: (Boolean) -> Unit
+) {
+    LaunchedEffect(connectionState) {
+        if (connectionState is ConnectionState.Connected) onRefresh()
+    }
+
+    val isConnected = connectionState is ConnectionState.Connected
+    val isLoading = state is OsUpdateState.Loading
+    val status = state as? OsUpdateState.Ready
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = SectionCardShape
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.update_block_title),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = stringResource(R.string.update_block_description),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = status?.status?.isBlocked == true,
+                    onCheckedChange = onSetBlocked,
+                    enabled = isConnected && !isLoading && status?.status?.supportedPackages?.isNotEmpty() == true
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+            when {
+                !isConnected -> Text(
+                    text = stringResource(R.string.update_block_connect_first),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                isLoading -> Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(stringResource(R.string.update_block_checking), style = MaterialTheme.typography.labelSmall)
+                }
+                state is OsUpdateState.Failed -> Text(
+                    text = state.message,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+                status?.status?.supportedPackages?.isEmpty() == true -> Text(
+                    text = stringResource(R.string.update_block_not_supported),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                status != null -> Text(
+                    text = stringResource(
+                        if (status.status.isBlocked) {
+                            R.string.update_block_enabled
+                        } else {
+                            R.string.update_block_disabled
+                        }
+                    ),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (status.status.isBlocked) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                )
+            }
+
+            if (isConnected && !isLoading) {
+                TextButton(
+                    onClick = onRefresh,
+                    modifier = Modifier.align(Alignment.End)
+                ) {
+                    Text(stringResource(R.string.refresh))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AppProfileEditorDialog(
+    apps: List<InstalledApp>,
+    onSave: (name: String, packageNames: Set<String>) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var profileName by remember { mutableStateOf("") }
+    var selection by remember(apps) { mutableStateOf(emptySet<String>()) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.profile_create_title)) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = profileName,
+                    onValueChange = { profileName = it.take(40) },
+                    label = { Text(stringResource(R.string.profile_name)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    TextButton(
+                        onClick = { selection = apps.map { it.packageName }.toSet() },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(stringResource(R.string.select_all))
+                    }
+                    TextButton(
+                        onClick = { selection = emptySet() },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(stringResource(R.string.select_none))
+                    }
+                }
+                LazyColumn(
+                    modifier = Modifier.heightIn(max = 360.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    items(apps, key = { it.packageName }) { app ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Checkbox(
+                                checked = app.packageName in selection,
+                                onCheckedChange = { checked ->
+                                    selection = if (checked) {
+                                        selection + app.packageName
+                                    } else {
+                                        selection - app.packageName
+                                    }
+                                }
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = app.name,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = app.packageName,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = stringResource(R.string.profile_app_count, selection.size),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onSave(profileName.trim(), selection) },
+                enabled = profileName.isNotBlank() && selection.isNotEmpty()
+            ) {
+                Text(stringResource(R.string.profile_save))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        }
+    )
+}
+
+@Composable
+private fun BackupAppSelectionDialog(
+    packages: List<String>,
+    isLoading: Boolean,
+    selectedPackages: Set<String>?,
+    onUseAll: () -> Unit,
+    onConfirm: (Set<String>) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var selection by remember(packages, selectedPackages) {
+        mutableStateOf(
+            selectedPackages
+                ?.intersect(packages.toSet())
+                ?: packages.toSet()
+        )
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.backup_choose_apps_title)) },
+        text = {
+            Column {
+                Text(
+                    text = stringResource(R.string.backup_choose_apps_description),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    TextButton(
+                        onClick = { selection = packages.toSet() },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(stringResource(R.string.select_all))
+                    }
+                    TextButton(
+                        onClick = { selection = emptySet() },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(stringResource(R.string.select_none))
+                    }
+                }
+                when {
+                    isLoading -> {
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    }
+                    packages.isEmpty() -> {
+                        Text(
+                            text = stringResource(R.string.portal_apps_empty),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    else -> {
+                        LazyColumn(
+                            modifier = Modifier.heightIn(max = 360.dp),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            items(packages, key = { it }) { packageName ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 2.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Checkbox(
+                                        checked = packageName in selection,
+                                        onCheckedChange = { checked ->
+                                            selection = if (checked) {
+                                                selection + packageName
+                                            } else {
+                                                selection - packageName
+                                            }
+                                        }
+                                    )
+                                    Text(
+                                        text = packageName,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = stringResource(
+                        R.string.backup_apps_selected,
+                        selection.size
+                    ),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (selection.size == packages.size) {
+                        onUseAll()
+                    } else {
+                        onConfirm(selection)
+                    }
+                },
+                enabled = !isLoading
+            ) {
+                Text(stringResource(R.string.save_selection))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        }
+    )
+}
+
+@Composable
 private fun BackupCard(
     isConnected: Boolean,
     backupState: BackupState,
+    availablePackageCount: Int,
+    isLoadingPackages: Boolean,
+    selectedPackages: Set<String>?,
+    onChooseApps: () -> Unit,
     onCreateBackup: () -> Unit,
     onRestoreBackup: () -> Unit
 ) {
     val isWorking = backupState is BackupState.Creating ||
-        backupState is BackupState.Restoring
+        backupState is BackupState.Restoring ||
+        backupState is BackupState.Previewing
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -2384,6 +3345,43 @@ private fun BackupCard(
             )
             Spacer(modifier = Modifier.height(12.dp))
 
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.backup_apps_label),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = when {
+                            isLoadingPackages -> stringResource(R.string.loading)
+                            selectedPackages == null && availablePackageCount > 0 -> stringResource(
+                                R.string.backup_apps_all,
+                                availablePackageCount
+                            )
+                            selectedPackages == null -> stringResource(R.string.backup_apps_all_simple)
+                            else -> stringResource(
+                                R.string.backup_apps_selected,
+                                selectedPackages.size
+                            )
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                OutlinedButton(
+                    onClick = onChooseApps,
+                    enabled = isConnected && !isWorking,
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Text(stringResource(R.string.choose))
+                }
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+
             if (isWorking) {
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 Spacer(modifier = Modifier.height(8.dp))
@@ -2400,6 +3398,7 @@ private fun BackupCard(
                         backupState.total,
                         backupState.packageName
                     )
+                    is BackupState.Previewing -> stringResource(R.string.backup_preview_progress)
                     else -> ""
                 }
                 Text(
@@ -2443,6 +3442,63 @@ private fun BackupCard(
             )
         }
     }
+}
+
+@Composable
+private fun BackupRestoreConfirmationDialog(
+    ready: BackupState.ReadyToRestore,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    val preview = ready.preview
+    val deviceName = listOf(preview.manufacturer, preview.model)
+        .filter { it.isNotBlank() }
+        .joinToString(" ")
+        .ifBlank { stringResource(R.string.backup_preview_unknown_device) }
+    val created = if (preview.createdAt > 0) {
+        DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT)
+            .format(Date(preview.createdAt))
+    } else {
+        "-"
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.backup_preview_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = stringResource(R.string.backup_preview_source, deviceName),
+                    fontWeight = FontWeight.SemiBold
+                )
+                if (preview.sdk.isNotBlank()) {
+                    Text(stringResource(R.string.backup_preview_sdk, preview.sdk))
+                }
+                Text(stringResource(R.string.backup_preview_date, created))
+                Text(
+                    stringResource(
+                        R.string.backup_preview_contents,
+                        preview.appCount,
+                        preview.settingCount
+                    )
+                )
+                Text(
+                    text = stringResource(R.string.backup_preview_warning),
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = onConfirm) {
+                Text(stringResource(R.string.backup_restore_confirm))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(android.R.string.cancel))
+            }
+        }
+    )
 }
 
 @Composable
