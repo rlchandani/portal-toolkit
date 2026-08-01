@@ -64,7 +64,13 @@ internal class ConnectionDadb(private val connection: Any) : Dadb {
 internal object DadbInternals {
 
     private val adbConnectionClass: Class<*> by lazy { Class.forName("dadb.AdbConnection") }
-    private val companion: Any by lazy { adbConnectionClass.getField("Companion").get(null) }
+    private val companion: Any by lazy {
+        // `Companion` este un câmp static non-null în dadb; dacă lipsește (bump de
+        // versiune care schimbă structura), preferăm o eroare clară în locul unui
+        // NPE opac mai târziu la primul apel de conexiune.
+        adbConnectionClass.getField("Companion").get(null)
+            ?: error("dadb.AdbConnection.Companion nu a putut fi rezolvat prin reflexie.")
+    }
 
     fun connectSocket(socket: Socket, keyPair: AdbKeyPair): Any {
         return resolveConnectSocketMethod().invoke(companion, socket, keyPair)
