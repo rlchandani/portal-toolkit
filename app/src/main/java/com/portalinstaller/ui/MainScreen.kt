@@ -39,6 +39,10 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
 import com.portalinstaller.R
 import com.portalinstaller.ui.common.formatFileSize
 import com.portalinstaller.data.AppProfileStore
@@ -95,7 +99,16 @@ fun MainScreen(viewModel: PortalViewModel = viewModel()) {
     val osUpdateState by viewModel.osUpdateState.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
-    var selectedTab by remember { mutableIntStateOf(2) }
+    val navController = rememberNavController()
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
+    val navigateToTab: (PortalRoute) -> Unit = { destination ->
+        navController.navigate(destination.route) {
+            popUpTo(PortalRoute.START_DESTINATION) { saveState = true }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
     var usbRefreshTrigger by remember { mutableIntStateOf(0) }
     var showPortalScanner by remember { mutableStateOf(false) }
     var showBackupAppSelector by remember { mutableStateOf(false) }
@@ -364,27 +377,22 @@ fun MainScreen(viewModel: PortalViewModel = viewModel()) {
         snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
             NavigationBar {
-                val destinations = listOf(
-                    Triple(R.string.tab_devices, 2, 2),
-                    Triple(R.string.tab_apps, 0, 0),
-                    Triple(R.string.tab_photos, 1, 1),
-                    Triple(R.string.tab_more, 3, 3)
-                )
-                destinations.forEach { (label, screen, glyph) ->
+                PortalRoute.bottomNavOrder.forEach { destination ->
+                    val selected = currentRoute == destination.route
                     NavigationBarItem(
-                        selected = selectedTab == screen,
+                        selected = selected,
                         onClick = {
-                            selectedTab = screen
-                            if (screen == 0 &&
+                            navigateToTab(destination)
+                            if (destination == PortalRoute.Apps &&
                                 connectionState is ConnectionState.Connected
                             ) {
                                 viewModel.loadPortalPackages(context)
                             }
                         },
                         icon = {
-                            NavigationGlyph(glyph, selectedTab == screen)
+                            NavigationGlyph(destination.glyphIndex, selected)
                         },
-                        label = { Text(stringResource(label)) }
+                        label = { Text(stringResource(destination.labelRes)) }
                     )
                 }
             }
@@ -416,8 +424,11 @@ fun MainScreen(viewModel: PortalViewModel = viewModel()) {
                 it.ip == ipAddress && it.port == (port.toIntOrNull() ?: 5555)
             }?.name
 
-            when (selectedTab) {
-                0 -> AppsHubTab(
+            NavHost(
+                navController = navController,
+                startDestination = PortalRoute.START_DESTINATION
+            ) {
+                composable(PortalRoute.Apps.route) { AppsHubTab(
                     isWifiConnected = isWifiConnected,
                     activePortalName = activePortalName,
                     activePortalAddress = "$ipAddress:${port.ifBlank { "5555" }}",
@@ -432,7 +443,7 @@ fun MainScreen(viewModel: PortalViewModel = viewModel()) {
                     uninstallState = uninstallState,
                     profiles = appProfiles,
                     profileApplyState = profileApplyState,
-                    onOpenDevices = { selectedTab = 2 },
+                    onOpenDevices = { navigateToTab(PortalRoute.Devices) },
                     onPickFile = {
                         apkPickerLauncher.launch("application/vnd.android.package-archive")
                     },
@@ -447,16 +458,16 @@ fun MainScreen(viewModel: PortalViewModel = viewModel()) {
                     onDeleteProfile = { profile ->
                         appProfiles = AppProfileStore.remove(context, profile.id)
                     }
-                )
-                1 -> PhotosTab(
+                ) }
+                composable(PortalRoute.Photos.route) { PhotosTab(
                     selectedUris = selectedPhotoUris,
                     isWifiConnected = isWifiConnected,
                     photoUploadState = photoUploadState,
-                    onOpenDevices = { selectedTab = 2 },
+                    onOpenDevices = { navigateToTab(PortalRoute.Devices) },
                     onPickPhotos = { photoPickerLauncher.launch("image/*") },
                     onUpload = { viewModel.uploadPhotos(context) }
-                )
-                2 -> DevicesTab(
+                ) }
+                composable(PortalRoute.Devices.route) { DevicesTab(
                     ipAddress = ipAddress,
                     port = port,
                     connectionState = connectionState,
@@ -527,8 +538,8 @@ fun MainScreen(viewModel: PortalViewModel = viewModel()) {
                             arrayOf("application/zip", "application/octet-stream")
                         )
                     }
-                )
-                3 -> MoreTab(
+                ) }
+                composable(PortalRoute.More.route) { MoreTab(
                     context = context,
                     history = operationHistory,
                     selectedLanguage = selectedLanguage,
@@ -539,7 +550,7 @@ fun MainScreen(viewModel: PortalViewModel = viewModel()) {
                             (context as? Activity)?.recreate()
                         }
                     }
-                )
+                ) }
             }
         }
     }
