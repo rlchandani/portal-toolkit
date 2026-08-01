@@ -63,6 +63,7 @@ import com.portalinstaller.viewmodel.InstallState
 import com.portalinstaller.viewmodel.PhotoUploadState
 import com.portalinstaller.viewmodel.PhotosViewModel
 import com.portalinstaller.viewmodel.PortalDiscoveryState
+import com.portalinstaller.viewmodel.LogcatViewModel
 import com.portalinstaller.viewmodel.PowerControlState
 import com.portalinstaller.viewmodel.ShellViewModel
 import com.portalinstaller.viewmodel.ProfileApplyState
@@ -87,7 +88,8 @@ fun MainScreen(
     appsViewModel: AppsViewModel = viewModel(),
     backupViewModel: BackupViewModel = viewModel(),
     photosViewModel: PhotosViewModel = viewModel(),
-    shellViewModel: ShellViewModel = viewModel()
+    shellViewModel: ShellViewModel = viewModel(),
+    logcatViewModel: LogcatViewModel = viewModel()
 ) {
     val context = LocalContext.current
     val container = remember { AppContainer.from(context) }
@@ -549,6 +551,7 @@ fun MainScreen(
                         backupViewModel.onDisconnected()
                         photosViewModel.onDisconnected()
                         shellViewModel.onDisconnected()
+                        logcatViewModel.onDisconnected()
                     },
                     onScanPortals = {
                         showPortalScanner = true
@@ -608,7 +611,8 @@ fun MainScreen(
                     shellQuickCommands = shellViewModel.quickCommands,
                     onShellRun = { command -> shellViewModel.run(context, command) },
                     onShellCancel = { shellViewModel.cancel() },
-                    onShellClear = { shellViewModel.clearTranscript() }
+                    onShellClear = { shellViewModel.clearTranscript() },
+                    logcatViewModel = logcatViewModel
                 ) }
             }
         }
