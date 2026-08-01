@@ -88,6 +88,10 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.portalinstaller.R
+import com.portalinstaller.ui.common.SectionCardShape
+import com.portalinstaller.ui.common.formatFileSize
+import com.portalinstaller.ui.common.formatRam
+import com.portalinstaller.ui.common.formatStorage
 import com.portalinstaller.data.AppProfile
 import com.portalinstaller.data.AppProfileStore
 import com.portalinstaller.data.ContentUriHelper
@@ -138,7 +142,6 @@ private val SPLIT_APK_RISK_KEYWORDS = listOf(
  * Pragul de marime peste care cerem confirmare explicita inainte de instalare.
  */
 private const val LARGE_APP_SIZE_THRESHOLD_BYTES = 50L * 1024 * 1024 // 50 MB
-private val SectionCardShape = RoundedCornerShape(20.dp)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1926,27 +1929,6 @@ private fun InstalledAppsTab(
     }
 }
 
-@Composable
-private fun formatStorage(deviceStatus: DeviceStatus): String {
-    val free = deviceStatus.storageFreeBytes
-    val total = deviceStatus.storageTotalBytes
-    return if (free != null && total != null) {
-        stringResource(
-            R.string.storage_free_of_total,
-            formatFileSize(free),
-            formatFileSize(total)
-        )
-    } else {
-        stringResource(R.string.unavailable)
-    }
-}
-
-@Composable
-private fun formatRam(ramFreeBytes: Long?): String {
-    return ramFreeBytes?.let {
-        stringResource(R.string.ram_free_amount, formatFileSize(it))
-    } ?: stringResource(R.string.unavailable)
-}
 
 @Composable
 private fun WirelessAdbTab(
@@ -3608,15 +3590,6 @@ private fun PhotosTab(
     }
 }
 
-private fun formatFileSize(bytes: Long): String {
-    val locale = java.util.Locale.getDefault()
-    return when {
-        bytes < 1024 -> "$bytes B"
-        bytes < 1024 * 1024 -> String.format(locale, "%.1f KB", bytes / 1024.0)
-        bytes < 1024 * 1024 * 1024 -> String.format(locale, "%.1f MB", bytes / (1024.0 * 1024.0))
-        else -> String.format(locale, "%.1f GB", bytes / (1024.0 * 1024.0 * 1024.0))
-    }
-}
 
 /**
  * Serializeaza istoricul de operatii ca JSON si il salveaza in
