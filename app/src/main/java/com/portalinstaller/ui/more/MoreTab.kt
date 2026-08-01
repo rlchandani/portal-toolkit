@@ -169,8 +169,8 @@ internal fun SettingsTab(
                 @Suppress("DEPRECATION")
                 context.packageManager.getPackageInfo(context.packageName, 0)
             }
-            pkgInfo.versionName ?: "1.1.0"
-        }.getOrDefault("1.1.0")
+            pkgInfo.versionName ?: "1.2.0"
+        }.getOrDefault("1.2.0")
     }
 
     LazyColumn(
