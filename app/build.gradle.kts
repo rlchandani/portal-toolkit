@@ -69,7 +69,7 @@ dependencies {
 
     // Dadb: direct ADB connection over TCP/IP without the ADB binary or server.
     // https://github.com/mobile-dev-inc/dadb
-    implementation("dev.mobile:dadb:1.2.6")
+    implementation("dev.mobile:dadb:1.2.10")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")

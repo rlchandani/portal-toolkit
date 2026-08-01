@@ -44,6 +44,15 @@ sealed class MonitorSignal {
 class ConnectionMonitor(
     private val backoff: ReconnectBackoff = ReconnectBackoff(),
     private val heartbeatIntervalMs: Long = 20_000,
+    /**
+     * Cate esecuri de ping CONSECUTIVE sunt necesare inainte sa declaram
+     * conexiunea pierduta. dadb poate esua un shell izolat pe o conexiune
+     * altfel sanatoasa (race de stream), deci un singur blip nu trebuie sa
+     * declanseze un ciclu deconectare/reconectare.
+     */
+    private val failureThreshold: Int = 3,
+    /** Pauza scurta intre ping-urile de confirmare din timpul unei serii de esecuri. */
+    private val failureRetryMs: Long = 2_000,
     private val now: () -> Long = { System.currentTimeMillis() }
 ) {
     private val _events = MutableStateFlow<List<ConnectionEvent>>(emptyList())
@@ -64,16 +73,28 @@ class ConnectionMonitor(
     ) {
         job?.cancel()
         job = scope.launch {
+            var consecutiveFailures = 0
             while (isActive) {
-                delay(heartbeatIntervalMs)
+                // Dupa primul esec confirmam mai des (failureRetryMs) pana atingem
+                // pragul; altfel asteptam intervalul normal de heartbeat.
+                delay(if (consecutiveFailures == 0) heartbeatIntervalMs else failureRetryMs)
                 if (!isActive) break
 
                 val alive = runCatching { ping() }.getOrDefault(false)
-                if (alive) continue
+                if (alive) {
+                    consecutiveFailures = 0
+                    continue
+                }
+
+                consecutiveFailures++
+                // Un blip izolat este tolerat; declaram pierdut doar dupa
+                // failureThreshold esecuri consecutive.
+                if (consecutiveFailures < failureThreshold) continue
 
                 append(ConnectionEventKind.LOST)
                 onSignal(MonitorSignal.Lost)
                 runReconnectLoop(reconnect, onSignal)
+                consecutiveFailures = 0
             }
         }
     }
