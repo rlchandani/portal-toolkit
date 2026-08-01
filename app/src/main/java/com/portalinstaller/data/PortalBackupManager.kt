@@ -39,12 +39,35 @@ data class PortalBackupPreview(
 class PortalBackupManager {
 
     companion object {
-        private const val FORMAT_VERSION = 1
+        internal const val FORMAT_VERSION = 1
         private const val MANIFEST_ENTRY = "manifest.json"
         private const val MAX_ARCHIVE_ENTRIES = 500
         private const val MAX_EXTRACTED_BYTES = 3L * 1024 * 1024 * 1024
         private const val MAX_MANIFEST_BYTES = 1024 * 1024
-        private const val MAX_CONSECUTIVE_RESTORE_FAILURES = 3
+        internal const val MAX_CONSECUTIVE_RESTORE_FAILURES = 3
+
+        private val PACKAGE_NAME_REGEX = Regex("[A-Za-z0-9_.]+")
+
+        /** Formatul de backup pe care îl putem restaura. Versiuni necunoscute sunt respinse. */
+        internal fun isSupportedFormat(version: Int): Boolean = version == FORMAT_VERSION
+
+        /** Nume de pachet valid: doar litere/cifre/`_`/`.` (evită injectarea în shell). */
+        internal fun isValidPackageName(name: String): Boolean = name.matches(PACKAGE_NAME_REGEX)
+
+        /** Oprim restaurarea după [MAX_CONSECUTIVE_RESTORE_FAILURES] eșecuri consecutive. */
+        internal fun shouldStopRestore(consecutiveFailures: Int): Boolean =
+            consecutiveFailures >= MAX_CONSECUTIVE_RESTORE_FAILURES
+
+        /**
+         * Rezolvă o intrare de arhivă în interiorul [root], respingând căile care
+         * evadează (zip-slip, ex. `../evil`). Publică pentru testare pe JVM.
+         */
+        internal fun safeArchiveFile(root: File, entryName: String): File {
+            val file = File(root, entryName)
+            val rootPath = root.canonicalPath + File.separator
+            require(file.canonicalPath.startsWith(rootPath)) { "Invalid file path in backup" }
+            return file
+        }
 
         private val BACKUP_SETTINGS = listOf(
             "system" to "screen_brightness",
@@ -163,7 +186,7 @@ class PortalBackupManager {
             val manifestFile = File(workDir, MANIFEST_ENTRY)
             require(manifestFile.isFile) { "The backup manifest is missing" }
             val manifest = JSONObject(manifestFile.readText())
-            require(manifest.optInt("formatVersion") == FORMAT_VERSION) {
+            require(isSupportedFormat(manifest.optInt("formatVersion"))) {
                 "Unsupported backup format"
             }
 
@@ -179,7 +202,7 @@ class PortalBackupManager {
             for (index in 0 until apps.length()) {
                 val app = apps.getJSONObject(index)
                 val packageName = app.getString("packageName")
-                require(packageName.matches(Regex("[A-Za-z0-9_.]+"))) {
+                require(isValidPackageName(packageName)) {
                     "Invalid package name in backup"
                 }
                 require(seenPackages.add(packageName)) {
@@ -216,7 +239,7 @@ class PortalBackupManager {
                 } else {
                     failedPackages += packageName
                     consecutiveFailures++
-                    if (consecutiveFailures >= MAX_CONSECUTIVE_RESTORE_FAILURES) {
+                    if (shouldStopRestore(consecutiveFailures)) {
                         val reason = installResult.exceptionOrNull()?.message
                             ?: "Multiple restore operations failed"
                         stoppedEarlyReason = context.getString(
@@ -284,7 +307,7 @@ class PortalBackupManager {
                         }
 
                         val manifest = JSONObject(bytes.toString(Charsets.UTF_8.name()))
-                        require(manifest.optInt("formatVersion") == FORMAT_VERSION) {
+                        require(isSupportedFormat(manifest.optInt("formatVersion"))) {
                             "Unsupported backup format"
                         }
                         require(!manifestFound) { "Backup contains multiple manifests" }
@@ -431,13 +454,6 @@ class PortalBackupManager {
                 }
             }
         }
-    }
-
-    private fun safeArchiveFile(root: File, entryName: String): File {
-        val file = File(root, entryName)
-        val rootPath = root.canonicalPath + File.separator
-        require(file.canonicalPath.startsWith(rootPath)) { "Invalid file path in backup" }
-        return file
     }
 
     private fun createWorkDir(context: Context, prefix: String): File {

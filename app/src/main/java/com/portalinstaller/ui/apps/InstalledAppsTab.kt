@@ -49,6 +49,7 @@ import com.portalinstaller.R
 import com.portalinstaller.ui.common.formatFileSize
 import com.portalinstaller.data.ContentUriHelper
 import com.portalinstaller.data.InstalledApp
+import com.portalinstaller.data.InstallPolicy
 import com.portalinstaller.data.PortalDeviceConfig
 import com.portalinstaller.viewmodel.ConnectionState
 import com.portalinstaller.viewmodel.InstallState
@@ -331,7 +332,7 @@ internal fun InstalledAppItem(
     isInstalling: Boolean,
     onInstall: () -> Unit
 ) {
-    val isPortalCompatible = app.minSdkVersion <= PortalDeviceConfig.MAX_SDK
+    val isPortalCompatible = InstallPolicy.isCompatible(app.minSdkVersion)
     val hasSplitApks = !app.splitSourceDirs.isNullOrEmpty()
     val pm = context.packageManager
     val icon by produceState<ImageBitmap?>(initialValue = null, app.packageName) {
@@ -393,7 +394,7 @@ internal fun InstalledAppItem(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                if (app.minSdkVersion > PortalDeviceConfig.MAX_SDK) {
+                if (!InstallPolicy.isCompatible(app.minSdkVersion)) {
                 Text(
                     text = stringResource(
                         R.string.portal_api_incompatible,

@@ -11,6 +11,7 @@ import com.portalinstaller.data.AppContainer
 import com.portalinstaller.data.ContentUriHelper
 import com.portalinstaller.data.InstalledApp
 import com.portalinstaller.data.PortalAppInfo
+import com.portalinstaller.data.InstallPolicy
 import com.portalinstaller.data.PortalDeviceConfig
 import com.portalinstaller.data.store.AppProfile
 import com.portalinstaller.data.store.HistoryEntry
@@ -365,7 +366,7 @@ class AppsViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun validatePortalApp(context: Context, label: String, minSdkVersion: Int): String? {
-        return if (minSdkVersion > PortalDeviceConfig.MAX_SDK) {
+        return if (!InstallPolicy.isCompatible(minSdkVersion)) {
             context.getString(
                 R.string.error_portal_sdk_incompatible,
                 label,
