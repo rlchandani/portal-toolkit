@@ -24,10 +24,12 @@ import com.portalinstaller.data.store.ThemeMode
 import com.portalinstaller.ui.more.HistoryTab
 import com.portalinstaller.ui.more.SettingsTab
 import com.portalinstaller.ui.tools.capture.CaptureTab
+import com.portalinstaller.ui.tools.files.FilesTab
 import com.portalinstaller.ui.tools.logcat.LogcatTab
 import com.portalinstaller.ui.tools.shell.ShellTab
 import com.portalinstaller.util.AppLanguage
 import com.portalinstaller.viewmodel.CaptureViewModel
+import com.portalinstaller.viewmodel.FileManagerViewModel
 import com.portalinstaller.viewmodel.LogcatViewModel
 import com.portalinstaller.viewmodel.ShellEntry
 
@@ -57,7 +59,8 @@ internal fun ToolsTab(
     onShellCancel: () -> Unit,
     onShellClear: () -> Unit,
     logcatViewModel: LogcatViewModel,
-    captureViewModel: CaptureViewModel
+    captureViewModel: CaptureViewModel,
+    fileManagerViewModel: FileManagerViewModel
 ) {
     var selectedSection by rememberSaveable { mutableIntStateOf(0) }
 
@@ -65,6 +68,7 @@ internal fun ToolsTab(
         R.string.tools_section_shell,
         R.string.tools_section_logcat,
         R.string.tools_section_capture,
+        R.string.tools_section_files,
         R.string.tools_section_history,
         R.string.tools_section_settings
     )
@@ -96,8 +100,9 @@ internal fun ToolsTab(
             )
             1 -> LogcatTab(context = context, viewModel = logcatViewModel)
             2 -> CaptureTab(context = context, viewModel = captureViewModel)
-            3 -> HistoryTab(history)
-            4 -> SettingsTab(
+            3 -> FilesTab(context = context, viewModel = fileManagerViewModel)
+            4 -> HistoryTab(history)
+            5 -> SettingsTab(
                 context = context,
                 selectedLanguage = selectedLanguage,
                 onSelectLanguage = onSelectLanguage,

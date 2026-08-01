@@ -2,6 +2,7 @@ package com.portalinstaller.data
 
 import android.content.Context
 import com.portalinstaller.PortalApplication
+import com.portalinstaller.data.files.PortalFileManager
 import com.portalinstaller.data.store.AppProfileStore
 import com.portalinstaller.data.store.HistoryStore
 import com.portalinstaller.data.store.PortalDataStores
@@ -22,6 +23,7 @@ class AppContainer(context: Context) {
     val connectionManager = PortalConnectionManager()
     val discoveryManager = PortalDiscoveryManager(connectionManager)
     val backupManager = PortalBackupManager()
+    val fileManager = PortalFileManager()
 
     val connectionHolder = ConnectionHolder()
     val connectionMonitor = ConnectionMonitor()

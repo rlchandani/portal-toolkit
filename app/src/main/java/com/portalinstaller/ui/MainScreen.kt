@@ -61,6 +61,8 @@ import com.portalinstaller.viewmodel.BackupState
 import com.portalinstaller.viewmodel.BackupViewModel
 import com.portalinstaller.viewmodel.ConnectionState
 import com.portalinstaller.viewmodel.ConnectionViewModel
+import com.portalinstaller.viewmodel.FileManagerViewModel
+import com.portalinstaller.viewmodel.FileTransferState
 import com.portalinstaller.viewmodel.InstallState
 import com.portalinstaller.viewmodel.PhotoUploadState
 import com.portalinstaller.viewmodel.PhotosViewModel
@@ -92,7 +94,8 @@ fun MainScreen(
     photosViewModel: PhotosViewModel = viewModel(),
     shellViewModel: ShellViewModel = viewModel(),
     logcatViewModel: LogcatViewModel = viewModel(),
-    captureViewModel: CaptureViewModel = viewModel()
+    captureViewModel: CaptureViewModel = viewModel(),
+    fileManagerViewModel: FileManagerViewModel = viewModel()
 ) {
     val context = LocalContext.current
     val container = remember { AppContainer.from(context) }
@@ -128,6 +131,9 @@ fun MainScreen(
 
     val captureSaveState by captureViewModel.saveState.collectAsStateWithLifecycle()
     val captureNotConnected by captureViewModel.notConnected.collectAsStateWithLifecycle()
+
+    val fileTransferState by fileManagerViewModel.transferState.collectAsStateWithLifecycle()
+    val fileNotConnected by fileManagerViewModel.notConnected.collectAsStateWithLifecycle()
 
     val operationHistory by container.historyStore.history.collectAsStateWithLifecycle(initialValue = emptyList())
     val savedPortals by container.savedPortalStore.portals.collectAsStateWithLifecycle(initialValue = emptyList())
@@ -424,6 +430,29 @@ fun MainScreen(
         }
     }
 
+    LaunchedEffect(fileTransferState) {
+        when (val state = fileTransferState) {
+            is FileTransferState.Done -> {
+                snackbarHostState.showSnackbar(
+                    context.getString(R.string.files_transfer_done, state.pulled, state.pushed)
+                )
+                fileManagerViewModel.clearTransferState()
+            }
+            is FileTransferState.Failed -> {
+                snackbarHostState.showSnackbar(state.message)
+                fileManagerViewModel.clearTransferState()
+            }
+            else -> Unit
+        }
+    }
+
+    LaunchedEffect(fileNotConnected) {
+        if (fileNotConnected) {
+            snackbarHostState.showSnackbar(context.getString(R.string.shell_not_connected))
+            fileManagerViewModel.clearNotConnected()
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -580,6 +609,7 @@ fun MainScreen(
                         shellViewModel.onDisconnected()
                         logcatViewModel.onDisconnected()
                         captureViewModel.onDisconnected()
+                        fileManagerViewModel.onDisconnected()
                     },
                     onScanPortals = {
                         showPortalScanner = true
@@ -641,7 +671,8 @@ fun MainScreen(
                     onShellCancel = { shellViewModel.cancel() },
                     onShellClear = { shellViewModel.clearTranscript() },
                     logcatViewModel = logcatViewModel,
-                    captureViewModel = captureViewModel
+                    captureViewModel = captureViewModel,
+                    fileManagerViewModel = fileManagerViewModel
                 ) }
             }
         }
