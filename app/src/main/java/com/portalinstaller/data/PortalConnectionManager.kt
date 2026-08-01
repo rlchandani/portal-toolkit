@@ -541,37 +541,9 @@ class PortalConnectionManager {
         return null
     }
 
-    private fun formatAdbReason(context: Context, rawMessage: String?, fallback: String): String {
-        val message = rawMessage?.trim().orEmpty()
-        if (message.isBlank()) return fallback
-
-        val normalized = message.lowercase()
-        return when {
-            normalized.contains("device offline") ->
-                context.getString(R.string.error_device_offline)
-            normalized.contains("broken pipe") || normalized.contains("connection reset") || normalized.contains("closed") ->
-                context.getString(R.string.error_connection_closed)
-            normalized.contains("timeout") || normalized.contains("timed out") ->
-                context.getString(R.string.error_operation_timed_out)
-            normalized.contains("permission denied") ->
-                context.getString(R.string.error_permission_denied)
-            normalized.contains("no space left") ->
-                context.getString(R.string.error_no_space_left)
-            normalized.contains("install_failed_version_downgrade") ->
-                context.getString(R.string.error_install_version_downgrade)
-            normalized.contains("install_failed_update_incompatible") ->
-                context.getString(R.string.error_install_update_incompatible)
-            normalized.contains("install_failed_invalid_apk") ->
-                context.getString(R.string.error_install_invalid_apk)
-            normalized.contains("install_failed_older_sdk") ->
-                context.getString(R.string.error_install_older_sdk)
-            normalized.contains("install_parse_failed") ->
-                context.getString(R.string.error_install_parse_failed)
-            normalized.contains("securityexception") ->
-                context.getString(R.string.error_security_exception)
-            else -> message
-        }
-    }
+    // Delegat catre formatterul partajat; pastrat privat pentru call-site-urile existente.
+    private fun formatAdbReason(context: Context, rawMessage: String?, fallback: String): String =
+        AdbErrors.formatReason(context, rawMessage, fallback)
 }
 
 sealed class AdbError(override val message: String) : Exception(message) {
