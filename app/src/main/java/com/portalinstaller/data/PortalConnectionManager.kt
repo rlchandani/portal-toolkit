@@ -17,7 +17,8 @@ data class DeviceStatus(
     val ramFreeBytes: Long?,
     val manufacturer: String,
     val model: String,
-    val sdk: String
+    val sdk: String,
+    val uptimeSeconds: Long?
 )
 
 data class PortalIdentity(
@@ -331,13 +332,15 @@ class PortalConnectionManager {
         return withContext(Dispatchers.IO) {
             val storage = runCatching { parseDf(dadb.shell("df /sdcard").output) }.getOrNull()
             val ramFree = runCatching { parseMemAvailable(dadb.shell("cat /proc/meminfo").output) }.getOrNull()
+            val uptime = runCatching { parseUptimeSeconds(dadb.shell("cat /proc/uptime").output) }.getOrNull()
             DeviceStatus(
                 storageFreeBytes = storage?.first,
                 storageTotalBytes = storage?.second,
                 ramFreeBytes = ramFree,
                 manufacturer = readProperty(dadb, "ro.product.manufacturer"),
                 model = readProperty(dadb, "ro.product.model"),
-                sdk = readProperty(dadb, "ro.build.version.sdk")
+                sdk = readProperty(dadb, "ro.build.version.sdk"),
+                uptimeSeconds = uptime
             )
         }
     }
@@ -420,6 +423,43 @@ class PortalConnectionManager {
                     }
                 }
                 getOsUpdateBlockStatus(dadb)
+            }
+        }
+    }
+
+    /** Repornire normală sau în recovery. Portal-ul se va deconecta imediat. */
+    suspend fun reboot(dadb: Dadb, recovery: Boolean): Result<Unit> {
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val command = if (recovery) "reboot recovery" else "reboot"
+                dadb.shell(command)
+                Unit
+            }
+        }
+    }
+
+    /** Aprinde (keyevent 224) sau stinge (keyevent 223) ecranul Portal-ului. */
+    suspend fun setScreenOn(dadb: Dadb, on: Boolean): Result<Unit> {
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val keyevent = if (on) 224 else 223
+                dadb.shell("input keyevent $keyevent")
+                Unit
+            }
+        }
+    }
+
+    /** Lansează o aplicație pe Portal prin monkey (categoria LAUNCHER). */
+    suspend fun launchApp(dadb: Dadb, packageName: String): Result<Unit> {
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val output = dadb.shell(
+                    "monkey -p ${shellQuote(packageName)} -c android.intent.category.LAUNCHER 1"
+                ).allOutput
+                require(!output.contains("No activities found", ignoreCase = true)) {
+                    "Nu s-a găsit o activitate de lansare pentru $packageName"
+                }
+                Unit
             }
         }
     }

@@ -5,6 +5,24 @@ import androidx.compose.ui.res.stringResource
 import com.portalinstaller.R
 import com.portalinstaller.data.DeviceStatus
 
+/**
+ * Formatează secunde de uptime într-o etichetă compactă cu cele mai
+ * semnificative două unități (ex. "14d 6h", "3h 25m", "7m", "45s").
+ */
+internal fun formatUptime(seconds: Long): String {
+    val safe = if (seconds < 0) 0 else seconds
+    val days = safe / 86_400
+    val hours = (safe % 86_400) / 3_600
+    val minutes = (safe % 3_600) / 60
+    val secs = safe % 60
+    return when {
+        days > 0 -> "${days}d ${hours}h"
+        hours > 0 -> "${hours}h ${minutes}m"
+        minutes > 0 -> "${minutes}m"
+        else -> "${secs}s"
+    }
+}
+
 internal fun formatFileSize(bytes: Long): String {
     val locale = java.util.Locale.getDefault()
     return when {

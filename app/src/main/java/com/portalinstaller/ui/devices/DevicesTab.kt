@@ -75,6 +75,12 @@ internal fun DevicesTab(
     isLoadingPortalPackages: Boolean,
     selectedBackupPackages: Set<String>?,
     connectionEvents: List<com.portalinstaller.data.ConnectionEvent>,
+    onRefreshDashboard: () -> Unit,
+    onReboot: () -> Unit,
+    onRebootRecovery: () -> Unit,
+    onScreenOn: () -> Unit,
+    onScreenOff: () -> Unit,
+    onLaunchApp: (String) -> Unit,
     onIpChange: (String) -> Unit,
     onPortChange: (String) -> Unit,
     onConnectManual: () -> Unit,
@@ -133,6 +139,20 @@ internal fun DevicesTab(
                         onDisconnect = onDisconnect,
                         onScanPortals = onScanPortals
                     )
+                }
+                if (connectionState is ConnectionState.Connected) {
+                    item {
+                        DashboardCard(
+                            deviceStatus = deviceStatus,
+                            portalPackages = portalPackages,
+                            onRefresh = onRefreshDashboard,
+                            onReboot = onReboot,
+                            onRebootRecovery = onRebootRecovery,
+                            onScreenOn = onScreenOn,
+                            onScreenOff = onScreenOff,
+                            onLaunchApp = onLaunchApp
+                        )
+                    }
                 }
                 item {
                     OsUpdateBlockCard(

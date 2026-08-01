@@ -49,6 +49,13 @@ sealed class OsUpdateState {
     data class Failed(val message: String) : OsUpdateState()
 }
 
+sealed class PowerControlState {
+    data object Idle : PowerControlState()
+    data object Working : PowerControlState()
+    data class Success(val message: String) : PowerControlState()
+    data class Failed(val message: String) : PowerControlState()
+}
+
 /**
  * Deține conexiunea ADB și tot ce ține de stabilirea/întreținerea ei:
  * conectare Wi-Fi/USB, deconectare, descoperire în rețea, activare ADB
@@ -90,6 +97,9 @@ class ConnectionViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _osUpdateState = MutableStateFlow<OsUpdateState>(OsUpdateState.Idle)
     val osUpdateState: StateFlow<OsUpdateState> = _osUpdateState.asStateFlow()
+
+    private val _powerControlState = MutableStateFlow<PowerControlState>(PowerControlState.Idle)
+    val powerControlState: StateFlow<PowerControlState> = _powerControlState.asStateFlow()
 
     private suspend fun addHistory(description: String, success: Boolean) {
         historyStore.add(HistoryEntry(System.currentTimeMillis(), description, success))
@@ -219,6 +229,87 @@ class ConnectionViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             _deviceStatus.value = connectionManager.getDeviceStatus(d)
         }
+    }
+
+    /** Reîmprospătează starea dispozitivului la cerere (ex. buton din dashboard). */
+    fun refreshDeviceDashboard() = refreshDeviceStatus()
+
+    /**
+     * Repornire (normală sau recovery). La succes, Portal-ul se deconectează;
+     * oprim monitorul și marcăm starea deconectată — nu reîncercăm reconectarea,
+     * fiindcă dispozitivul repornește intenționat.
+     */
+    fun reboot(context: Context, recovery: Boolean) {
+        val d = holder.dadb.value ?: return
+        if (_powerControlState.value is PowerControlState.Working) return
+        viewModelScope.launch {
+            _powerControlState.value = PowerControlState.Working
+            connectionManager.reboot(d, recovery)
+                .onSuccess {
+                    val msg = context.getString(
+                        if (recovery) R.string.power_reboot_recovery_done
+                        else R.string.power_reboot_done
+                    )
+                    _powerControlState.value = PowerControlState.Success(msg)
+                    addHistory(msg, success = true)
+                    monitor.stop()
+                    monitor.logEvent(ConnectionEventKind.DISCONNECTED)
+                    holder.clear()
+                    _connectionState.value = ConnectionState.Disconnected
+                    _connectionMethod.value = null
+                    _deviceStatus.value = null
+                    _osUpdateState.value = OsUpdateState.Idle
+                }
+                .onFailure { e ->
+                    val msg = e.message ?: context.getString(R.string.error_unknown)
+                    _powerControlState.value = PowerControlState.Failed(msg)
+                    addHistory(context.getString(R.string.power_reboot_failed, msg), success = false)
+                }
+        }
+    }
+
+    fun setScreenOn(context: Context, on: Boolean) {
+        val d = holder.dadb.value ?: return
+        if (_powerControlState.value is PowerControlState.Working) return
+        viewModelScope.launch {
+            _powerControlState.value = PowerControlState.Working
+            connectionManager.setScreenOn(d, on)
+                .onSuccess {
+                    _powerControlState.value = PowerControlState.Success(
+                        context.getString(
+                            if (on) R.string.power_screen_on_done else R.string.power_screen_off_done
+                        )
+                    )
+                }
+                .onFailure { e ->
+                    _powerControlState.value = PowerControlState.Failed(
+                        e.message ?: context.getString(R.string.error_unknown)
+                    )
+                }
+        }
+    }
+
+    fun launchPortalApp(context: Context, packageName: String) {
+        val d = holder.dadb.value ?: return
+        if (_powerControlState.value is PowerControlState.Working) return
+        viewModelScope.launch {
+            _powerControlState.value = PowerControlState.Working
+            connectionManager.launchApp(d, packageName)
+                .onSuccess {
+                    _powerControlState.value = PowerControlState.Success(
+                        context.getString(R.string.power_launch_done, packageName)
+                    )
+                    addHistory(context.getString(R.string.power_launch_done, packageName), success = true)
+                }
+                .onFailure { e ->
+                    val msg = e.message ?: context.getString(R.string.error_unknown)
+                    _powerControlState.value = PowerControlState.Failed(msg)
+                }
+        }
+    }
+
+    fun clearPowerControlState() {
+        _powerControlState.value = PowerControlState.Idle
     }
 
     fun refreshOsUpdateStatus(context: Context) {

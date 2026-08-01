@@ -62,6 +62,7 @@ import com.portalinstaller.viewmodel.InstallState
 import com.portalinstaller.viewmodel.PhotoUploadState
 import com.portalinstaller.viewmodel.PhotosViewModel
 import com.portalinstaller.viewmodel.PortalDiscoveryState
+import com.portalinstaller.viewmodel.PowerControlState
 import com.portalinstaller.viewmodel.ProfileApplyState
 import com.portalinstaller.viewmodel.UninstallState
 import com.portalinstaller.viewmodel.WirelessAdbState
@@ -96,6 +97,7 @@ fun MainScreen(
     val portalDiscoveryState by connectionViewModel.portalDiscoveryState.collectAsStateWithLifecycle()
     val osUpdateState by connectionViewModel.osUpdateState.collectAsStateWithLifecycle()
     val connectionEvents by connectionViewModel.connectionEvents.collectAsStateWithLifecycle()
+    val powerControlState by connectionViewModel.powerControlState.collectAsStateWithLifecycle()
 
     val installState by appsViewModel.installState.collectAsStateWithLifecycle()
     val uninstallState by appsViewModel.uninstallState.collectAsStateWithLifecycle()
@@ -370,6 +372,20 @@ fun MainScreen(
         }
     }
 
+    LaunchedEffect(powerControlState) {
+        when (val state = powerControlState) {
+            is PowerControlState.Success -> {
+                snackbarHostState.showSnackbar(state.message)
+                connectionViewModel.clearPowerControlState()
+            }
+            is PowerControlState.Failed -> {
+                snackbarHostState.showSnackbar(state.message)
+                connectionViewModel.clearPowerControlState()
+            }
+            else -> Unit
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -488,6 +504,12 @@ fun MainScreen(
                     isLoadingPortalPackages = isLoadingPortalPackages,
                     selectedBackupPackages = selectedBackupPackages,
                     connectionEvents = connectionEvents,
+                    onRefreshDashboard = { connectionViewModel.refreshDeviceDashboard() },
+                    onReboot = { connectionViewModel.reboot(context, recovery = false) },
+                    onRebootRecovery = { connectionViewModel.reboot(context, recovery = true) },
+                    onScreenOn = { connectionViewModel.setScreenOn(context, on = true) },
+                    onScreenOff = { connectionViewModel.setScreenOn(context, on = false) },
+                    onLaunchApp = { pkg -> connectionViewModel.launchPortalApp(context, pkg) },
                     onIpChange = { ipAddress = it },
                     onPortChange = { port = it },
                     onConnectManual = {
