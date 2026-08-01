@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Portal Toolkit — Improvement Roadmap Mockups</title>
+<style>
+  :root {
+    --teal: #006D6B;
+    --teal-dark: #00504E;
+    --teal-container: #B2DFDB;
+    --bg: #FFF9F5;
+    --surface: #FFFFFF;
+    --outline: #E0D8D0;
+    --text: #1C1B1A;
+    --text-dim: #6B6560;
+    --amber: #B45309;
+    --amber-bg: #FEF3C7;
+    --green: #15803D;
+    --green-bg: #DCFCE7;
+    --red: #B91C1C;
+    --red-bg: #FEE2E2;
+    --blue: #1D4ED8;
+    --blue-bg: #DBEAFE;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg); color: var(--text);
+    line-height: 1.55;
+  }
+  .page { max-width: 1240px; margin: 0 auto; padding: 40px 24px 80px; }
+
+  header.hero {
+    background: linear-gradient(135deg, var(--teal) 0%, #0A8A87 100%);
+    color: #fff; border-radius: 24px; padding: 40px 44px; margin-bottom: 16px;
+  }
+  header.hero h1 { font-size: 30px; font-weight: 800; letter-spacing: -0.5px; }
+  header.hero p { margin-top: 10px; max-width: 760px; opacity: 0.92; font-size: 15.5px; }
+  .hero-tags { margin-top: 18px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .hero-tags span {
+    background: rgba(255,255,255,0.16); border: 1px solid rgba(255,255,255,0.3);
+    padding: 4px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 600;
+  }
+
+  nav.toc {
+    display: flex; gap: 8px; flex-wrap: wrap; margin: 20px 0 40px;
+  }
+  nav.toc a {
+    text-decoration: none; color: var(--teal-dark); background: var(--surface);
+    border: 1px solid var(--outline); padding: 7px 14px; border-radius: 999px;
+    font-size: 13px; font-weight: 600;
+  }
+  nav.toc a:hover { background: var(--teal-container); }
+
+  .tier { margin-bottom: 56px; }
+  .tier-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 6px; }
+  .tier-head h2 { font-size: 22px; font-weight: 800; letter-spacing: -0.3px; }
+  .tier-badge {
+    font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px;
+    padding: 3px 10px; border-radius: 6px;
+  }
+  .t1 { background: var(--red-bg); color: var(--red); }
+  .t2 { background: var(--amber-bg); color: var(--amber); }
+  .t3 { background: var(--blue-bg); color: var(--blue); }
+  .tier > p.tier-sub { color: var(--text-dim); font-size: 14.5px; margin-bottom: 24px; max-width: 820px; }
+
+  .feature {
+    background: var(--surface); border: 1px solid var(--outline); border-radius: 20px;
+    padding: 28px; margin-bottom: 24px;
+    display: grid; grid-template-columns: 1fr 300px; gap: 32px; align-items: start;
+  }
+  .feature.two-phone { grid-template-columns: 1fr 620px; }
+  @media (max-width: 900px) { .feature, .feature.two-phone { grid-template-columns: 1fr; } }
+  .feature h3 { font-size: 18px; font-weight: 750; display: flex; align-items: center; gap: 10px; }
+  .feature h3 .num {
+    background: var(--teal); color: #fff; width: 28px; height: 28px; border-radius: 8px;
+    display: inline-flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0;
+  }
+  .feature p.desc { margin-top: 10px; font-size: 14.5px; color: #3d3a37; }
+  .meta-row { margin-top: 14px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip { font-size: 12px; font-weight: 650; padding: 4px 11px; border-radius: 999px; }
+  .chip.effort-s { background: var(--green-bg); color: var(--green); }
+  .chip.effort-m { background: var(--amber-bg); color: var(--amber); }
+  .chip.effort-l { background: var(--red-bg); color: var(--red); }
+  .chip.impact { background: var(--teal-container); color: var(--teal-dark); }
+  .chip.tech { background: #F3F0EC; color: var(--text-dim); }
+  .how {
+    margin-top: 14px; background: #F7F4F0; border-left: 3px solid var(--teal);
+    border-radius: 0 10px 10px 0; padding: 10px 14px; font-size: 13px; color: #4a4642;
+  }
+  .how b { color: var(--teal-dark); }
+  .how code { background: #ECE7E1; padding: 1px 6px; border-radius: 5px; font-size: 12px; font-family: "SF Mono", Menlo, monospace; }
+
+  /* ---------- Phone frame ---------- */
+  .phones { display: flex; gap: 20px; justify-content: center; }
+  .phone {
+    width: 290px; flex-shrink: 0; background: #111; border-radius: 30px; padding: 9px;
+    box-shadow: 0 12px 30px rgba(0,0,0,0.18);
+  }
+  .phone-label { text-align: center; font-size: 12px; font-weight: 650; color: var(--text-dim); margin-top: 10px; }
+  .screen {
+    background: var(--bg); border-radius: 22px; overflow: hidden; height: 560px;
+    display: flex; flex-direction: column; font-size: 12px;
+  }
+  .screen.dark { background: #131615; color: #E3E1DE; }
+  .statusbar {
+    display: flex; justify-content: space-between; padding: 7px 16px 5px;
+    font-size: 10.5px; font-weight: 650; color: var(--text-dim); flex-shrink: 0;
+  }
+  .screen.dark .statusbar { color: #9BA3A0; }
+  .appbar {
+    padding: 8px 16px 10px; font-size: 15px; font-weight: 750; color: var(--teal-dark);
+    display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+  }
+  .screen.dark .appbar { color: #7FD9D5; }
+  .appbar .conn {
+    font-size: 9.5px; font-weight: 700; padding: 3px 9px; border-radius: 999px;
+    background: var(--green-bg); color: var(--green); display: flex; align-items: center; gap: 5px;
+  }
+  .appbar .conn::before { content:""; width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
+  .appbar .conn.warn { background: var(--amber-bg); color: var(--amber); }
+  .appbar .conn.warn::before { background: var(--amber); animation: pulse 1.2s infinite; }
+  @keyframes pulse { 50% { opacity: 0.3; } }
+  .body { flex: 1; overflow: hidden; padding: 0 12px; display: flex; flex-direction: column; gap: 10px; }
+  .card {
+    background: var(--surface); border: 1px solid var(--outline); border-radius: 16px; padding: 12px;
+  }
+  .screen.dark .card { background: #1E2321; border-color: #2E3532; }
+  .bottomnav {
+    display: flex; justify-content: space-around; padding: 8px 0 12px; flex-shrink: 0;
+    background: var(--surface); border-top: 1px solid var(--outline);
+  }
+  .screen.dark .bottomnav { background: #1A1E1D; border-color: #2E3532; }
+  .bottomnav div { font-size: 9px; font-weight: 650; color: var(--text-dim); text-align: center; }
+  .bottomnav div.on { color: var(--teal); }
+  .screen.dark .bottomnav div.on { color: #7FD9D5; }
+  .bottomnav .ico { font-size: 15px; display: block; margin-bottom: 1px; }
+
+  /* terminal */
+  .term {
+    background: #0D1412; border-radius: 14px; padding: 12px; flex: 1;
+    font-family: "SF Mono", Menlo, monospace; font-size: 10.5px; color: #C9E8E0;
+    display: flex; flex-direction: column; gap: 3px; overflow: hidden;
+  }
+  .term .p { color: #5EEAD4; }
+  .term .dim { color: #6B7A76; }
+  .term .err { color: #FCA5A5; }
+  .term-input {
+    display: flex; gap: 8px; align-items: center; background: var(--surface);
+    border: 1.5px solid var(--teal); border-radius: 12px; padding: 8px 12px;
+    font-family: "SF Mono", Menlo, monospace; font-size: 11px; color: var(--text-dim);
+  }
+  .term-input .send { margin-left: auto; color: var(--teal); font-weight: 800; }
+
+  /* logcat */
+  .filter-row { display: flex; gap: 6px; flex-wrap: wrap; }
+  .fchip {
+    font-size: 9.5px; font-weight: 700; padding: 3px 9px; border-radius: 999px;
+    border: 1px solid var(--outline); color: var(--text-dim); background: var(--surface);
+  }
+  .fchip.on { background: var(--teal); color: #fff; border-color: var(--teal); }
+  .fchip.e { background: var(--red-bg); color: var(--red); border-color: transparent; }
+  .fchip.w { background: var(--amber-bg); color: var(--amber); border-color: transparent; }
+  .logline { font-family: "SF Mono", Menlo, monospace; font-size: 9px; padding: 2px 0; border-bottom: 1px solid #F1EDE8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .logline b { font-weight: 800; margin-right: 5px; }
+  .lv-e b { color: var(--red); } .lv-w b { color: var(--amber); } .lv-i b { color: var(--blue); } .lv-d b { color: var(--text-dim); }
+
+  /* file manager */
+  .crumb { font-size: 10px; color: var(--text-dim); font-weight: 600; padding: 2px 4px; }
+  .crumb b { color: var(--teal-dark); }
+  .frow { display: flex; align-items: center; gap: 10px; padding: 8px 6px; border-bottom: 1px solid #F1EDE8; }
+  .frow .fi { width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 15px; flex-shrink: 0; }
+  .fi.dir { background: var(--teal-container); } .fi.file { background: #F3F0EC; } .fi.img { background: var(--amber-bg); }
+  .frow .fname { font-size: 11.5px; font-weight: 650; }
+  .frow .fmeta { font-size: 9.5px; color: var(--text-dim); }
+  .frow .fact { margin-left: auto; color: var(--text-dim); font-size: 14px; }
+  .fab {
+    position: absolute; bottom: 74px; right: 18px; background: var(--teal); color: #fff;
+    border-radius: 16px; padding: 10px 16px; font-size: 12px; font-weight: 700; box-shadow: 0 6px 14px rgba(0,109,107,0.4);
+  }
+  .rel { position: relative; }
+
+  /* dashboard gauges */
+  .gauge-row { display: flex; gap: 10px; }
+  .gauge { flex: 1; text-align: center; }
+  .gauge svg { width: 74px; height: 74px; }
+  .gauge .gl { font-size: 9.5px; font-weight: 700; color: var(--text-dim); margin-top: 2px; }
+  .gauge .gv { font-size: 12px; font-weight: 800; color: var(--teal-dark); }
+  .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .abtn {
+    border: 1px solid var(--outline); border-radius: 12px; padding: 9px 6px; text-align: center;
+    font-size: 10.5px; font-weight: 700; color: var(--teal-dark); background: var(--surface);
+  }
+  .abtn.danger { color: var(--red); }
+  .abtn .bi { display: block; font-size: 16px; margin-bottom: 2px; }
+  .screen.dark .abtn { background: #1E2321; border-color: #2E3532; color: #7FD9D5; }
+  .screen.dark .abtn.danger { color: #FCA5A5; }
+
+  /* app rows */
+  .approw { display: flex; align-items: center; gap: 10px; padding: 8px 4px; border-bottom: 1px solid #F1EDE8; }
+  .appicon { width: 34px; height: 34px; border-radius: 9px; flex-shrink: 0; display:flex; align-items:center; justify-content:center; font-size: 16px; color:#fff; font-weight:800; }
+  .approw .an { font-size: 11.5px; font-weight: 700; }
+  .approw .am { font-size: 9px; color: var(--text-dim); }
+  .approw .aa { margin-left: auto; display: flex; gap: 6px; }
+  .aa span { width: 26px; height: 26px; border-radius: 8px; background: #F3F0EC; display: flex; align-items: center; justify-content: center; font-size: 12px; }
+
+  /* progress */
+  .pbar { height: 8px; border-radius: 99px; background: #ECE7E1; overflow: hidden; margin-top: 8px; }
+  .pbar > div { height: 100%; background: var(--teal); border-radius: 99px; }
+  .pmeta { display: flex; justify-content: space-between; font-size: 10px; color: var(--text-dim); margin-top: 5px; font-weight: 600; }
+  .cancel-btn {
+    margin-top: 10px; text-align: center; border: 1.5px solid var(--red); color: var(--red);
+    border-radius: 10px; padding: 6px; font-size: 11px; font-weight: 750;
+  }
+  .step { display: flex; align-items: center; gap: 8px; font-size: 10.5px; padding: 3px 0; font-weight: 600; }
+  .step .dot { width: 16px; height: 16px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 9px; flex-shrink: 0; }
+  .dot.done { background: var(--green); color: #fff; }
+  .dot.now { background: var(--teal); color: #fff; }
+  .dot.todo { background: #ECE7E1; color: var(--text-dim); }
+  .step.todo { color: var(--text-dim); }
+
+  /* screenshot mock */
+  .mirror {
+    flex: 1; background: #000; border-radius: 14px; overflow: hidden; position: relative;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .portal-screen {
+    width: 85%; aspect-ratio: 16/10; border-radius: 8px;
+    background: linear-gradient(160deg, #123B3A 0%, #0A6B68 55%, #12938E 100%);
+    position: relative; overflow: hidden;
+  }
+  .portal-clock { position: absolute; top: 14px; left: 16px; color: #fff; font-weight: 800; font-size: 20px; }
+  .portal-date { position: absolute; top: 38px; left: 16px; color: #B7E7E4; font-size: 9px; font-weight: 600; }
+  .portal-dock { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; }
+  .portal-dock span { width: 20px; height: 20px; border-radius: 6px; background: rgba(255,255,255,0.25); }
+  .mirror-tools { display: flex; gap: 8px; }
+  .mtool { flex: 1; text-align: center; border: 1px solid var(--outline); background: var(--surface); border-radius: 10px; padding: 7px 4px; font-size: 10px; font-weight: 700; color: var(--teal-dark); }
+  .mtool.primary { background: var(--teal); color: #fff; border-color: var(--teal); }
+
+  .toast {
+    background: #2B2A28; color: #fff; border-radius: 10px; padding: 8px 12px; font-size: 10.5px;
+    display: flex; align-items: center; gap: 8px; font-weight: 600;
+  }
+  .toast .ta { margin-left: auto; color: #7FD9D5; font-weight: 800; }
+
+  .arch-list { margin-top: 14px; display: grid; gap: 10px; }
+  .arch-item { display: flex; gap: 12px; align-items: baseline; background: #F7F4F0; border-radius: 12px; padding: 12px 16px; font-size: 13.5px; }
+  .arch-item b { color: var(--teal-dark); }
+  .arch-item .n { font-weight: 800; color: var(--teal); flex-shrink: 0; }
+
+  table.summary { width: 100%; border-collapse: collapse; background: var(--surface); border-radius: 16px; overflow: hidden; border: 1px solid var(--outline); font-size: 13.5px; }
+  table.summary th { background: var(--teal); color: #fff; text-align: left; padding: 10px 14px; font-size: 12.5px; }
+  table.summary td { padding: 9px 14px; border-top: 1px solid #F1EDE8; }
+  table.summary tr td:first-child { font-weight: 700; }
+</style>
+</head>
+<body>
+<div class="page">
+
+<header class="hero">
+  <h1>Portal Toolkit — v1.2+ Improvement Roadmap</h1>
+  <p>Ten proposed features with visual mockups, based on a full read of the v1.1.0 codebase. Everything below rides on the ADB connection the app already maintains (via <b>dadb</b>) — no new device-side requirements. Mocks follow the app's existing Material&nbsp;3 teal design language.</p>
+  <div class="hero-tags">
+    <span>Kotlin + Jetpack Compose</span><span>dadb 1.2.6</span><span>Portal = Android 10 (SDK 29)</span><span>Current: v1.1.0 · ~6.7k LOC</span>
+  </div>
+</header>
+
+<nav class="toc">
+  <a href="#f1">1 · Remote Shell</a>
+  <a href="#f2">2 · Logcat Viewer</a>
+  <a href="#f3">3 · File Manager</a>
+  <a href="#f4">4 · Screen Capture</a>
+  <a href="#f11" style="background: var(--teal); color:#fff; border-color: var(--teal);">11 · Screensaver Manager ★</a>
+  <a href="#f5">5 · Device Dashboard</a>
+  <a href="#f6">6 · Rich App List</a>
+  <a href="#f7">7 · Connection Health</a>
+  <a href="#f8">8 · Real Progress</a>
+  <a href="#f9">9 · Dark Theme</a>
+  <a href="#f10">10 · Architecture</a>
+  <a href="#summary">Summary</a>
+</nav>
+
+<!-- ============ TIER 1 ============ -->
+<section class="tier">
+  <div class="tier-head"><h2>Tier 1 — New Power Tools</h2><span class="tier-badge t1">Highest user value</span></div>
+  <p class="tier-sub">Capabilities users of a Portal management tool expect but the app doesn't have yet. All four are new ADB channels over the connection the app already holds — moderate effort, big payoff.</p>
+
+  <!-- 1. Remote Shell -->
+  <div class="feature" id="f1">
+    <div>
+      <h3><span class="num">1</span>Remote Shell (Terminal)</h3>
+      <p class="desc">An interactive terminal into the Portal. Power users constantly need one-off commands — <i>pm list packages</i>, <i>settings put</i>, <i>am start</i> — and today they must fall back to a PC. A command history, quick-command chips (reboot, list packages, wm size), and copyable output make this the single most-requested class of feature in device-toolkit apps.</p>
+      <div class="meta-row">
+        <span class="chip impact">Impact: Very High</span><span class="chip effort-s">Effort: Small</span><span class="chip tech">dadb.shell() — already used internally</span>
+      </div>
+      <div class="how"><b>How:</b> the app already runs shell commands everywhere (e.g. <code>PortalConnectionManager.getDeviceStatus</code>). This just exposes the same channel as a UI: a <code>LazyColumn</code> transcript + <code>TextField</code> + persisted history. Guard destructive commands with a confirm dialog.</div>
+    </div>
+    <div class="phones"><div>
+      <div class="phone"><div class="screen">
+        <div class="statusbar"><span>10:42</span><span>▲ ▼ ■</span></div>
+        <div class="appbar">Shell <span class="conn">Portal Mini · 192.168.1.44</span></div>
+        <div class="body">
+          <div class="filter-row">
+            <span class="fchip on">pm list packages</span><span class="fchip">getprop</span><span class="fchip">wm size</span><span class="fchip">df -h</span>
+          </div>
+          <div class="term">
+            <span class="p">portal:/ $</span>
+            <span>getprop ro.build.version.sdk</span>
+            <span class="dim">29</span>
+            <span class="p">portal:/ $</span>
+            <span>pm list packages -3</span>
+            <span class="dim">package:com.spotify.tv.android</span>
+            <span class="dim">package:org.jellyfin.androidtv</span>
+            <span class="dim">package:com.plexapp.android</span>
+            <span class="p">portal:/ $</span>
+            <span>am start -n com.spotify.tv.android/.MainActivity</span>
+            <span class="dim">Starting: Intent { cmp=com.spotify… }</span>
+            <span class="p">portal:/ $</span>
+            <span>rm -rf /sdcard/DCIM</span>
+            <span class="err">⚠ Destructive command — confirm to run</span>
+          </div>
+          <div class="term-input">$ <span style="color:#999">type a command…</span><span class="send">▶</span></div>
+        </div>
+        <div class="bottomnav"><div><span class="ico">▦</span>Apps</div><div><span class="ico">🖼</span>Photos</div><div><span class="ico">⌂</span>Devices</div><div class="on"><span class="ico">›_</span>Tools</div></div>
+      </div></div>
+      <div class="phone-label">New “Tools” tab · Shell</div>
+    </div></div>
+  </div>
+
+  <!-- 2. Logcat -->
+  <div class="feature" id="f2">
+    <div>
+      <h3><span class="num">2</span>Live Logcat Viewer</h3>
+      <p class="desc">Stream the Portal's logs to the phone with level filters, package filter, pause, and share-as-file. Essential for the app's core audience: people sideloading apps onto a discontinued device and needing to see <i>why</i> an install or launch failed. Pairs perfectly with the existing install flow — “Install failed → View logs”.</p>
+      <div class="meta-row">
+        <span class="chip impact">Impact: High</span><span class="chip effort-m">Effort: Medium</span><span class="chip tech">shell "logcat" streaming via dadb open()</span>
+      </div>
+      <div class="how"><b>How:</b> open a long-lived <code>shell:logcat -v brief</code> stream, parse lines into a bounded ring buffer (e.g. 2,000 lines) to keep memory flat, render with a lazy list. Filters are client-side; “errors only” chip maps to <code>logcat *:E</code>.</div>
+    </div>
+    <div class="phones"><div>
+      <div class="phone"><div class="screen">
+        <div class="statusbar"><span>10:43</span><span>▲ ▼ ■</span></div>
+        <div class="appbar">Logcat <span class="conn">Portal Mini</span></div>
+        <div class="body">
+          <div class="filter-row">
+            <span class="fchip on">All</span><span class="fchip e">Errors</span><span class="fchip w">Warnings</span><span class="fchip">com.spotify…</span><span class="fchip">⏸ Pause</span><span class="fchip">⇪ Export</span>
+          </div>
+          <div class="card" style="flex:1; overflow:hidden; padding:8px;">
+            <div class="logline lv-i"><b>I</b>ActivityManager: START u0 {cmp=com.spotify.tv.android}</div>
+            <div class="logline lv-d"><b>D</b>libEGL: loaded /vendor/lib/egl/libGLES.so</div>
+            <div class="logline lv-w"><b>W</b>Spotify: Slow network detected, degrading bitrate</div>
+            <div class="logline lv-e"><b>E</b>AndroidRuntime: FATAL EXCEPTION: main</div>
+            <div class="logline lv-e"><b>E</b>AndroidRuntime: java.lang.NoClassDefFoundError: android.window.SplashScreen</div>
+            <div class="logline lv-e"><b>E</b>AndroidRuntime: &nbsp;&nbsp;requires API 31, device is API 29</div>
+            <div class="logline lv-i"><b>I</b>ActivityManager: Process com.spotify… died</div>
+            <div class="logline lv-i"><b>I</b>WindowManager: Focus moved to launcher</div>
+            <div class="logline lv-d"><b>D</b>ConnectivityService: NetworkAgent wifi validated</div>
+            <div class="logline lv-w"><b>W</b>PackageManager: verifying com.plexapp.android</div>
+            <div class="logline lv-i"><b>I</b>PackageManager: Install succeeded (session 231)</div>
+          </div>
+          <div class="toast">🔴 Crash detected in com.spotify.tv.android <span class="ta">JUMP</span></div>
+        </div>
+        <div class="bottomnav"><div><span class="ico">▦</span>Apps</div><div><span class="ico">🖼</span>Photos</div><div><span class="ico">⌂</span>Devices</div><div class="on"><span class="ico">›_</span>Tools</div></div>
+      </div></div>
+      <div class="phone-label">Tools tab · Logcat with crash jump</div>
+    </div></div>
+  </div>
+
+  <!-- 3. File Manager -->
+  <div class="feature" id="f3">
+    <div>
+      <h3><span class="num">3</span>Two-Way File Manager</h3>
+      <p class="desc">Browse the Portal's storage, pull files back to the phone, push any file (not just photos), delete, and see sizes. Today the data flow is one-way — photos go up, nothing comes back. A file manager subsumes photo upload, enables pulling media/backups off the device before a reset, and makes the Portal feel like a normal managed device.</p>
+      <div class="meta-row">
+        <span class="chip impact">Impact: High</span><span class="chip effort-m">Effort: Medium</span><span class="chip tech">ls -la parsing + dadb push/pull (sync protocol)</span>
+      </div>
+      <div class="how"><b>How:</b> <code>dadb.pull()</code>/<code>push()</code> already exist and are used by backup. Directory listing via <code>shell:ls -la</code> parsed into rows; breadcrumb stack for navigation; long-press for multi-select. Restrict writes outside <code>/sdcard</code> behind an “advanced” toggle.</div>
+    </div>
+    <div class="phones"><div>
+      <div class="phone"><div class="screen rel">
+        <div class="statusbar"><span>10:45</span><span>▲ ▼ ■</span></div>
+        <div class="appbar">Files <span class="conn">Portal Mini</span></div>
+        <div class="body">
+          <div class="crumb">Portal › sdcard › <b>Pictures</b></div>
+          <div class="card" style="flex:1; padding: 4px 10px;">
+            <div class="frow"><div class="fi dir">📁</div><div><div class="fname">PortalInstaller</div><div class="fmeta">42 items</div></div><div class="fact">›</div></div>
+            <div class="frow"><div class="fi dir">📁</div><div><div class="fname">Screenshots</div><div class="fmeta">7 items</div></div><div class="fact">›</div></div>
+            <div class="frow"><div class="fi img">🖼</div><div><div class="fname">family_2024.jpg</div><div class="fmeta">2.4 MB · Mar 12</div></div><div class="fact">⋮</div></div>
+            <div class="frow"><div class="fi img">🖼</div><div><div class="fname">vacation_beach.jpg</div><div class="fmeta">3.1 MB · Mar 12</div></div><div class="fact">⋮</div></div>
+            <div class="frow"><div class="fi file">📄</div><div><div class="fname">portal_backup_notes.txt</div><div class="fmeta">1 KB · Jan 8</div></div><div class="fact">⋮</div></div>
+            <div class="frow" style="background: var(--teal-container); border-radius: 10px;"><div class="fi img">🖼</div><div><div class="fname">holiday_card.png</div><div class="fmeta">Selected · 1.8 MB</div></div><div class="fact">✓</div></div>
+          </div>
+          <div class="mirror-tools">
+            <div class="mtool primary">⬇ Pull to phone</div><div class="mtool">⬆ Push</div><div class="mtool" style="color: var(--red);">🗑 Delete</div>
+          </div>
+        </div>
+        <div class="fab">＋ Upload</div>
+        <div class="bottomnav"><div><span class="ico">▦</span>Apps</div><div><span class="ico">🖼</span>Photos</div><div><span class="ico">⌂</span>Devices</div><div class="on"><span class="ico">›_</span>Tools</div></div>
+      </div></div>
+      <div class="phone-label">Tools tab · File browser with pull</div>
+    </div></div>
+  </div>
+
+  <!-- 4. Screen capture -->
+  <div class="feature" id="f4">
+    <div>
+      <h3><span class="num">4</span>Screen Capture &amp; Live Peek</h3>
+      <p class="desc">See what's on the Portal's display without walking over to it. One-tap screenshot (saved to the phone), plus a “live peek” mode that refreshes every 1–2 seconds — enough to verify an app launched, navigate a setup wizard remotely, or confirm the device isn't stuck on a boot screen. Full scrcpy-style mirroring is out of scope; polling screenshots gets 90% of the value at 5% of the complexity.</p>
+      <div class="meta-row">
+        <span class="chip impact">Impact: High</span><span class="chip effort-s">Effort: Small–Medium</span><span class="chip tech">shell "screencap -p" → pull → Bitmap</span>
+      </div>
+      <div class="how"><b>How:</b> <code>screencap -p /sdcard/.pt_peek.png</code> then <code>dadb.pull()</code>, decode, display. Live peek = loop with a coroutine; tap-to-input later via <code>input tap x y</code> mapped from image coordinates (stretch goal).</div>
+    </div>
+    <div class="phones"><div>
+      <div class="phone"><div class="screen">
+        <div class="statusbar"><span>10:47</span><span>▲ ▼ ■</span></div>
+        <div class="appbar">Screen <span class="conn">Portal Mini</span></div>
+        <div class="body">
+          <div class="mirror">
+            <div class="portal-screen">
+              <div class="portal-clock">10:47</div>
+              <div class="portal-date">Saturday, August 1</div>
+              <div class="portal-dock"><span></span><span></span><span></span><span></span></div>
+            </div>
+            <div style="position:absolute; top:10px; right:10px; background:rgba(0,0,0,0.55); color:#7FD9D5; font-size:9px; font-weight:700; padding:3px 8px; border-radius:99px;">● LIVE · 1.5s</div>
+          </div>
+          <div class="mirror-tools">
+            <div class="mtool primary">📷 Screenshot</div><div class="mtool">▶ Live peek</div><div class="mtool">👆 Tap mode</div>
+          </div>
+          <div class="toast">✓ Saved to phone · Screenshots/portal_1047.png <span class="ta">VIEW</span></div>
+        </div>
+        <div class="bottomnav"><div><span class="ico">▦</span>Apps</div><div><span class="ico">🖼</span>Photos</div><div><span class="ico">⌂</span>Devices</div><div class="on"><span class="ico">›_</span>Tools</div></div>
+      </div></div>
+      <div class="phone-label">Tools tab · Screen capture / live peek</div>
+    </div></div>
+  </div>
+
+  <!-- 11. Screensaver Manager -->
+  <div class="feature two-phone" id="f11" style="border: 2px solid var(--teal);">
+    <div>
+      <h3><span class="num">11</span>Screensaver Manager <span class="chip impact" style="margin-left:4px;">★ Requested</span></h3>
+      <p class="desc">A dedicated manager for the folder the Portal's screensaver / photo-frame app reads from. Today the Photos tab is <b>upload-only and one-way</b>: it pushes to a hardcoded <code>/sdcard/Pictures/PortalInstaller</code> and you can never see what's already on the device. This replaces it with a full round-trip photo manager:</p>
+      <ul style="margin: 10px 0 0 20px; font-size: 14px; color:#3d3a37; display:grid; gap:6px;">
+        <li><b>Choose the screensaver folder</b> — pick any folder on the Portal (with smart suggestions: the app scans for known screensaver dirs and folders full of images), remembered per saved device.</li>
+        <li><b>See what's already there</b> — thumbnail grid of the device's current contents, with size and date. Thumbnails are generated on-device (<code>screencap</code>-free: pull a downscaled copy) and cached on the phone.</li>
+        <li><b>Manage in place</b> — multi-select to <b>delete</b>, <b>move/copy to another folder</b>, or <b>pull back to the phone</b>. Rename supported.</li>
+        <li><b>Smart upload</b> — when adding photos, duplicates already on the device are flagged and skipped by default; a storage meter shows the folder's footprint before you commit.</li>
+      </ul>
+      <div class="meta-row">
+        <span class="chip impact">Impact: Very High — core photo-frame use case</span><span class="chip effort-m">Effort: Medium</span><span class="chip tech">ls/stat parsing + dadb push/pull + mv/rm/cp</span>
+      </div>
+      <div class="how"><b>How:</b> builds directly on the File Manager plumbing (#3) — same <code>ls -la</code> parser and <code>dadb push/pull</code>, specialized into a photo-first UI. Folder choice stored per device in <code>SavedPortalStore</code>. Dedupe via file size + name (fast) with optional md5 (<code>md5sum</code> exists on the Portal). Thumbnails: pull each image once at full size on Wi-Fi, downscale with <code>BitmapFactory.inSampleSize</code>, cache keyed by path+mtime. The existing Photos tab becomes this screen — no separate upload flow to maintain.</div>
+    </div>
+    <div class="phones">
+      <div>
+        <div class="phone"><div class="screen rel">
+          <div class="statusbar"><span>11:02</span><span>▲ ▼ ■</span></div>
+          <div class="appbar">Screensaver <span class="conn">Portal Mini</span></div>
+          <div class="body">
+            <div class="card" style="display:flex; align-items:center; gap:8px; padding:9px 12px;">
+              <span style="font-size:15px;">📁</span>
+              <div style="flex:1;">
+                <div style="font-size:11px; font-weight:750;">/sdcard/Pictures/Screensaver</div>
+                <div style="font-size:9px; color:var(--text-dim); font-weight:600;">Screensaver folder · 34 photos · 89 MB</div>
+              </div>
+              <span style="font-size:10px; font-weight:800; color:var(--teal);">CHANGE</span>
+            </div>
+            <div class="pbar" style="margin:0 2px;"><div style="width:32%;"></div></div>
+            <div class="pmeta" style="margin:2px 2px 0;"><span>89 MB used by this folder</span><span>4.8 GB free on Portal</span></div>
+            <div class="card" style="flex:1; padding:8px;">
+              <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:6px;">
+                <div style="aspect-ratio:1; border-radius:8px; background:linear-gradient(135deg,#F59E0B,#EF4444); position:relative;"><span style="position:absolute; bottom:3px; left:5px; font-size:7.5px; color:#fff; font-weight:700; text-shadow:0 1px 2px rgba(0,0,0,.5);">sunset.jpg</span></div>
+                <div style="aspect-ratio:1; border-radius:8px; background:linear-gradient(135deg,#3B82F6,#06B6D4); position:relative; outline:2.5px solid var(--teal); outline-offset:-2.5px;"><span style="position:absolute; top:3px; right:3px; width:14px; height:14px; border-radius:50%; background:var(--teal); color:#fff; font-size:9px; display:flex; align-items:center; justify-content:center;">✓</span><span style="position:absolute; bottom:3px; left:5px; font-size:7.5px; color:#fff; font-weight:700; text-shadow:0 1px 2px rgba(0,0,0,.5);">beach.jpg</span></div>
+                <div style="aspect-ratio:1; border-radius:8px; background:linear-gradient(135deg,#10B981,#84CC16); position:relative; outline:2.5px solid var(--teal); outline-offset:-2.5px;"><span style="position:absolute; top:3px; right:3px; width:14px; height:14px; border-radius:50%; background:var(--teal); color:#fff; font-size:9px; display:flex; align-items:center; justify-content:center;">✓</span><span style="position:absolute; bottom:3px; left:5px; font-size:7.5px; color:#fff; font-weight:700; text-shadow:0 1px 2px rgba(0,0,0,.5);">hike.jpg</span></div>
+                <div style="aspect-ratio:1; border-radius:8px; background:linear-gradient(135deg,#8B5CF6,#EC4899);"></div>
+                <div style="aspect-ratio:1; border-radius:8px; background:linear-gradient(135deg,#64748B,#94A3B8);"></div>
+                <div style="aspect-ratio:1; border-radius:8px; background:linear-gradient(135deg,#F43F5E,#FB923C);"></div>
+                <div style="aspect-ratio:1; border-radius:8px; background:linear-gradient(135deg,#0EA5E9,#6366F1);"></div>
+                <div style="aspect-ratio:1; border-radius:8px; background:linear-gradient(135deg,#D946EF,#F472B6);"></div>
+                <div style="aspect-ratio:1; border-radius:8px; background:#ECE7E1; display:flex; align-items:center; justify-content:center; color:var(--text-dim); font-size:9px; font-weight:700;">+25 more</div>
+              </div>
+            </div>
+            <div class="mirror-tools">
+              <div class="mtool">⬇ Pull</div><div class="mtool">📂 Move to…</div><div class="mtool" style="color:var(--red);">🗑 Delete (2)</div>
+            </div>
+          </div>
+          <div class="fab">＋ Add photos</div>
+          <div class="bottomnav"><div><span class="ico">▦</span>Apps</div><div class="on"><span class="ico">🖼</span>Photos</div><div><span class="ico">⌂</span>Devices</div><div><span class="ico">›_</span>Tools</div></div>
+        </div></div>
+        <div class="phone-label">Photos tab, reborn · manage device contents</div>
+      </div>
+      <div>
+        <div class="phone"><div class="screen">
+          <div class="statusbar"><span>11:03</span><span>▲ ▼ ■</span></div>
+          <div class="appbar">Add photos <span class="conn">Portal Mini</span></div>
+          <div class="body">
+            <div class="card" style="padding:10px 12px;">
+              <div style="font-size:11px; font-weight:800; color:var(--teal-dark); margin-bottom:6px;">SELECT SCREENSAVER FOLDER</div>
+              <div class="frow" style="border:none; padding:5px 0;"><div class="fi dir">⭐</div><div><div class="fname">/sdcard/Pictures/Screensaver</div><div class="fmeta">Suggested · 34 images found</div></div><div class="fact" style="color:var(--teal); font-weight:800; font-size:11px;">✓ IN USE</div></div>
+              <div class="frow" style="border:none; padding:5px 0;"><div class="fi dir">📁</div><div><div class="fname">/sdcard/Pictures/PortalInstaller</div><div class="fmeta">Legacy upload folder · 12 images</div></div><div class="fact">›</div></div>
+              <div class="frow" style="border:none; padding:5px 0;"><div class="fi dir">📁</div><div><div class="fname">Browse all folders…</div><div class="fmeta">Full file explorer</div></div><div class="fact">›</div></div>
+            </div>
+            <div class="card">
+              <div style="font-size:11px; font-weight:800; color:var(--teal-dark); margin-bottom:6px;">UPLOADING 6 PHOTOS · 2 SKIPPED</div>
+              <div class="step"><span class="dot done">✓</span>kids_park.jpg · 2.1 MB</div>
+              <div class="step"><span class="dot done">✓</span>grandma_bday.jpg · 3.4 MB</div>
+              <div class="step"><span class="dot now">●</span>lake_house.jpg · 61%</div>
+              <div class="step todo"><span class="dot todo">4</span>3 more queued…</div>
+              <div class="step" style="color:var(--amber);"><span class="dot" style="background:var(--amber-bg); color:var(--amber);">⊘</span>beach.jpg · already on Portal (skipped)</div>
+              <div class="step" style="color:var(--amber);"><span class="dot" style="background:var(--amber-bg); color:var(--amber);">⊘</span>sunset.jpg · already on Portal (skipped)</div>
+              <div class="pbar"><div style="width:48%;"></div></div>
+              <div class="pmeta"><span>11.8 / 24.6 MB</span><span>3.9 MB/s · ~4s left</span></div>
+              <div class="cancel-btn">✕ Cancel upload</div>
+            </div>
+            <div class="toast">💾 After upload: 40 photos · 114 MB in folder</div>
+          </div>
+          <div class="bottomnav"><div><span class="ico">▦</span>Apps</div><div class="on"><span class="ico">🖼</span>Photos</div><div><span class="ico">⌂</span>Devices</div><div><span class="ico">›_</span>Tools</div></div>
+        </div></div>
+        <div class="phone-label">Folder picker · dedupe-aware upload</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ TIER 2 ============ -->
+<section class="tier">
+  <div class="tier-head"><h2>Tier 2 — Polish Existing Flows</h2><span class="tier-badge t2">Reliability & UX</span></div>
+  <p class="tier-sub">The features exist but feel rough. These upgrades make the current app feel finished and trustworthy.</p>
+
+  <!-- 5. Dashboard -->
+  <div class="feature" id="f5">
+    <div>
+      <h3><span class="num">5</span>Device Dashboard + Power Controls</h3>
+      <p class="desc">Promote the buried device-status text into a proper dashboard: storage / RAM gauges, uptime, battery-less health at a glance — plus the controls that are conspicuously missing today: <b>Reboot</b>, <b>Reboot to recovery</b>, <b>Screen off/on</b>, and <b>Launch app</b>. Today there is no way to reboot a Portal from the app at all.</p>
+      <div class="meta-row">
+        <span class="chip impact">Impact: High</span><span class="chip effort-s">Effort: Small</span><span class="chip tech">reboot / input keyevent / monkey -p pkg 1</span>
+      </div>
+      <div class="how"><b>How:</b> data already collected by <code>getDeviceStatus()</code> (df, meminfo, getprop) — just render it. Controls are one-liners: <code>shell:reboot</code>, <code>input keyevent KEYCODE_SLEEP</code>, <code>monkey -p pkg -c android.intent.category.LAUNCHER 1</code>. Confirm dialogs on reboot.</div>
+    </div>
+    <div class="phones"><div>
+      <div class="phone"><div class="screen">
+        <div class="statusbar"><span>10:50</span><span>▲ ▼ ■</span></div>
+        <div class="appbar">Portal Mini <span class="conn">Connected · Wi-Fi</span></div>
+        <div class="body">
+          <div class="card">
+            <div class="gauge-row">
+              <div class="gauge">
+                <svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="15" fill="none" stroke="#ECE7E1" stroke-width="4"/><circle cx="18" cy="18" r="15" fill="none" stroke="#006D6B" stroke-width="4" stroke-dasharray="66 94" stroke-linecap="round" transform="rotate(-90 18 18)"/><text x="18" y="21" text-anchor="middle" font-size="8" font-weight="800" fill="#00504E">70%</text></svg>
+                <div class="gv">11.2 / 16 GB</div><div class="gl">STORAGE</div>
+              </div>
+              <div class="gauge">
+                <svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="15" fill="none" stroke="#ECE7E1" stroke-width="4"/><circle cx="18" cy="18" r="15" fill="none" stroke="#0A8A87" stroke-width="4" stroke-dasharray="42 94" stroke-linecap="round" transform="rotate(-90 18 18)"/><text x="18" y="21" text-anchor="middle" font-size="8" font-weight="800" fill="#00504E">45%</text></svg>
+                <div class="gv">0.9 / 2 GB</div><div class="gl">RAM</div>
+              </div>
+              <div class="gauge">
+                <svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="15" fill="none" stroke="#ECE7E1" stroke-width="4"/><circle cx="18" cy="18" r="15" fill="none" stroke="#B45309" stroke-width="4" stroke-dasharray="31 94" stroke-linecap="round" transform="rotate(-90 18 18)"/><text x="18" y="21" text-anchor="middle" font-size="8" font-weight="800" fill="#B45309">33°</text></svg>
+                <div class="gv">33°C</div><div class="gl">TEMP</div>
+              </div>
+            </div>
+          </div>
+          <div class="card" style="font-size:10.5px; color: var(--text-dim); font-weight:600; display:grid; grid-template-columns:1fr 1fr; gap:4px;">
+            <span>Android 10 · SDK 29</span><span>Uptime: 14d 6h</span>
+            <span>OTA updates: <b style="color:var(--green)">Blocked ✓</b></span><span>Wireless ADB: On</span>
+          </div>
+          <div class="card">
+            <div style="font-size:11px; font-weight:800; color:var(--teal-dark); margin-bottom:8px;">CONTROLS</div>
+            <div class="btn-grid">
+              <div class="abtn"><span class="bi">🔄</span>Reboot</div>
+              <div class="abtn"><span class="bi">🌙</span>Screen off</div>
+              <div class="abtn"><span class="bi">🚀</span>Launch app…</div>
+              <div class="abtn danger"><span class="bi">🛠</span>Recovery</div>
+            </div>
+          </div>
+        </div>
+        <div class="bottomnav"><div><span class="ico">▦</span>Apps</div><div><span class="ico">🖼</span>Photos</div><div class="on"><span class="ico">⌂</span>Devices</div><div><span class="ico">›_</span>Tools</div></div>
+      </div></div>
+      <div class="phone-label">Devices tab · Dashboard</div>
+    </div></div>
+  </div>
+
+  <!-- 6. Rich app list -->
+  <div class="feature" id="f6">
+    <div>
+      <h3><span class="num">6</span>Rich Portal App List</h3>
+      <p class="desc">The Portal apps list currently shows raw package names with no icons (the icon path is fetched but never used). Upgrade it: real app labels, icons pulled from the APK, and per-app actions — <b>Launch</b>, <b>Force stop</b>, <b>Clear data</b>, in addition to Uninstall. This turns a read-only list into an app manager.</p>
+      <div class="meta-row">
+        <span class="chip impact">Impact: Medium–High</span><span class="chip effort-m">Effort: Medium</span><span class="chip tech">pull base.apk → PackageManager.getPackageArchiveInfo</span>
+      </div>
+      <div class="how"><b>How:</b> <code>iconApkPath</code> is already plumbed but always <code>null</code> (PortalConnectionManager.kt:400). Pull each <code>base.apk</code> header once, extract label + icon with the phone's own <code>PackageManager</code>, cache to disk keyed by package+version.</div>
+    </div>
+    <div class="phones"><div>
+      <div class="phone"><div class="screen">
+        <div class="statusbar"><span>10:52</span><span>▲ ▼ ■</span></div>
+        <div class="appbar">Portal Apps <span class="conn">Portal Mini</span></div>
+        <div class="body">
+          <div class="filter-row"><span class="fchip on">All (6)</span><span class="fchip">Recently used</span><span class="fchip">Largest</span></div>
+          <div class="card" style="flex:1; padding: 4px 10px;">
+            <div class="approw"><div class="appicon" style="background:#1DB954;">S</div><div><div class="an">Spotify</div><div class="am">v8.9.2 · 118 MB</div></div><div class="aa"><span>▶</span><span>⏹</span><span>🗑</span></div></div>
+            <div class="approw"><div class="appicon" style="background:#7B4FA6;">J</div><div><div class="an">Jellyfin</div><div class="am">v0.16.8 · 64 MB</div></div><div class="aa"><span>▶</span><span>⏹</span><span>🗑</span></div></div>
+            <div class="approw"><div class="appicon" style="background:#E5A00D;">P</div><div><div class="an">Plex</div><div class="am">v10.4 · 89 MB</div></div><div class="aa"><span>▶</span><span>⏹</span><span>🗑</span></div></div>
+            <div class="approw"><div class="appicon" style="background:#FF0000;">Y</div><div><div class="an">SmartTube</div><div class="am">v24.31 · 42 MB</div></div><div class="aa"><span>▶</span><span>⏹</span><span>🗑</span></div></div>
+            <div class="approw"><div class="appicon" style="background:#0A84FF;">K</div><div><div class="an">Kodi</div><div class="am">v20.5 · 156 MB</div></div><div class="aa"><span>▶</span><span>⏹</span><span>🗑</span></div></div>
+            <div class="approw" style="background:#F7F4F0; border-radius:10px;"><div class="appicon" style="background:#6B6560;">V</div><div><div class="an">VLC</div><div class="am">Clear data? This removes settings ⚠</div></div><div class="aa"><span style="background:var(--red-bg); color:var(--red); width:auto; padding:0 8px; font-size:10px; font-weight:800;">CLEAR</span></div></div>
+          </div>
+        </div>
+        <div class="bottomnav"><div class="on"><span class="ico">▦</span>Apps</div><div><span class="ico">🖼</span>Photos</div><div><span class="ico">⌂</span>Devices</div><div><span class="ico">›_</span>Tools</div></div>
+      </div></div>
+      <div class="phone-label">Apps tab · icons, labels, actions</div>
+    </div></div>
+  </div>
+
+  <!-- 7. Connection health -->
+  <div class="feature" id="f7">
+    <div>
+      <h3><span class="num">7</span>Connection Health &amp; Auto-Reconnect</h3>
+      <p class="desc">Today a dropped Wi-Fi connection is invisible until the next operation fails with a confusing error. Add a lightweight heartbeat (a no-op shell echo every ~20s), a persistent status chip in the app bar on every screen, and automatic reconnect with backoff when the link drops — with a toast so the user knows what happened.</p>
+      <div class="meta-row">
+        <span class="chip impact">Impact: High (trust)</span><span class="chip effort-s">Effort: Small</span><span class="chip tech">heartbeat coroutine + reconnect w/ backoff</span>
+      </div>
+      <div class="how"><b>How:</b> a <code>while(isActive)</code> loop in the ViewModel issuing <code>shell:echo ok</code>; on failure flip <code>ConnectionState</code> to <code>Reconnecting</code> and retry the saved host with exponential backoff (2s → 30s). The status chip shown in every mock above is this feature.</div>
+    </div>
+    <div class="phones"><div>
+      <div class="phone"><div class="screen">
+        <div class="statusbar"><span>10:54</span><span>▲ ▼ ■</span></div>
+        <div class="appbar">Devices <span class="conn warn">Reconnecting…</span></div>
+        <div class="body">
+          <div class="card">
+            <div style="font-size:11.5px; font-weight:700;">Portal Mini <span style="color:var(--text-dim); font-weight:600;">· 192.168.1.44:5555</span></div>
+            <div style="font-size:10px; color:var(--amber); font-weight:700; margin-top:4px;">⚠ Connection lost 8s ago — retrying (attempt 2, next in 4s)</div>
+            <div class="pbar"><div style="width:35%; background:var(--amber);"></div></div>
+          </div>
+          <div class="card" style="font-size:10.5px; color:var(--text-dim); font-weight:600;">
+            <div style="font-size:11px; font-weight:800; color:var(--teal-dark); margin-bottom:6px;">CONNECTION LOG</div>
+            <div>10:54:02 · Heartbeat failed (timeout)</div>
+            <div>10:53:41 · Heartbeat OK · 12 ms</div>
+            <div>10:53:21 · Heartbeat OK · 9 ms</div>
+            <div>10:41:15 · Connected via Wi-Fi ADB</div>
+          </div>
+          <div class="toast">📶 Reconnected to Portal Mini <span class="ta">OK</span></div>
+        </div>
+        <div class="bottomnav"><div><span class="ico">▦</span>Apps</div><div><span class="ico">🖼</span>Photos</div><div class="on"><span class="ico">⌂</span>Devices</div><div><span class="ico">›_</span>Tools</div></div>
+      </div></div>
+      <div class="phone-label">Status chip + auto-reconnect</div>
+    </div></div>
+  </div>
+
+  <!-- 8. Progress -->
+  <div class="feature" id="f8">
+    <div>
+      <h3><span class="num">8</span>Real Progress + Cancel Everywhere</h3>
+      <p class="desc">Installs currently show only an elapsed-seconds ticker; photo uploads report only the last error; backups, restores, scans and profile installs can't be cancelled at all. Add byte-level progress (the app controls the stream when pushing files), per-item results for batch operations, and a Cancel button on every long-running job.</p>
+      <div class="meta-row">
+        <span class="chip impact">Impact: High (trust)</span><span class="chip effort-m">Effort: Medium</span><span class="chip tech">counting Source wrapper + cancellable coroutine Jobs</span>
+      </div>
+      <div class="how"><b>How:</b> wrap the okio <code>Source</code> in a counting decorator to emit bytes-sent; keep each operation's <code>Job</code> so Cancel actually cancels; change batch states to carry per-item results (e.g. <code>ProfileApplyState.Done(succeeded, failed)</code> — today it reports Success even with failures).</div>
+    </div>
+    <div class="phones"><div>
+      <div class="phone"><div class="screen">
+        <div class="statusbar"><span>10:56</span><span>▲ ▼ ■</span></div>
+        <div class="appbar">Installing… <span class="conn">Portal Mini</span></div>
+        <div class="body">
+          <div class="card">
+            <div style="display:flex; gap:10px; align-items:center;">
+              <div class="appicon" style="background:#1DB954;">S</div>
+              <div><div style="font-size:12px; font-weight:750;">Spotify</div><div style="font-size:9.5px; color:var(--text-dim);">split APK · 3 parts · 118 MB</div></div>
+            </div>
+            <div class="pbar"><div style="width:62%;"></div></div>
+            <div class="pmeta"><span>73.2 / 118 MB</span><span>4.1 MB/s · ~11s left</span></div>
+            <div style="margin-top:10px;">
+              <div class="step"><span class="dot done">✓</span>Verify compatibility (minSdk 24 ≤ 29)</div>
+              <div class="step"><span class="dot done">✓</span>Push base.apk (64 MB)</div>
+              <div class="step"><span class="dot now">●</span>Push split_config.arm64.apk (48 MB)</div>
+              <div class="step todo"><span class="dot todo">3</span>Commit install session</div>
+            </div>
+            <div class="cancel-btn">✕ Cancel install</div>
+          </div>
+          <div class="card">
+            <div style="font-size:11px; font-weight:800; color:var(--teal-dark); margin-bottom:6px;">PROFILE “MEDIA PACK” · 3 of 5 done</div>
+            <div class="step"><span class="dot done">✓</span>Jellyfin · installed</div>
+            <div class="step"><span class="dot done">✓</span>Kodi · installed</div>
+            <div class="step"><span class="dot" style="background:var(--red-bg); color:var(--red);">✕</span>Netflix · minSdk 30 &gt; device 29</div>
+            <div class="step"><span class="dot now">●</span>Plex · pushing 41%…</div>
+            <div class="step todo"><span class="dot todo">5</span>SmartTube · queued</div>
+          </div>
+        </div>
+        <div class="bottomnav"><div class="on"><span class="ico">▦</span>Apps</div><div><span class="ico">🖼</span>Photos</div><div><span class="ico">⌂</span>Devices</div><div><span class="ico">›_</span>Tools</div></div>
+      </div></div>
+      <div class="phone-label">Byte progress · steps · per-item results</div>
+    </div></div>
+  </div>
+
+  <!-- 9. Dark theme -->
+  <div class="feature two-phone" id="f9">
+    <div>
+      <h3><span class="num">9</span>Dark Theme + Dynamic Color</h3>
+      <p class="desc">The color scheme is a single hardcoded light palette in <code>MainActivity.kt</code>. Add a proper <code>ui/theme</code> package with a dark scheme (teal survives beautifully in dark mode), follow-system by default, and optional Material You dynamic color on Android 12+ phones. A device-management tool gets used in the evening on the couch — dark mode is table stakes.</p>
+      <div class="meta-row">
+        <span class="chip impact">Impact: Medium</span><span class="chip effort-s">Effort: Small</span><span class="chip tech">darkColorScheme() + isSystemInDarkTheme()</span>
+      </div>
+      <div class="how"><b>How:</b> extract the palette into <code>ui/theme/Theme.kt</code>, add <code>darkColorScheme(primary = 0xFF4FD8D4, background = 0xFF131615…)</code>, a 3-way setting (System/Light/Dark) in the existing Settings tab, and <code>dynamicDarkColorScheme()</code> when available.</div>
+    </div>
+    <div class="phones">
+      <div>
+        <div class="phone"><div class="screen">
+          <div class="statusbar"><span>21:14</span><span>▲ ▼ ■</span></div>
+          <div class="appbar">Devices <span class="conn">Portal Mini</span></div>
+          <div class="body">
+            <div class="card"><div style="font-size:11.5px;font-weight:750;">Portal Mini</div><div style="font-size:9.5px;color:var(--text-dim);">192.168.1.44:5555 · Wi-Fi ADB</div><div class="pbar"><div style="width:70%;"></div></div><div class="pmeta"><span>Storage 70%</span><span>RAM 45%</span></div></div>
+            <div class="card"><div style="font-size:11px;font-weight:800;color:var(--teal-dark);margin-bottom:6px;">SAVED PORTALS</div><div style="font-size:10.5px;font-weight:650;">Living Room · 192.168.1.44</div><div style="font-size:10.5px;font-weight:650;margin-top:4px;">Kitchen · 192.168.1.61</div></div>
+          </div>
+          <div class="bottomnav"><div><span class="ico">▦</span>Apps</div><div><span class="ico">🖼</span>Photos</div><div class="on"><span class="ico">⌂</span>Devices</div><div><span class="ico">›_</span>Tools</div></div>
+        </div></div>
+        <div class="phone-label">Light (current palette)</div>
+      </div>
+      <div>
+        <div class="phone"><div class="screen dark">
+          <div class="statusbar"><span>21:14</span><span>▲ ▼ ■</span></div>
+          <div class="appbar">Devices <span class="conn" style="background:#0F2E2C;color:#5EEAD4;">Portal Mini</span></div>
+          <div class="body">
+            <div class="card"><div style="font-size:11.5px;font-weight:750;">Portal Mini</div><div style="font-size:9.5px;color:#9BA3A0;">192.168.1.44:5555 · Wi-Fi ADB</div><div class="pbar" style="background:#2E3532;"><div style="width:70%;background:#4FD8D4;"></div></div><div class="pmeta" style="color:#9BA3A0;"><span>Storage 70%</span><span>RAM 45%</span></div></div>
+            <div class="card"><div style="font-size:11px;font-weight:800;color:#7FD9D5;margin-bottom:6px;">SAVED PORTALS</div><div style="font-size:10.5px;font-weight:650;">Living Room · 192.168.1.44</div><div style="font-size:10.5px;font-weight:650;margin-top:4px;">Kitchen · 192.168.1.61</div></div>
+          </div>
+          <div class="bottomnav"><div><span class="ico">▦</span>Apps</div><div><span class="ico">🖼</span>Photos</div><div class="on"><span class="ico">⌂</span>Devices</div><div><span class="ico">›_</span>Tools</div></div>
+        </div></div>
+        <div class="phone-label">Dark (proposed)</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ TIER 3 ============ -->
+<section class="tier">
+  <div class="tier-head"><h2>Tier 3 — Foundation Work</h2><span class="tier-badge t3">Enables everything above</span></div>
+  <p class="tier-sub">Invisible to users but pays for itself before Tier 1 ships — the new Tools tab shouldn't be bolted onto a 3,659-line file.</p>
+
+  <div class="feature" id="f10" style="grid-template-columns: 1fr;">
+    <div>
+      <h3><span class="num">10</span>Architecture Cleanup</h3>
+      <div class="arch-list">
+        <div class="arch-item"><span class="n">10a</span><span><b>Split MainScreen.kt</b> (3,659 lines → ~12 focused files) into <code>ui/devices/</code>, <code>ui/apps/</code>, <code>ui/photos/</code>, <code>ui/tools/</code>, <code>ui/theme/</code>. Purely mechanical, zero behavior change, do it first.</span></div>
+        <div class="arch-item"><span class="n">10b</span><span><b>Adopt Navigation-Compose</b> — replaces the raw <code>selectedTab` int</code>, gives back-stack, deep links, and preserved sub-tab state.</span></div>
+        <div class="arch-item"><span class="n">10c</span><span><b>Remove reflection into dadb internals</b> (discovery + USB bridge both reflect into private APIs with a "re-test after every version bump" comment). Upstream a PR to dadb or vendor the two functions — this is a silent-breakage time bomb.</span></div>
+        <div class="arch-item"><span class="n">10d</span><span><b>Split the god-ViewModel</b> per feature area, move history persistence out of the UI layer (it writes SharedPreferences directly), migrate prefs to DataStore.</span></div>
+        <div class="arch-item"><span class="n">10e</span><span><b>Add tests</b> — there are currently zero. Start with the pure logic: backup manifest validation, zip-slip protection, <code>ls</code>/logcat parsers, minSdk gate.</span></div>
+        <div class="arch-item"><span class="n">10f</span><span><b>Delete dead code</b> — <code>WirelessAdbTab</code> is defined but never called; update Compose BOM (2023.10) and compileSdk 34 → 35.</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SUMMARY ============ -->
+<section class="tier" id="summary">
+  <div class="tier-head"><h2>Suggested Release Plan</h2></div>
+  <table class="summary">
+    <tr><th>Release</th><th>Contents</th><th>Theme</th></tr>
+    <tr><td>v1.2</td><td>10a–10c architecture prep · #7 connection health · #5 dashboard + power controls · #9 dark theme</td><td>“Feels solid”</td></tr>
+    <tr><td>v1.3</td><td>New <b>Tools</b> tab: #1 shell · #2 logcat · #4 screen capture</td><td>“Power tools”</td></tr>
+    <tr><td>v1.4</td><td>#3 file manager · <b>#11 screensaver manager ★</b> · #6 rich app list · #8 real progress + cancel</td><td>“Complete manager”</td></tr>
+  </table>
+  <p style="margin-top:16px; color: var(--text-dim); font-size: 13.5px;">All mocks are illustrative — colors, spacing and copy follow the app's existing Material 3 teal system (primary <code style="background:#ECE7E1;padding:1px 6px;border-radius:5px;">#006D6B</code>, background <code style="background:#ECE7E1;padding:1px 6px;border-radius:5px;">#FFF9F5</code>, 20&nbsp;dp rounded cards).</p>
+</section>
+
+</div>
+</body>
+</html>
