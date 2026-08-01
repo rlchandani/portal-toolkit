@@ -95,13 +95,26 @@ internal fun NavigationGlyph(index: Int, selected: Boolean) {
             }
 
             else -> {
-                listOf(6.dp, 12.dp, 18.dp).forEach { x ->
-                    drawCircle(
-                        color = color,
-                        radius = 1.8.dp.toPx(),
-                        center = Offset(x.toPx(), 12.dp.toPx())
-                    )
-                }
+                // Tab „Tools”: doua slidere (linii orizontale cu buton), sugerand
+                // reglaje/unelte, in locul vechilor trei puncte de la „Mai multe”.
+                val leftX = 4.dp.toPx()
+                val rightX = 20.dp.toPx()
+                listOf(9.dp.toPx() to 15.dp.toPx(), 15.dp.toPx() to 9.dp.toPx())
+                    .forEach { (rowY, knobX) ->
+                        drawLine(
+                            color = color,
+                            start = Offset(leftX, rowY),
+                            end = Offset(rightX, rowY),
+                            strokeWidth = strokeWidth,
+                            cap = StrokeCap.Round
+                        )
+                        drawCircle(
+                            color = color,
+                            radius = 2.5.dp.toPx(),
+                            center = Offset(knobX, rowY),
+                            style = stroke
+                        )
+                    }
             }
         }
     }

@@ -15,10 +15,10 @@ sealed class PortalRoute(
     data object Apps : PortalRoute("apps", R.string.tab_apps, 0)
     data object Photos : PortalRoute("photos", R.string.tab_photos, 1)
     data object Devices : PortalRoute("devices", R.string.tab_devices, 2)
-    data object More : PortalRoute("more", R.string.tab_more, 3)
+    data object Tools : PortalRoute("tools", R.string.tab_tools, 3)
 
     companion object {
-        val bottomNavOrder: List<PortalRoute> = listOf(Devices, Apps, Photos, More)
+        val bottomNavOrder: List<PortalRoute> = listOf(Devices, Apps, Photos, Tools)
         const val START_DESTINATION = "devices"
     }
 }

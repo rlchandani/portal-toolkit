@@ -15,6 +15,13 @@
     <string name="tab_devices">Devices</string>
     <string name="tab_settings">Settings</string>
     <string name="tab_more">More</string>
+    <string name="tab_tools">Tools</string>
+    <string name="tools_section_shell">Shell</string>
+    <string name="tools_section_logcat">Logcat</string>
+    <string name="tools_section_capture">Capture</string>
+    <string name="tools_section_history">History</string>
+    <string name="tools_section_settings">Settings</string>
+    <string name="tools_coming_soon">Coming soon.</string>
     <string name="connect_over_wifi">Connect over Wi-Fi</string>
     <string name="wireless_setup_title">Set up Wireless ADB</string>
     <string name="wireless_setup_description">USB is only needed for initial setup.</string>

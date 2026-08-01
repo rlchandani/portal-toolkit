@@ -15,6 +15,13 @@
     <string name="tab_devices">Dispozitive</string>
     <string name="tab_settings">Setari</string>
     <string name="tab_more">Mai multe</string>
+    <string name="tab_tools">Unelte</string>
+    <string name="tools_section_shell">Shell</string>
+    <string name="tools_section_logcat">Logcat</string>
+    <string name="tools_section_capture">Captura</string>
+    <string name="tools_section_history">Istoric</string>
+    <string name="tools_section_settings">Setari</string>
+    <string name="tools_coming_soon">In curand.</string>
     <string name="connect_over_wifi">Conectare prin Wi-Fi</string>
     <string name="wireless_setup_title">Configureaza ADB wireless</string>
     <string name="wireless_setup_description">USB este necesar doar pentru configurarea initiala.</string>

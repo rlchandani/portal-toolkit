@@ -21,15 +21,9 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -40,49 +34,6 @@ import com.portalinstaller.ui.common.SectionCardShape
 import com.portalinstaller.util.AppLanguage
 import com.portalinstaller.data.store.HistoryEntry
 import com.portalinstaller.data.store.ThemeMode
-
-@Composable
-internal fun MoreTab(
-    context: Context,
-    history: List<HistoryEntry>,
-    selectedLanguage: AppLanguage,
-    onSelectLanguage: (AppLanguage) -> Unit,
-    themeMode: ThemeMode,
-    onSelectThemeMode: (ThemeMode) -> Unit,
-    useDynamicColor: Boolean,
-    onToggleDynamicColor: (Boolean) -> Unit
-) {
-    var selectedSection by rememberSaveable { mutableIntStateOf(0) }
-
-    Column(modifier = Modifier.fillMaxSize()) {
-        TabRow(selectedTabIndex = selectedSection) {
-            Tab(
-                selected = selectedSection == 0,
-                onClick = { selectedSection = 0 },
-                text = { Text(stringResource(R.string.tab_history)) }
-            )
-            Tab(
-                selected = selectedSection == 1,
-                onClick = { selectedSection = 1 },
-                text = { Text(stringResource(R.string.tab_settings)) }
-            )
-        }
-
-        if (selectedSection == 0) {
-            HistoryTab(history)
-        } else {
-            SettingsTab(
-                context = context,
-                selectedLanguage = selectedLanguage,
-                onSelectLanguage = onSelectLanguage,
-                themeMode = themeMode,
-                onSelectThemeMode = onSelectThemeMode,
-                useDynamicColor = useDynamicColor,
-                onToggleDynamicColor = onToggleDynamicColor
-            )
-        }
-    }
-}
 
 @Composable
 internal fun HistoryTab(history: List<HistoryEntry>) {

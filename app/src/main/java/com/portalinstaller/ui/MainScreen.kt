@@ -76,8 +76,8 @@ import com.portalinstaller.ui.devices.BackupAppSelectionDialog
 import com.portalinstaller.ui.devices.BackupRestoreConfirmationDialog
 import com.portalinstaller.ui.devices.DevicesTab
 import com.portalinstaller.ui.devices.PortalScannerDialog
-import com.portalinstaller.ui.more.MoreTab
 import com.portalinstaller.ui.photos.PhotosTab
+import com.portalinstaller.ui.tools.ToolsTab
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -576,7 +576,7 @@ fun MainScreen(
                         )
                     }
                 ) }
-                composable(PortalRoute.More.route) { MoreTab(
+                composable(PortalRoute.Tools.route) { ToolsTab(
                     context = context,
                     history = operationHistory,
                     selectedLanguage = selectedLanguage,
