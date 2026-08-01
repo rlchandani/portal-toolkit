@@ -150,10 +150,16 @@ internal fun ScreensaverTab(
         }
 
         (uploadState as? UploadSummaryState.Uploading)?.let { u ->
-            Text(
-                text = stringResource(R.string.uploading_progress, u.current, u.total),
-                style = MaterialTheme.typography.labelSmall
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = stringResource(R.string.uploading_progress, u.current, u.total),
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(onClick = { viewModel.cancelUpload() }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
             LinearProgressIndicator(
                 progress = { if (u.progress.isDeterminate) u.progress.fraction else 0f },
                 modifier = Modifier.fillMaxWidth()

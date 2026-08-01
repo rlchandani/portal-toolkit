@@ -47,6 +47,7 @@ internal fun ProfilesTab(
     isConnected: Boolean,
     onCreate: () -> Unit,
     onApply: (AppProfile) -> Unit,
+    onCancelApply: () -> Unit,
     onDelete: (AppProfile) -> Unit
 ) {
     val applying = applyState as? ProfileApplyState.Applying
@@ -110,6 +111,15 @@ internal fun ProfilesTab(
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis
                         )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            TextButton(onClick = onCancelApply) {
+                                Text(stringResource(R.string.cancel))
+                            }
+                        }
                     }
                 }
             }

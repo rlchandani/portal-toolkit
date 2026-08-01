@@ -106,10 +106,16 @@ internal fun FilesTab(
         }
 
         (transfer as? FileTransferState.Working)?.let { w ->
-            Text(
-                text = stringResource(R.string.files_transfer_progress, w.current, w.total),
-                style = MaterialTheme.typography.labelSmall
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = stringResource(R.string.files_transfer_progress, w.current, w.total),
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(onClick = { viewModel.cancelTransfer() }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
             LinearProgressIndicator(
                 progress = { if (w.progress.isDeterminate) w.progress.fraction else 0f },
                 modifier = Modifier.fillMaxWidth()

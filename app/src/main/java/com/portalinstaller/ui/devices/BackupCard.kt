@@ -47,7 +47,8 @@ internal fun BackupCard(
     selectedPackages: Set<String>?,
     onChooseApps: () -> Unit,
     onCreateBackup: () -> Unit,
-    onRestoreBackup: () -> Unit
+    onRestoreBackup: () -> Unit,
+    onCancel: () -> Unit
 ) {
     val isWorking = backupState is BackupState.Creating ||
         backupState is BackupState.Restoring ||
@@ -134,6 +135,18 @@ internal fun BackupCard(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
+                // Anularea are sens doar pentru operatiuni lungi (creare/restaurare),
+                // nu pentru previzualizarea rapida a unei arhive.
+                if (backupState is BackupState.Creating || backupState is BackupState.Restoring) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(onClick = onCancel) {
+                            Text(stringResource(R.string.cancel))
+                        }
+                    }
+                }
                 Spacer(modifier = Modifier.height(8.dp))
             }
 

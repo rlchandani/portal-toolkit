@@ -393,6 +393,8 @@
     <string name="profile_install_busy">Another installation is already in progress.</string>
     <string name="profile_apply_success">Profile %1$s applied: %2$d apps installed.</string>
     <string name="profile_apply_partial">Profile %1$s: %2$d apps installed, %3$d failed or unavailable.</string>
+    <string name="profile_app_not_found">App not found on phone.</string>
+    <string name="profile_apply_done">Applied: %1$d succeeded, %2$d failed.</string>
     <string name="profile_connect_hint">You can create profiles offline. Connect a Portal over Wi-Fi to apply them.</string>
     <string name="profile_delete_title">Delete profile?</string>
     <string name="profile_delete_message">Profile %1$s will be removed from this phone.</string>

@@ -393,6 +393,8 @@
     <string name="profile_install_busy">O alta instalare este deja in curs.</string>
     <string name="profile_apply_success">Profilul %1$s a fost aplicat: %2$d aplicatii instalate.</string>
     <string name="profile_apply_partial">Profilul %1$s: %2$d aplicatii instalate, %3$d esuate sau indisponibile.</string>
+    <string name="profile_app_not_found">Aplicatia nu a fost gasita pe telefon.</string>
+    <string name="profile_apply_done">Aplicat: %1$d reusite, %2$d esuate.</string>
     <string name="profile_connect_hint">Poti crea profiluri offline. Conecteaza un Portal prin Wi-Fi pentru a le aplica.</string>
     <string name="profile_delete_title">Sterge profilul?</string>
     <string name="profile_delete_message">Profilul %1$s va fi eliminat de pe telefon.</string>

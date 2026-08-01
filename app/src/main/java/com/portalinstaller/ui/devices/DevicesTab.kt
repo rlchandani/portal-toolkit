@@ -97,7 +97,8 @@ internal fun DevicesTab(
     onSetOsUpdatesBlocked: (Boolean) -> Unit,
     onChooseBackupApps: () -> Unit,
     onCreateBackup: () -> Unit,
-    onRestoreBackup: () -> Unit
+    onRestoreBackup: () -> Unit,
+    onCancelBackup: () -> Unit
 ) {
     var selectedSection by rememberSaveable { mutableIntStateOf(0) }
 
@@ -195,7 +196,8 @@ internal fun DevicesTab(
                         selectedPackages = selectedBackupPackages,
                         onChooseApps = onChooseBackupApps,
                         onCreateBackup = onCreateBackup,
-                        onRestoreBackup = onRestoreBackup
+                        onRestoreBackup = onRestoreBackup,
+                        onCancel = onCancelBackup
                     )
                 }
             }

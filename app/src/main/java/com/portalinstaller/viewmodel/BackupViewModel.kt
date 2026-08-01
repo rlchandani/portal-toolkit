@@ -9,7 +9,9 @@ import com.portalinstaller.R
 import com.portalinstaller.data.AppContainer
 import com.portalinstaller.data.PortalBackupPreview
 import com.portalinstaller.data.store.HistoryEntry
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -44,6 +46,9 @@ class BackupViewModel(app: Application) : AndroidViewModel(app) {
     private val _backupState = MutableStateFlow<BackupState>(BackupState.Idle)
     val backupState: StateFlow<BackupState> = _backupState.asStateFlow()
 
+    // Job-ul backup/restore in curs, ca sa poata fi anulat din UI.
+    private var backupJob: Job? = null
+
     private suspend fun addHistory(description: String, success: Boolean) {
         historyStore.add(HistoryEntry(System.currentTimeMillis(), description, success))
     }
@@ -56,7 +61,7 @@ class BackupViewModel(app: Application) : AndroidViewModel(app) {
         }
         if (_backupState.value is BackupState.Creating || _backupState.value is BackupState.Restoring) return
 
-        viewModelScope.launch {
+        backupJob = viewModelScope.launch {
             _backupState.value = BackupState.Creating(0, 0, "")
             runCatching {
                 withContext(Dispatchers.IO) {
@@ -74,6 +79,7 @@ class BackupViewModel(app: Application) : AndroidViewModel(app) {
                 _backupState.value = BackupState.Success(message)
                 addHistory(message, success = true)
             }.onFailure { error ->
+                if (error is CancellationException) return@onFailure
                 val message = context.getString(
                     R.string.backup_failed,
                     error.message ?: context.getString(R.string.error_unknown)
@@ -126,7 +132,7 @@ class BackupViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
 
-        viewModelScope.launch {
+        backupJob = viewModelScope.launch {
             _backupState.value = BackupState.Restoring(0, 0, "")
             runCatching {
                 withContext(Dispatchers.IO) {
@@ -166,6 +172,7 @@ class BackupViewModel(app: Application) : AndroidViewModel(app) {
                     onRestored()
                 }
             }.onFailure { error ->
+                if (error is CancellationException) return@onFailure
                 val message = context.getString(
                     R.string.backup_restore_failed,
                     error.message ?: context.getString(R.string.error_unknown)
@@ -174,6 +181,13 @@ class BackupViewModel(app: Application) : AndroidViewModel(app) {
                 addHistory(message, success = false)
             }
         }
+    }
+
+    /** Anuleaza backup-ul/restaurarea in curs (daca exista). */
+    fun cancelBackup() {
+        backupJob?.cancel()
+        backupJob = null
+        _backupState.value = BackupState.Idle
     }
 
     fun clearBackupState() {

@@ -75,6 +75,7 @@ internal fun AppsHubTab(
     onClearAppData: (String) -> Unit,
     onCreateProfile: () -> Unit,
     onApplyProfile: (AppProfile) -> Unit,
+    onCancelApplyProfile: () -> Unit,
     onDeleteProfile: (AppProfile) -> Unit
 ) {
     var selectedSection by rememberSaveable { mutableIntStateOf(0) }
@@ -203,6 +204,7 @@ internal fun AppsHubTab(
                 isConnected = isWifiConnected,
                 onCreate = onCreateProfile,
                 onApply = onApplyProfile,
+                onCancelApply = onCancelApplyProfile,
                 onDelete = onDeleteProfile
             )
         }

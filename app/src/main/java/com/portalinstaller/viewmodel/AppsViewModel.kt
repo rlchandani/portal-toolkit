@@ -16,7 +16,9 @@ import com.portalinstaller.data.PortalDeviceConfig
 import com.portalinstaller.data.store.AppProfile
 import com.portalinstaller.data.store.HistoryEntry
 import dadb.Dadb
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -58,8 +60,31 @@ sealed class ProfileApplyState {
         val total: Int,
         val appName: String
     ) : ProfileApplyState()
-    data class Success(val message: String) : ProfileApplyState()
+    /**
+     * Rezultatul final al aplicarii unui profil, cu detalierea pe fiecare
+     * pachet: cele reusite si cele esuate (cu motivul).
+     */
+    data class Done(
+        val profileName: String,
+        val succeeded: List<String>,
+        val failed: List<Pair<String, String>>
+    ) : ProfileApplyState()
     data class Failed(val message: String) : ProfileApplyState()
+}
+
+/**
+ * Reduce o lista de rezultate (pachet -> reusit) la o stare [ProfileApplyState.Done].
+ * Extras ca functie pura pentru a fi testabil fara conexiune ADB.
+ */
+internal fun foldProfileResults(
+    results: List<Pair<String, Boolean>>,
+    profileName: String = "",
+    reasons: Map<String, String> = emptyMap()
+): ProfileApplyState.Done {
+    val succeeded = results.filter { it.second }.map { it.first }
+    val failed = results.filter { !it.second }
+        .map { it.first to (reasons[it.first] ?: "") }
+    return ProfileApplyState.Done(profileName, succeeded, failed)
 }
 
 /**
@@ -108,6 +133,10 @@ class AppsViewModel(app: Application) : AndroidViewModel(app) {
     private val _appActionState = MutableStateFlow<AppActionState>(AppActionState.Idle)
     val appActionState: StateFlow<AppActionState> = _appActionState.asStateFlow()
 
+    // Retinem Job-urile operatiunilor lungi ca sa le putem anula din UI.
+    private var installJob: Job? = null
+    private var profileApplyJob: Job? = null
+
     fun setPortalAppsSort(sort: PortalAppsSort) {
         _portalAppsSort.value = sort
         _portalApps.value = sortPortalApps(_portalApps.value, sort)
@@ -142,7 +171,7 @@ class AppsViewModel(app: Application) : AndroidViewModel(app) {
             _installState.value = InstallState.Failed(context.getString(R.string.profile_install_busy))
             return
         }
-        viewModelScope.launch {
+        installJob = viewModelScope.launch {
             val compatibilityError = validatePortalApp(context, app.name, app.minSdkVersion)
             if (compatibilityError != null) {
                 _installState.value = InstallState.Failed(compatibilityError)
@@ -193,7 +222,7 @@ class AppsViewModel(app: Application) : AndroidViewModel(app) {
             _installState.value = InstallState.Failed(context.getString(R.string.profile_install_busy))
             return
         }
-        viewModelScope.launch {
+        installJob = viewModelScope.launch {
             _installState.value = InstallState.Installing()
 
             val apkFile = withContext(Dispatchers.IO) {
@@ -321,56 +350,85 @@ class AppsViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
 
-        viewModelScope.launch {
+        profileApplyJob = viewModelScope.launch {
             val appsByPackage = availableApps.associateBy { it.packageName }
-            var installedCount = 0
-            val failedPackages = mutableListOf<String>()
             val packages = profile.packageNames.sorted()
+            val results = mutableListOf<Pair<String, Boolean>>()
+            val reasons = mutableMapOf<String, String>()
 
-            packages.forEachIndexed { index, packageName ->
-                val app = appsByPackage[packageName]
-                _profileApplyState.value = ProfileApplyState.Applying(
-                    profileName = profile.name,
-                    current = index + 1,
-                    total = packages.size,
-                    appName = app?.name ?: packageName
-                )
+            try {
+                packages.forEachIndexed { index, packageName ->
+                    val app = appsByPackage[packageName]
+                    _profileApplyState.value = ProfileApplyState.Applying(
+                        profileName = profile.name,
+                        current = index + 1,
+                        total = packages.size,
+                        appName = app?.name ?: packageName
+                    )
 
-                if (app == null) {
-                    failedPackages += packageName
-                    return@forEachIndexed
+                    val label = app?.name ?: packageName
+                    if (app == null) {
+                        results += packageName to false
+                        reasons[packageName] = context.getString(R.string.profile_app_not_found)
+                        return@forEachIndexed
+                    }
+
+                    val compatibilityError = validatePortalApp(context, app.name, app.minSdkVersion)
+                    if (compatibilityError != null) {
+                        results += packageName to false
+                        reasons[packageName] = compatibilityError
+                        return@forEachIndexed
+                    }
+
+                    val baseApk = File(app.sourceDir)
+                    val splits = app.splitSourceDirs?.map(::File).orEmpty()
+                    val result = if (splits.isEmpty()) {
+                        connectionManager.installApk(context, connection, baseApk)
+                    } else {
+                        connectionManager.installMultipleApks(context, connection, listOf(baseApk) + splits)
+                    }
+                    if (result.isSuccess) {
+                        results += packageName to true
+                    } else {
+                        results += packageName to false
+                        reasons[packageName] = result.exceptionOrNull()?.message ?: label
+                    }
                 }
-
-                val compatibilityError = validatePortalApp(context, app.name, app.minSdkVersion)
-                if (compatibilityError != null) {
-                    failedPackages += packageName
-                    return@forEachIndexed
-                }
-
-                val baseApk = File(app.sourceDir)
-                val splits = app.splitSourceDirs?.map(::File).orEmpty()
-                val result = if (splits.isEmpty()) {
-                    connectionManager.installApk(context, connection, baseApk)
-                } else {
-                    connectionManager.installMultipleApks(context, connection, listOf(baseApk) + splits)
-                }
-                if (result.isSuccess) installedCount++ else failedPackages += packageName
+            } catch (e: CancellationException) {
+                // Anulare voita: raportam ce s-a apucat, restul raman neinstalate.
+                _profileApplyState.value = foldProfileResults(results, profile.name, reasons)
+                loadPortalPackages(context)
+                throw e
             }
 
-            val message = if (failedPackages.isEmpty()) {
-                context.getString(R.string.profile_apply_success, profile.name, installedCount)
+            val done = foldProfileResults(results, profile.name, reasons)
+            val message = if (done.failed.isEmpty()) {
+                context.getString(R.string.profile_apply_success, profile.name, done.succeeded.size)
             } else {
                 context.getString(
                     R.string.profile_apply_partial,
                     profile.name,
-                    installedCount,
-                    failedPackages.size
+                    done.succeeded.size,
+                    done.failed.size
                 )
             }
-            _profileApplyState.value = ProfileApplyState.Success(message)
-            addHistory(message, success = failedPackages.isEmpty())
+            _profileApplyState.value = done
+            addHistory(message, success = done.failed.isEmpty())
             loadPortalPackages(context)
         }
+    }
+
+    /** Anuleaza instalarea in curs (daca exista). */
+    fun cancelInstall() {
+        installJob?.cancel()
+        installJob = null
+        _installState.value = InstallState.Idle
+    }
+
+    /** Anuleaza aplicarea profilului in curs (daca exista). */
+    fun cancelProfileApply() {
+        profileApplyJob?.cancel()
+        profileApplyJob = null
     }
 
     /**

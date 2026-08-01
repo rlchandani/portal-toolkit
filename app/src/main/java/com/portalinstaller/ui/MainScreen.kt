@@ -9,6 +9,7 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -23,6 +24,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -34,6 +36,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -404,8 +407,22 @@ fun MainScreen(
 
     LaunchedEffect(profileApplyState) {
         when (val state = profileApplyState) {
-            is ProfileApplyState.Success -> {
-                snackbarHostState.showSnackbar(state.message)
+            is ProfileApplyState.Done -> {
+                val message = if (state.failed.isEmpty()) {
+                    context.getString(
+                        R.string.profile_apply_success,
+                        state.profileName,
+                        state.succeeded.size
+                    )
+                } else {
+                    context.getString(
+                        R.string.profile_apply_partial,
+                        state.profileName,
+                        state.succeeded.size,
+                        state.failed.size
+                    )
+                }
+                snackbarHostState.showSnackbar(message)
                 appsViewModel.clearProfileApplyState()
             }
             is ProfileApplyState.Failed -> {
@@ -530,16 +547,26 @@ fun MainScreen(
             if (installState is InstallState.Installing) {
                 val state = installState as InstallState.Installing
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                Text(
-                    text = stringResource(
-                        R.string.install_progress_message,
-                        formatFileSize(state.sizeBytes),
-                        state.elapsedSeconds
-                    ),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = stringResource(
+                            R.string.install_progress_message,
+                            formatFileSize(state.sizeBytes),
+                            state.elapsedSeconds
+                        ),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(horizontal = 16.dp, vertical = 4.dp)
+                    )
+                    TextButton(onClick = { appsViewModel.cancelInstall() }) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                }
             }
 
             val isWifiConnected = connectionState is ConnectionState.Connected &&
@@ -584,6 +611,7 @@ fun MainScreen(
                     onApplyProfile = { profile ->
                         appsViewModel.applyProfile(context, profile, installedApps)
                     },
+                    onCancelApplyProfile = { appsViewModel.cancelProfileApply() },
                     onDeleteProfile = { profile ->
                         scope.launch { container.appProfileStore.remove(profile.id) }
                     }
@@ -689,7 +717,8 @@ fun MainScreen(
                         backupRestoreLauncher.launch(
                             arrayOf("application/zip", "application/octet-stream")
                         )
-                    }
+                    },
+                    onCancelBackup = { backupViewModel.cancelBackup() }
                 ) }
                 composable(PortalRoute.Tools.route) { ToolsTab(
                     context = context,
