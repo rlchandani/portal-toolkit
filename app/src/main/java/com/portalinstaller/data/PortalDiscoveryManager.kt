@@ -4,8 +4,8 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.LinkAddress
 import com.portalinstaller.R
+import com.portalinstaller.data.adb.DadbConnections
 import dadb.AdbKeyPair
-import dadb.AdbStream
 import dadb.Dadb
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -14,7 +14,6 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
-import java.io.IOException
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.util.concurrent.atomic.AtomicInteger
@@ -22,27 +21,6 @@ import java.util.concurrent.atomic.AtomicInteger
 private const val DISCOVERY_CONNECT_TIMEOUT_MS = 500
 private const val DISCOVERY_BATCH_SIZE = 48
 private const val MAX_DISCOVERY_HOSTS = 65_534
-
-private class ReflectiveTcpDadb(
-    private val connection: Any
-) : Dadb {
-    private val connectionClass = connection.javaClass
-    private val openMethod = connectionClass.getMethod("open", String::class.java)
-    private val supportsFeatureMethod = connectionClass.getMethod("supportsFeature", String::class.java)
-    private val closeMethod = connectionClass.getMethod("close")
-
-    override fun open(destination: String): AdbStream {
-        return openMethod.invoke(connection, destination) as AdbStream
-    }
-
-    override fun supportsFeature(feature: String): Boolean {
-        return supportsFeatureMethod.invoke(connection, feature) as Boolean
-    }
-
-    override fun close() {
-        closeMethod.invoke(connection)
-    }
-}
 
 data class DiscoveredPortal(
     val ip: String,
@@ -132,20 +110,7 @@ class PortalDiscoveryManager(
         return try {
             socket.connect(InetSocketAddress(ip, port), DISCOVERY_CONNECT_TIMEOUT_MS)
             socket.soTimeout = DISCOVERY_CONNECT_TIMEOUT_MS
-
-            val adbConnectionClass = Class.forName("dadb.AdbConnection")
-            val companionField = adbConnectionClass.getField("Companion")
-            val companion = companionField.get(null)
-            val companionClass = companion.javaClass
-            val method = companionClass.getDeclaredMethod(
-                "connect",
-                Socket::class.java,
-                AdbKeyPair::class.java
-            )
-            method.isAccessible = true
-            val connection = method.invoke(companion, socket, keyPair)
-                ?: throw IOException("Nu s-a putut crea conexiunea ADB pentru discovery.")
-            ReflectiveTcpDadb(connection)
+            DadbConnections.connectTcp(socket, keyPair)
         } catch (_: Throwable) {
             runCatching { socket.close() }
             null

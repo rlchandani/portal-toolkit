@@ -6,8 +6,8 @@ import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbEndpoint
 import android.hardware.usb.UsbInterface
 import android.hardware.usb.UsbManager
+import com.portalinstaller.data.adb.DadbConnections
 import dadb.AdbKeyPair
-import dadb.AdbStream
 import dadb.Dadb
 import okio.Buffer
 import okio.Sink
@@ -128,27 +128,6 @@ private class UsbBulkSink(
     }
 }
 
-private class ReflectiveUsbDadb(
-    private val connection: Any
-) : Dadb {
-    private val connectionClass = connection.javaClass
-    private val openMethod = connectionClass.getMethod("open", String::class.java)
-    private val supportsFeatureMethod = connectionClass.getMethod("supportsFeature", String::class.java)
-    private val closeMethod = connectionClass.getMethod("close")
-
-    override fun open(destination: String): AdbStream {
-        return openMethod.invoke(connection, destination) as AdbStream
-    }
-
-    override fun supportsFeature(feature: String): Boolean {
-        return supportsFeatureMethod.invoke(connection, feature) as Boolean
-    }
-
-    override fun close() {
-        closeMethod.invoke(connection)
-    }
-}
-
 object UsbAdbBridge {
     fun create(usbManager: UsbManager, device: UsbDevice, keyPair: AdbKeyPair): Dadb {
         val adbInterface = findAdbInterface(device) ?: throw IOException("ADB USB interface not found")
@@ -179,40 +158,12 @@ object UsbAdbBridge {
         }
 
         return try {
-            ReflectiveUsbDadb(createAdbConnection(source, sink, keyPair, closeable))
+            DadbConnections.connectStreams(source, sink, keyPair, closeable)
         } catch (error: Throwable) {
-            // The reflected dadb setup can fail before it owns the connection.
+            // dadb setup can fail before it owns the connection.
             closeable.close()
             throw error
         }
-    }
-
-    private fun createAdbConnection(
-        source: Source,
-        sink: Sink,
-        keyPair: AdbKeyPair,
-        closeable: Closeable
-    ): Any {
-        // Verified against dev.mobile:dadb:1.2.6. This reaches an internal
-        // transport hook because dadb does not expose a public USB transport API.
-        // Re-test this path after every dadb version bump.
-        val adbConnectionClass = Class.forName("dadb.AdbConnection")
-        val companionField = adbConnectionClass.getField("Companion")
-        val companion = companionField.get(null)
-        val companionClass = companion.javaClass
-        val method = companionClass.getDeclaredMethod(
-            "connect\$default",
-            companionClass,
-            Source::class.java,
-            Sink::class.java,
-            AdbKeyPair::class.java,
-            Closeable::class.java,
-            Int::class.javaPrimitiveType,
-            Any::class.java
-        )
-        method.isAccessible = true
-        return method.invoke(null, companion, source, sink, keyPair, closeable, 0, null)
-            ?: throw IOException("Failed to create dadb USB connection")
     }
 
     private fun findAdbInterface(device: UsbDevice): UsbInterface? {
