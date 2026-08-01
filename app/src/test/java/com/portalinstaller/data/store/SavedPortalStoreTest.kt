@@ -82,6 +82,25 @@ class SavedPortalStoreTest {
     }
 
     @Test
+    fun `setScreensaverFolder persists and round-trips`() = runTest {
+        store.upsert(SavedPortal("A", "10.0.0.5", 5555, "", lastConnectedAt = 100))
+
+        store.setScreensaverFolder("10.0.0.5:5555", "/sdcard/DCIM/Screensaver")
+
+        val portals = store.portals.first()
+        assertEquals("/sdcard/DCIM/Screensaver", portals.first().screensaverFolder)
+    }
+
+    @Test
+    fun `screensaverFolder survives serialize parse`() {
+        val serialized = SavedPortalStore.serialize(
+            listOf(SavedPortal("Den", "10.0.0.9", 5555, "Portal", lastConnectedAt = 50, screensaverFolder = "/sdcard/Fotos"))
+        )
+        val parsed = SavedPortalStore.parse(serialized)
+        assertEquals("/sdcard/Fotos", parsed.first().screensaverFolder)
+    }
+
+    @Test
     fun `parse reuses the legacy json shape`() {
         val legacy = SavedPortalStore.serialize(
             listOf(SavedPortal("Den", "10.0.0.9", 5555, "Portal", lastConnectedAt = 50))

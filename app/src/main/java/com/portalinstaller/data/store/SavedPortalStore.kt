@@ -14,7 +14,8 @@ data class SavedPortal(
     val ip: String,
     val port: Int,
     val model: String,
-    val lastConnectedAt: Long
+    val lastConnectedAt: Long,
+    val screensaverFolder: String? = null
 ) {
     val id: String
         get() = "$ip:$port"
@@ -49,6 +50,13 @@ class SavedPortalStore(private val dataStore: DataStore<Preferences>) {
         }
     }
 
+    suspend fun setScreensaverFolder(id: String, folder: String?): List<SavedPortal> {
+        val cleaned = folder?.trim()?.takeIf { it.isNotBlank() }
+        return mutate { current ->
+            current.map { if (it.id == id) it.copy(screensaverFolder = cleaned) else it }
+        }
+    }
+
     private suspend fun portalsSnapshot(): List<SavedPortal> = mutate { it }
 
     private suspend fun mutate(transform: (List<SavedPortal>) -> List<SavedPortal>): List<SavedPortal> {
@@ -77,7 +85,8 @@ class SavedPortalStore(private val dataStore: DataStore<Preferences>) {
                             ip = ip,
                             port = item.optInt("port", 5555),
                             model = item.optString("model"),
-                            lastConnectedAt = item.optLong("lastConnectedAt")
+                            lastConnectedAt = item.optLong("lastConnectedAt"),
+                            screensaverFolder = item.optString("screensaverFolder").takeIf { it.isNotBlank() }
                         )
                     )
                 }
@@ -87,14 +96,14 @@ class SavedPortalStore(private val dataStore: DataStore<Preferences>) {
         internal fun serialize(portals: List<SavedPortal>): String {
             val array = JSONArray()
             portals.forEach { portal ->
-                array.put(
-                    JSONObject()
-                        .put("name", portal.name)
-                        .put("ip", portal.ip)
-                        .put("port", portal.port)
-                        .put("model", portal.model)
-                        .put("lastConnectedAt", portal.lastConnectedAt)
-                )
+                val obj = JSONObject()
+                    .put("name", portal.name)
+                    .put("ip", portal.ip)
+                    .put("port", portal.port)
+                    .put("model", portal.model)
+                    .put("lastConnectedAt", portal.lastConnectedAt)
+                portal.screensaverFolder?.let { obj.put("screensaverFolder", it) }
+                array.put(obj)
             }
             return array.toString()
         }
