@@ -7,6 +7,7 @@ import com.portalinstaller.data.store.HistoryStore
 import com.portalinstaller.data.store.PortalDataStores
 import com.portalinstaller.data.store.SavedPortalStore
 import com.portalinstaller.data.store.SettingsStore
+import com.portalinstaller.data.store.ShellHistoryStore
 
 /**
  * Container simplu de dependențe, fără framework de DI. Deține instanțele
@@ -29,6 +30,7 @@ class AppContainer(context: Context) {
     val appProfileStore = AppProfileStore(PortalDataStores.appProfiles(appContext))
     val historyStore = HistoryStore(PortalDataStores.history(appContext))
     val settingsStore = SettingsStore(PortalDataStores.settings(appContext))
+    val shellHistoryStore = ShellHistoryStore(PortalDataStores.shellHistory(appContext))
 
     companion object {
         fun from(context: Context): AppContainer =

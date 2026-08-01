@@ -43,6 +43,9 @@ object PortalDataStores {
     // Setările de aspect sunt o funcționalitate nouă — fără migrare din prefs vechi.
     private val Context.settingsDataStore by preferencesDataStore(name = "app_settings")
 
+    // Istoricul comenzilor shell — funcționalitate nouă, fără migrare.
+    private val Context.shellHistoryDataStore by preferencesDataStore(name = "shell_history")
+
     private val Context.historyDataStore by preferencesDataStore(
         name = "operation_history",
         produceMigrations = { context ->
@@ -69,4 +72,7 @@ object PortalDataStores {
 
     fun settings(context: Context): DataStore<Preferences> =
         context.applicationContext.settingsDataStore
+
+    fun shellHistory(context: Context): DataStore<Preferences> =
+        context.applicationContext.shellHistoryDataStore
 }
