@@ -46,6 +46,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.portalinstaller.R
+import com.portalinstaller.ui.common.SectionCard
 import com.portalinstaller.ui.common.SectionCardShape
 import com.portalinstaller.ui.common.formatRam
 import com.portalinstaller.ui.common.formatStorage
@@ -124,7 +125,7 @@ internal fun DevicesTab(
         if (selectedSection == 0) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 16.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 item {
@@ -227,111 +228,104 @@ internal fun SavedPortalsCard(
 ) {
     var portalToRename by remember { mutableStateOf<SavedPortal?>(null) }
 
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        shape = SectionCardShape
-    ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            Text(
-                text = stringResource(R.string.saved_portals_title),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Medium
-            )
-            Spacer(modifier = Modifier.height(8.dp))
+    SectionCard {
+        Text(
+            text = stringResource(R.string.saved_portals_title),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Medium
+        )
+        Spacer(modifier = Modifier.height(8.dp))
 
-            if (portals.isEmpty()) {
-                Text(
-                    text = stringResource(R.string.saved_portals_empty),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            } else {
-                portals.forEachIndexed { index, portal ->
-                    if (index > 0) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                    }
-                    val isCurrent = currentAddress == portal.id
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = if (isCurrent) {
-                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f)
-                            } else {
-                                MaterialTheme.colorScheme.surface
-                            }
-                        )
-                    ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = portal.name,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Medium,
-                                    modifier = Modifier.weight(1f),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                if (isCurrent) {
-                                    Text(
-                                        text = stringResource(R.string.active),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                            }
+        if (portals.isEmpty()) {
+            Text(
+                text = stringResource(R.string.saved_portals_empty),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            portals.forEachIndexed { index, portal ->
+                if (index > 0) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+                val isCurrent = currentAddress == portal.id
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isCurrent) {
+                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f)
+                        } else {
+                            MaterialTheme.colorScheme.surface
+                        }
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Text(
-                                text = portal.id,
+                                text = portal.name,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.weight(1f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            if (isCurrent) {
+                                Text(
+                                    text = stringResource(R.string.active),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                        Text(
+                            text = portal.id,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (portal.model.isNotBlank() && portal.model != portal.name) {
+                            Text(
+                                text = portal.model,
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            if (portal.model.isNotBlank() && portal.model != portal.name) {
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            OutlinedButton(
+                                onClick = { onConnect(portal) },
+                                enabled = !isCurrent,
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(14.dp)
+                            ) {
                                 Text(
-                                    text = portal.model,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    if (isCurrent) {
+                                        stringResource(R.string.active)
+                                    } else {
+                                        stringResource(R.string.connect)
+                                    }
                                 )
                             }
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                OutlinedButton(
-                                    onClick = { onConnect(portal) },
-                                    enabled = !isCurrent,
-                                    modifier = Modifier.weight(1f),
-                                    shape = RoundedCornerShape(14.dp)
-                                ) {
-                                    Text(
-                                        if (isCurrent) {
-                                            stringResource(R.string.active)
-                                        } else {
-                                            stringResource(R.string.connect)
-                                        }
-                                    )
-                                }
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            TextButton(onClick = { portalToRename = portal }) {
+                                Text(stringResource(R.string.rename))
                             }
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.End,
-                                verticalAlignment = Alignment.CenterVertically
+                            TextButton(
+                                onClick = { onRemove(portal) },
+                                enabled = !isCurrent
                             ) {
-                                TextButton(onClick = { portalToRename = portal }) {
-                                    Text(stringResource(R.string.rename))
-                                }
-                                TextButton(
-                                    onClick = { onRemove(portal) },
-                                    enabled = !isCurrent
-                                ) {
-                                    Text(stringResource(R.string.remove))
-                                }
+                                Text(stringResource(R.string.remove))
                             }
                         }
                     }
@@ -340,6 +334,7 @@ internal fun SavedPortalsCard(
         }
     }
 
+    // -- dialog redenumire (in afara cardului) --
     portalToRename?.let { portal ->
         RenamePortalDialog(
             portal = portal,
@@ -412,10 +407,13 @@ internal fun ConnectionSection(
     val ipSummary = ipAddress.ifBlank { "-" }
     val portSummary = port.ifBlank { "5555" }
 
+    // Latimea orizontala este detinuta de LazyColumn (contentPadding); aici
+    // adaugam doar spatiere verticala ca sa nu dublam inset-ul si sa iasa
+    // sectiunea mai ingusta decat cardurile de dedesubt.
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .padding(vertical = 6.dp)
     ) {
         if (isConnected) {
             Card(

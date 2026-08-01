@@ -46,6 +46,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.portalinstaller.R
+import com.portalinstaller.ui.common.SectionCard
 import com.portalinstaller.ui.common.formatFileSize
 import com.portalinstaller.data.ContentUriHelper
 import com.portalinstaller.data.InstalledApp
@@ -181,16 +182,9 @@ internal fun InstalledAppsTab(
                     ?: context.getString(R.string.unknown_apk_file)
             }
 
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                shape = RoundedCornerShape(18.dp)
-            ) {
+            SectionCard {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(14.dp),
+                    modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {

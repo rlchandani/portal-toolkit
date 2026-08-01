@@ -14,7 +14,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -33,7 +32,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.portalinstaller.R
-import com.portalinstaller.ui.common.SectionCardShape
+import com.portalinstaller.ui.common.SectionCard
 import com.portalinstaller.viewmodel.BackupState
 import java.text.DateFormat
 import java.util.Date
@@ -54,132 +53,127 @@ internal fun BackupCard(
         backupState is BackupState.Restoring ||
         backupState is BackupState.Previewing
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = SectionCardShape
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = stringResource(R.string.backup_title),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Medium
-            )
-            Spacer(modifier = Modifier.height(6.dp))
-            Text(
-                text = stringResource(R.string.backup_description),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(12.dp))
+    SectionCard {
+        Text(
+            text = stringResource(R.string.backup_title),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Medium
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = stringResource(R.string.backup_description),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(12.dp))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = stringResource(R.string.backup_apps_label),
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Text(
-                        text = when {
-                            isLoadingPackages -> stringResource(R.string.loading)
-                            selectedPackages == null && availablePackageCount > 0 -> stringResource(
-                                R.string.backup_apps_all,
-                                availablePackageCount
-                            )
-                            selectedPackages == null -> stringResource(R.string.backup_apps_all_simple)
-                            else -> stringResource(
-                                R.string.backup_apps_selected,
-                                selectedPackages.size
-                            )
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                OutlinedButton(
-                    onClick = onChooseApps,
-                    enabled = isConnected && !isWorking,
-                    shape = RoundedCornerShape(14.dp)
-                ) {
-                    Text(stringResource(R.string.choose))
-                }
-            }
-            Spacer(modifier = Modifier.height(10.dp))
-
-            if (isWorking) {
-                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                Spacer(modifier = Modifier.height(8.dp))
-                val progressText = when (backupState) {
-                    is BackupState.Creating -> stringResource(
-                        R.string.backup_creating_progress,
-                        backupState.current,
-                        backupState.total,
-                        backupState.packageName
-                    )
-                    is BackupState.Restoring -> stringResource(
-                        R.string.backup_restoring_progress,
-                        backupState.current,
-                        backupState.total,
-                        backupState.packageName
-                    )
-                    is BackupState.Previewing -> stringResource(R.string.backup_preview_progress)
-                    else -> ""
-                }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = progressText,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
+                    text = stringResource(R.string.backup_apps_label),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Medium
                 )
-                // Anularea are sens doar pentru operatiuni lungi (creare/restaurare),
-                // nu pentru previzualizarea rapida a unei arhive.
-                if (backupState is BackupState.Creating || backupState is BackupState.Restoring) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End
-                    ) {
-                        TextButton(onClick = onCancel) {
-                            Text(stringResource(R.string.cancel))
-                        }
-                    }
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-            }
-
-            Button(
-                onClick = onCreateBackup,
-                enabled = isConnected && !isWorking,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(stringResource(R.string.backup_create))
-            }
-            Spacer(modifier = Modifier.height(6.dp))
-            OutlinedButton(
-                onClick = onRestoreBackup,
-                enabled = isConnected && !isWorking,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(stringResource(R.string.backup_restore))
-            }
-            if (!isConnected) {
-                Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = stringResource(R.string.backup_connect_hint),
-                    style = MaterialTheme.typography.labelSmall,
+                    text = when {
+                        isLoadingPackages -> stringResource(R.string.loading)
+                        selectedPackages == null && availablePackageCount > 0 -> stringResource(
+                            R.string.backup_apps_all,
+                            availablePackageCount
+                        )
+                        selectedPackages == null -> stringResource(R.string.backup_apps_all_simple)
+                        else -> stringResource(
+                            R.string.backup_apps_selected,
+                            selectedPackages.size
+                        )
+                    },
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+            OutlinedButton(
+                onClick = onChooseApps,
+                enabled = isConnected && !isWorking,
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Text(stringResource(R.string.choose))
+            }
+        }
+        Spacer(modifier = Modifier.height(10.dp))
+
+        if (isWorking) {
+            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            Spacer(modifier = Modifier.height(8.dp))
+            val progressText = when (backupState) {
+                is BackupState.Creating -> stringResource(
+                    R.string.backup_creating_progress,
+                    backupState.current,
+                    backupState.total,
+                    backupState.packageName
+                )
+                is BackupState.Restoring -> stringResource(
+                    R.string.backup_restoring_progress,
+                    backupState.current,
+                    backupState.total,
+                    backupState.packageName
+                )
+                is BackupState.Previewing -> stringResource(R.string.backup_preview_progress)
+                else -> ""
+            }
+            Text(
+                text = progressText,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            // Anularea are sens doar pentru operatiuni lungi (creare/restaurare),
+            // nu pentru previzualizarea rapida a unei arhive.
+            if (backupState is BackupState.Creating || backupState is BackupState.Restoring) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onCancel) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+
+        Button(
+            onClick = onCreateBackup,
+            enabled = isConnected && !isWorking,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(stringResource(R.string.backup_create))
+        }
+        Spacer(modifier = Modifier.height(6.dp))
+        OutlinedButton(
+            onClick = onRestoreBackup,
+            enabled = isConnected && !isWorking,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(stringResource(R.string.backup_restore))
+        }
+        if (!isConnected) {
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = stringResource(R.string.backup_limitations),
+                text = stringResource(R.string.backup_connect_hint),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = stringResource(R.string.backup_limitations),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 

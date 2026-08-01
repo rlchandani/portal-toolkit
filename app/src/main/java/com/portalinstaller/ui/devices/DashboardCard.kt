@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -39,7 +38,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.shape.RoundedCornerShape
 import com.portalinstaller.R
 import com.portalinstaller.data.DeviceStatus
-import com.portalinstaller.ui.common.SectionCardShape
+import com.portalinstaller.ui.common.SectionCard
 import com.portalinstaller.ui.common.formatFileSize
 import com.portalinstaller.ui.common.formatUptime
 
@@ -63,115 +62,108 @@ internal fun DashboardCard(
     var confirmRecovery by remember { mutableStateOf(false) }
     var showLaunchPicker by remember { mutableStateOf(false) }
 
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        shape = SectionCardShape
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = stringResource(R.string.dashboard_title),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Medium
-                )
-                TextButton(onClick = onRefresh) {
-                    Text(stringResource(R.string.dashboard_refresh))
-                }
-            }
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                val storageFree = deviceStatus?.storageFreeBytes
-                val storageTotal = deviceStatus?.storageTotalBytes
-                val storageUsedFraction = if (storageFree != null && storageTotal != null && storageTotal > 0) {
-                    ((storageTotal - storageFree).toFloat() / storageTotal).coerceIn(0f, 1f)
-                } else {
-                    0f
-                }
-                DonutGauge(
-                    fraction = storageUsedFraction,
-                    label = stringResource(R.string.dashboard_storage),
-                    center = if (storageFree != null && storageTotal != null) {
-                        "${(storageUsedFraction * 100).toInt()}%"
-                    } else {
-                        stringResource(R.string.unavailable)
-                    },
-                    subtitle = if (storageFree != null && storageTotal != null) {
-                        "${formatFileSize(storageFree)} / ${formatFileSize(storageTotal)}"
-                    } else {
-                        ""
-                    },
-                    color = MaterialTheme.colorScheme.primary
-                )
-
-                val ramFree = deviceStatus?.ramFreeBytes
-                DonutGauge(
-                    // Nu avem RAM total sigur; arătăm liber ca inel plin informativ.
-                    fraction = if (ramFree != null) 1f else 0f,
-                    label = stringResource(R.string.dashboard_ram),
-                    center = if (ramFree != null) formatFileSize(ramFree) else stringResource(R.string.unavailable),
-                    subtitle = "",
-                    color = MaterialTheme.colorScheme.tertiary
-                )
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-            InfoRow(
-                stringResource(R.string.dashboard_uptime),
-                deviceStatus?.uptimeSeconds?.let { formatUptime(it) } ?: stringResource(R.string.unavailable)
-            )
-            InfoRow(
-                stringResource(R.string.dashboard_sdk),
-                deviceStatus?.sdk?.takeIf { it.isNotBlank() } ?: stringResource(R.string.unavailable)
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
+    SectionCard {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Text(
-                text = stringResource(R.string.power_controls_title),
+                text = stringResource(R.string.dashboard_title),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Medium
             )
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                OutlinedButton(onClick = { confirmReboot = true }, modifier = Modifier.weight(1f)) {
-                    Text(stringResource(R.string.power_reboot))
-                }
-                OutlinedButton(onClick = { confirmRecovery = true }, modifier = Modifier.weight(1f)) {
-                    Text(stringResource(R.string.power_reboot_recovery))
-                }
+            TextButton(onClick = onRefresh) {
+                Text(stringResource(R.string.dashboard_refresh))
             }
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                OutlinedButton(onClick = onScreenOn, modifier = Modifier.weight(1f)) {
-                    Text(stringResource(R.string.power_screen_on))
-                }
-                OutlinedButton(onClick = onScreenOff, modifier = Modifier.weight(1f)) {
-                    Text(stringResource(R.string.power_screen_off))
-                }
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            val storageFree = deviceStatus?.storageFreeBytes
+            val storageTotal = deviceStatus?.storageTotalBytes
+            val storageUsedFraction = if (storageFree != null && storageTotal != null && storageTotal > 0) {
+                ((storageTotal - storageFree).toFloat() / storageTotal).coerceIn(0f, 1f)
+            } else {
+                0f
             }
-            Spacer(modifier = Modifier.height(8.dp))
-            OutlinedButton(
-                onClick = { showLaunchPicker = true },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = portalPackages.isNotEmpty()
-            ) {
-                Text(stringResource(R.string.power_launch_app))
+            DonutGauge(
+                fraction = storageUsedFraction,
+                label = stringResource(R.string.dashboard_storage),
+                center = if (storageFree != null && storageTotal != null) {
+                    "${(storageUsedFraction * 100).toInt()}%"
+                } else {
+                    stringResource(R.string.unavailable)
+                },
+                subtitle = if (storageFree != null && storageTotal != null) {
+                    "${formatFileSize(storageFree)} / ${formatFileSize(storageTotal)}"
+                } else {
+                    ""
+                },
+                color = MaterialTheme.colorScheme.primary
+            )
+
+            val ramFree = deviceStatus?.ramFreeBytes
+            DonutGauge(
+                // Nu avem RAM total sigur; arătăm liber ca inel plin informativ.
+                fraction = if (ramFree != null) 1f else 0f,
+                label = stringResource(R.string.dashboard_ram),
+                center = if (ramFree != null) formatFileSize(ramFree) else stringResource(R.string.unavailable),
+                subtitle = "",
+                color = MaterialTheme.colorScheme.tertiary
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+        InfoRow(
+            stringResource(R.string.dashboard_uptime),
+            deviceStatus?.uptimeSeconds?.let { formatUptime(it) } ?: stringResource(R.string.unavailable)
+        )
+        InfoRow(
+            stringResource(R.string.dashboard_sdk),
+            deviceStatus?.sdk?.takeIf { it.isNotBlank() } ?: stringResource(R.string.unavailable)
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = stringResource(R.string.power_controls_title),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Medium
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            OutlinedButton(onClick = { confirmReboot = true }, modifier = Modifier.weight(1f)) {
+                Text(stringResource(R.string.power_reboot))
             }
+            OutlinedButton(onClick = { confirmRecovery = true }, modifier = Modifier.weight(1f)) {
+                Text(stringResource(R.string.power_reboot_recovery))
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            OutlinedButton(onClick = onScreenOn, modifier = Modifier.weight(1f)) {
+                Text(stringResource(R.string.power_screen_on))
+            }
+            OutlinedButton(onClick = onScreenOff, modifier = Modifier.weight(1f)) {
+                Text(stringResource(R.string.power_screen_off))
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        OutlinedButton(
+            onClick = { showLaunchPicker = true },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = portalPackages.isNotEmpty()
+        ) {
+            Text(stringResource(R.string.power_launch_app))
         }
     }
 

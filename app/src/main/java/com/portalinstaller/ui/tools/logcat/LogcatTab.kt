@@ -14,7 +14,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -38,6 +37,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.portalinstaller.R
 import com.portalinstaller.data.tools.LogLine
+import com.portalinstaller.ui.common.SectionCard
 import com.portalinstaller.viewmodel.LogcatViewModel
 
 private val LEVEL_COLORS = mapOf(
@@ -199,9 +199,10 @@ private fun CrashBanner(
     visibleSize: Int,
     onDismiss: () -> Unit
 ) {
-    Card(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+    // Padding interior de 16dp este aplicat de SectionCard; pastram doar marginea verticala
+    SectionCard(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(

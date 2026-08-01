@@ -30,7 +30,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.portalinstaller.R
-import com.portalinstaller.ui.common.SectionCardShape
+import com.portalinstaller.ui.common.SectionCard
 import com.portalinstaller.util.AppLanguage
 import com.portalinstaller.data.store.HistoryEntry
 import com.portalinstaller.data.store.ThemeMode
@@ -130,58 +130,53 @@ internal fun SettingsTab(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = SectionCardShape
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = stringResource(R.string.settings_language_title),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = stringResource(R.string.settings_language_description),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    val systemLanguage = AppLanguage.SYSTEM
-                    FilterChip(
-                        selected = selectedLanguage == systemLanguage,
-                        onClick = { onSelectLanguage(systemLanguage) },
-                        label = {
-                            Text(
-                                text = stringResource(systemLanguage.labelRes),
-                                modifier = Modifier.fillMaxWidth(),
-                                maxLines = 1
+            SectionCard {
+                Text(
+                    text = stringResource(R.string.settings_language_title),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Medium
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = stringResource(R.string.settings_language_description),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                val systemLanguage = AppLanguage.SYSTEM
+                FilterChip(
+                    selected = selectedLanguage == systemLanguage,
+                    onClick = { onSelectLanguage(systemLanguage) },
+                    label = {
+                        Text(
+                            text = stringResource(systemLanguage.labelRes),
+                            modifier = Modifier.fillMaxWidth(),
+                            maxLines = 1
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    AppLanguage.entries
+                        .filterNot { it == systemLanguage }
+                        .forEach { language ->
+                            FilterChip(
+                                selected = selectedLanguage == language,
+                                onClick = { onSelectLanguage(language) },
+                                label = {
+                                    Text(
+                                        text = stringResource(language.labelRes),
+                                        modifier = Modifier.fillMaxWidth(),
+                                        maxLines = 1
+                                    )
+                                },
+                                modifier = Modifier.weight(1f)
                             )
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        AppLanguage.entries
-                            .filterNot { it == systemLanguage }
-                            .forEach { language ->
-                                FilterChip(
-                                    selected = selectedLanguage == language,
-                                    onClick = { onSelectLanguage(language) },
-                                    label = {
-                                        Text(
-                                            text = stringResource(language.labelRes),
-                                            modifier = Modifier.fillMaxWidth(),
-                                            maxLines = 1
-                                        )
-                                    },
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
-                    }
+                        }
                 }
             }
         }
@@ -196,32 +191,27 @@ internal fun SettingsTab(
         }
 
         item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = SectionCardShape
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = stringResource(R.string.settings_about_title),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Text(
-                        text = stringResource(R.string.settings_app_name_value, stringResource(R.string.app_name)),
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = stringResource(R.string.settings_app_version_value, versionName),
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = stringResource(R.string.settings_portal_support_value),
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                }
+            SectionCard {
+                Text(
+                    text = stringResource(R.string.settings_about_title),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Medium
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = stringResource(R.string.settings_app_name_value, stringResource(R.string.app_name)),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = stringResource(R.string.settings_app_version_value, versionName),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = stringResource(R.string.settings_portal_support_value),
+                    style = MaterialTheme.typography.bodyMedium
+                )
             }
         }
     }
@@ -234,56 +224,51 @@ private fun AppearanceCard(
     useDynamicColor: Boolean,
     onToggleDynamicColor: (Boolean) -> Unit
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = SectionCardShape
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = stringResource(R.string.settings_appearance_title),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Medium
+    SectionCard {
+        Text(
+            text = stringResource(R.string.settings_appearance_title),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Medium
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = stringResource(R.string.settings_theme_description),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        ThemeMode.entries.forEach { mode ->
+            ThemeModeRow(
+                mode = mode,
+                selected = themeMode == mode,
+                onSelect = { onSelectThemeMode(mode) }
             )
-            Spacer(modifier = Modifier.height(6.dp))
-            Text(
-                text = stringResource(R.string.settings_theme_description),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            ThemeMode.entries.forEach { mode ->
-                ThemeModeRow(
-                    mode = mode,
-                    selected = themeMode == mode,
-                    onSelect = { onSelectThemeMode(mode) }
-                )
-            }
+        }
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onToggleDynamicColor(!useDynamicColor) }
-                        .padding(vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = stringResource(R.string.settings_dynamic_color_title),
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        Text(
-                            text = stringResource(R.string.settings_dynamic_color_description),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = useDynamicColor,
-                        onCheckedChange = onToggleDynamicColor
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onToggleDynamicColor(!useDynamicColor) }
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.settings_dynamic_color_title),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = stringResource(R.string.settings_dynamic_color_description),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+                Switch(
+                    checked = useDynamicColor,
+                    onCheckedChange = onToggleDynamicColor
+                )
             }
         }
     }
