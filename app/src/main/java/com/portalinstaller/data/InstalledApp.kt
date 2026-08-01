@@ -25,5 +25,10 @@ data class PortalAppInfo(
     val versionName: String,
     val versionCode: Long,
     val sizeBytes: Long,
-    val iconApkPath: String?
+    // Calea APK-ului pe Portal (din care se poate extrage iconita/eticheta).
+    val iconApkPath: String?,
+    // Eticheta lizibila a aplicatiei, populata la imbogatire (null pana atunci).
+    val label: String? = null,
+    // Calea locala a iconitei PNG din cache, populata la imbogatire.
+    val iconCachePath: String? = null
 )

@@ -42,6 +42,7 @@ import com.portalinstaller.data.InstalledApp
 import com.portalinstaller.data.PortalAppInfo
 import com.portalinstaller.viewmodel.ConnectionState
 import com.portalinstaller.viewmodel.InstallState
+import com.portalinstaller.viewmodel.PortalAppsSort
 import com.portalinstaller.viewmodel.ProfileApplyState
 import com.portalinstaller.viewmodel.UninstallState
 
@@ -59,6 +60,7 @@ internal fun AppsHubTab(
     portalApps: List<PortalAppInfo>,
     isLoadingPortalPackages: Boolean,
     uninstallState: UninstallState,
+    portalAppsSort: PortalAppsSort,
     profiles: List<AppProfile>,
     profileApplyState: ProfileApplyState,
     onOpenDevices: () -> Unit,
@@ -66,7 +68,11 @@ internal fun AppsHubTab(
     onInstall: (InstalledApp) -> Unit,
     onInstallCustomApk: (Uri) -> Unit,
     onRefreshPortalApps: () -> Unit,
+    onSortPortalApps: (PortalAppsSort) -> Unit,
     onUninstall: (String) -> Unit,
+    onLaunchApp: (String) -> Unit,
+    onForceStopApp: (String) -> Unit,
+    onClearAppData: (String) -> Unit,
     onCreateProfile: () -> Unit,
     onApplyProfile: (AppProfile) -> Unit,
     onDeleteProfile: (AppProfile) -> Unit
@@ -182,8 +188,13 @@ internal fun AppsHubTab(
                 apps = portalApps,
                 isLoading = isLoadingPortalPackages,
                 uninstallState = uninstallState,
+                sort = portalAppsSort,
+                onSortChange = onSortPortalApps,
                 onRefresh = onRefreshPortalApps,
-                onUninstall = onUninstall
+                onUninstall = onUninstall,
+                onLaunch = onLaunchApp,
+                onForceStop = onForceStopApp,
+                onClearData = onClearAppData
             )
         } else {
             ProfilesTab(

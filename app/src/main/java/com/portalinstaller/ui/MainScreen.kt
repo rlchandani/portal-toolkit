@@ -70,6 +70,8 @@ import com.portalinstaller.viewmodel.PortalDiscoveryState
 import com.portalinstaller.viewmodel.LogcatViewModel
 import com.portalinstaller.viewmodel.PowerControlState
 import com.portalinstaller.viewmodel.ShellViewModel
+import com.portalinstaller.viewmodel.AppActionState
+import com.portalinstaller.viewmodel.PortalAppsSort
 import com.portalinstaller.viewmodel.ProfileApplyState
 import com.portalinstaller.viewmodel.UninstallState
 import com.portalinstaller.viewmodel.WirelessAdbState
@@ -119,6 +121,8 @@ fun MainScreen(
     val isLoadingPortalPackages by appsViewModel.isLoadingPortalPackages.collectAsStateWithLifecycle()
     val portalPackagesError by appsViewModel.portalPackagesError.collectAsStateWithLifecycle()
     val profileApplyState by appsViewModel.profileApplyState.collectAsStateWithLifecycle()
+    val portalAppsSort by appsViewModel.portalAppsSort.collectAsStateWithLifecycle()
+    val appActionState by appsViewModel.appActionState.collectAsStateWithLifecycle()
 
     val backupState by backupViewModel.backupState.collectAsStateWithLifecycle()
 
@@ -412,6 +416,20 @@ fun MainScreen(
         }
     }
 
+    LaunchedEffect(appActionState) {
+        when (val state = appActionState) {
+            is AppActionState.Done -> {
+                snackbarHostState.showSnackbar(state.message)
+                appsViewModel.clearAppActionState()
+            }
+            is AppActionState.Failed -> {
+                snackbarHostState.showSnackbar(state.message)
+                appsViewModel.clearAppActionState()
+            }
+            else -> Unit
+        }
+    }
+
     LaunchedEffect(powerControlState) {
         when (val state = powerControlState) {
             is PowerControlState.Success -> {
@@ -547,6 +565,7 @@ fun MainScreen(
                     portalApps = portalApps,
                     isLoadingPortalPackages = isLoadingPortalPackages,
                     uninstallState = uninstallState,
+                    portalAppsSort = portalAppsSort,
                     profiles = appProfiles,
                     profileApplyState = profileApplyState,
                     onOpenDevices = { navigateToTab(PortalRoute.Devices) },
@@ -556,7 +575,11 @@ fun MainScreen(
                     onInstall = { app -> appsViewModel.installApp(context, app) },
                     onInstallCustomApk = { uri -> appsViewModel.installApkFromUri(context, uri) },
                     onRefreshPortalApps = { appsViewModel.loadPortalPackages(context) },
+                    onSortPortalApps = { sort -> appsViewModel.setPortalAppsSort(sort) },
                     onUninstall = { packageName -> appsViewModel.uninstallApp(context, packageName) },
+                    onLaunchApp = { packageName -> appsViewModel.launchApp(context, packageName) },
+                    onForceStopApp = { packageName -> appsViewModel.forceStopApp(context, packageName) },
+                    onClearAppData = { packageName -> appsViewModel.clearAppData(context, packageName) },
                     onCreateProfile = { showProfileEditor = true },
                     onApplyProfile = { profile ->
                         appsViewModel.applyProfile(context, profile, installedApps)

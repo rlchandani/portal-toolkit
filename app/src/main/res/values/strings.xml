@@ -161,6 +161,15 @@
     <string name="portal_app_details">Versiunea %1$s • %2$s</string>
     <string name="loading_ellipsis">...</string>
     <string name="uninstall">Dezinstaleaza</string>
+    <string name="apps_sort_name">Nume</string>
+    <string name="apps_sort_size">Marime</string>
+    <string name="apps_launch">Deschide</string>
+    <string name="apps_force_stop">Oprire fortata</string>
+    <string name="apps_clear_data">Sterge datele</string>
+    <string name="apps_clear_data_confirm">Stergi toate datele aplicatiei %1$s? Aceasta actiune sterge preferintele si conturile salvate si nu poate fi anulata.</string>
+    <string name="apps_launched">S-a deschis %1$s</string>
+    <string name="apps_force_stopped">S-a oprit %1$s</string>
+    <string name="apps_data_cleared">Datele au fost sterse pentru %1$s</string>
     <string name="select_photos">Selecteaza poze</string>
     <string name="selected_photos_count">%1$d poze selectate</string>
     <string name="uploading_progress">Se trimite %1$d/%2$d...</string>

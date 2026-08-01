@@ -15,6 +15,7 @@ import com.portalinstaller.data.InstallPolicy
 import com.portalinstaller.data.PortalDeviceConfig
 import com.portalinstaller.data.store.AppProfile
 import com.portalinstaller.data.store.HistoryEntry
+import dadb.Dadb
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -37,6 +38,16 @@ sealed class UninstallState {
     data class InProgress(val packageName: String) : UninstallState()
     data object Success : UninstallState()
     data class Failed(val message: String) : UninstallState()
+}
+
+/** Modul de sortare pentru lista de aplicatii Portal. */
+enum class PortalAppsSort { NAME, SIZE }
+
+/** Rezultatul unei actiuni rapide pe o aplicatie (force-stop/clear-data/launch). */
+sealed class AppActionState {
+    data object Idle : AppActionState()
+    data class Done(val message: String) : AppActionState()
+    data class Failed(val message: String) : AppActionState()
 }
 
 sealed class ProfileApplyState {
@@ -90,6 +101,23 @@ class AppsViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _profileApplyState = MutableStateFlow<ProfileApplyState>(ProfileApplyState.Idle)
     val profileApplyState: StateFlow<ProfileApplyState> = _profileApplyState.asStateFlow()
+
+    private val _portalAppsSort = MutableStateFlow(PortalAppsSort.NAME)
+    val portalAppsSort: StateFlow<PortalAppsSort> = _portalAppsSort.asStateFlow()
+
+    private val _appActionState = MutableStateFlow<AppActionState>(AppActionState.Idle)
+    val appActionState: StateFlow<AppActionState> = _appActionState.asStateFlow()
+
+    fun setPortalAppsSort(sort: PortalAppsSort) {
+        _portalAppsSort.value = sort
+        _portalApps.value = sortPortalApps(_portalApps.value, sort)
+    }
+
+    private fun sortPortalApps(apps: List<PortalAppInfo>, sort: PortalAppsSort): List<PortalAppInfo> =
+        when (sort) {
+            PortalAppsSort.NAME -> apps.sortedBy { (it.label ?: it.name).lowercase() }
+            PortalAppsSort.SIZE -> apps.sortedByDescending { it.sizeBytes }
+        }
 
     private suspend fun addHistory(description: String, success: Boolean) {
         historyStore.add(HistoryEntry(System.currentTimeMillis(), description, success))
@@ -239,11 +267,14 @@ class AppsViewModel(app: Application) : AndroidViewModel(app) {
                     _portalPackagesError.value = null
                     _isLoadingPortalPackages.value = false
 
-                    // Enrichment is deliberately separate: the package list must
-                    // appear even if metadata for one application is slow or unavailable.
+                    // Imbogatirea este deliberat separata: lista de pachete trebuie
+                    // sa apara chiar daca metadatele unei aplicatii sunt lente.
                     viewModelScope.launch {
                         connectionManager.listPortalApps(context, d)
-                            .onSuccess { details -> _portalApps.value = details }
+                            .onSuccess { details ->
+                                _portalApps.value = sortPortalApps(details, _portalAppsSort.value)
+                                enrichPortalApps(context, d)
+                            }
                     }
                 }
                 .onFailure { e ->
@@ -340,6 +371,81 @@ class AppsViewModel(app: Application) : AndroidViewModel(app) {
             addHistory(message, success = failedPackages.isEmpty())
             loadPortalPackages(context)
         }
+    }
+
+    /**
+     * Imbogateste aplicatiile Portal una cate una (eticheta + iconita), pe masura
+     * ce APK-urile sunt descarcate si puse in cache. Actualizeaza fluxul dupa
+     * fiecare aplicatie, ca UI-ul sa afiseze iconitele progresiv.
+     */
+    private fun enrichPortalApps(context: Context, d: Dadb) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val current = _portalApps.value
+            current.forEach { app ->
+                val enriched = connectionManager.enrichPortalApp(context, d, app)
+                if (enriched != app) {
+                    _portalApps.value = sortPortalApps(
+                        _portalApps.value.map { if (it.packageName == app.packageName) enriched else it },
+                        _portalAppsSort.value
+                    )
+                }
+            }
+        }
+    }
+
+    fun forceStopApp(context: Context, packageName: String) {
+        val d = holder.dadb.value ?: return
+        viewModelScope.launch {
+            connectionManager.forceStopApp(context, d, packageName)
+                .onSuccess {
+                    _appActionState.value = AppActionState.Done(
+                        context.getString(R.string.apps_force_stopped, packageName)
+                    )
+                }
+                .onFailure {
+                    _appActionState.value = AppActionState.Failed(
+                        it.message ?: context.getString(R.string.error_unknown)
+                    )
+                }
+        }
+    }
+
+    fun clearAppData(context: Context, packageName: String) {
+        val d = holder.dadb.value ?: return
+        viewModelScope.launch {
+            connectionManager.clearAppData(context, d, packageName)
+                .onSuccess {
+                    _appActionState.value = AppActionState.Done(
+                        context.getString(R.string.apps_data_cleared, packageName)
+                    )
+                }
+                .onFailure {
+                    _appActionState.value = AppActionState.Failed(
+                        it.message ?: context.getString(R.string.error_unknown)
+                    )
+                }
+        }
+    }
+
+    fun launchApp(context: Context, packageName: String) {
+        val d = holder.dadb.value ?: return
+        viewModelScope.launch {
+            connectionManager.launchApp(d, packageName)
+                .onSuccess {
+                    _appActionState.value = AppActionState.Done(
+                        context.getString(R.string.apps_launched, packageName)
+                    )
+                }
+                .onFailure {
+                    _appActionState.value = AppActionState.Failed(
+                        it.message ?: context.getString(R.string.error_unknown)
+                    )
+                }
+        }
+    }
+
+    fun clearAppActionState() {
+        _appActionState.value = AppActionState.Idle
     }
 
     fun clearProfileApplyState() {

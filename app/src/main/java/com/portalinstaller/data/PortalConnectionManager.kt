@@ -3,6 +3,7 @@ package com.portalinstaller.data
 import android.content.Context
 import android.content.pm.PackageManager
 import com.portalinstaller.R
+import com.portalinstaller.data.apps.AppMetadataCache
 import dadb.Dadb
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -403,6 +404,92 @@ class PortalConnectionManager {
             iconApkPath = null
         )
     }
+
+    /**
+     * Imbogateste o aplicatie Portal cu eticheta lizibila si iconita, extrase
+     * din `base.apk`. Descarcarea APK-ului este costisitoare, deci rezultatul
+     * este pus in cache pe disc dupa cheia pachet+versiune ([AppMetadataCache]).
+     * Intoarce aplicatia neschimbata daca extragerea esueaza.
+     */
+    suspend fun enrichPortalApp(context: Context, dadb: Dadb, app: PortalAppInfo): PortalAppInfo {
+        return withContext(Dispatchers.IO) {
+            val cacheDir = context.cacheDir
+            val key = AppMetadataCache.keyFor(app.packageName, app.versionCode)
+            val iconFile = AppMetadataCache.iconFile(cacheDir, key)
+            val labelFile = AppMetadataCache.labelFile(cacheDir, key)
+
+            if (AppMetadataCache.isCached(cacheDir, key)) {
+                return@withContext app.copy(
+                    label = labelFile.readText().ifBlank { app.name },
+                    iconCachePath = iconFile.absolutePath
+                )
+            }
+
+            runCatching {
+                // Afla calea base.apk pe Portal.
+                val apkPath = dadb.shell("pm path ${shellQuote(app.packageName)}").output
+                    .lineSequence()
+                    .map { it.trim().removePrefix("package:") }
+                    .firstOrNull { it.endsWith("base.apk") || it.endsWith(".apk") }
+                    ?: return@runCatching app
+
+                val tempApk = File(cacheDir, "meta_${key.replace('/', '_')}.apk")
+                dadb.pull(tempApk, apkPath)
+
+                val pm = context.packageManager
+                val info = pm.getPackageArchiveInfo(tempApk.absolutePath, 0)
+                val appInfo = info?.applicationInfo
+                if (appInfo != null) {
+                    appInfo.sourceDir = tempApk.absolutePath
+                    appInfo.publicSourceDir = tempApk.absolutePath
+                    val label = appInfo.loadLabel(pm).toString().ifBlank { app.name }
+                    labelFile.writeText(label)
+                    runCatching { writeIconPng(appInfo.loadIcon(pm), iconFile) }
+                    tempApk.delete()
+                    return@runCatching app.copy(
+                        label = label,
+                        iconCachePath = if (iconFile.exists()) iconFile.absolutePath else null
+                    )
+                }
+                tempApk.delete()
+                app
+            }.getOrDefault(app)
+        }
+    }
+
+    private fun writeIconPng(drawable: android.graphics.drawable.Drawable, dest: File) {
+        val width = drawable.intrinsicWidth.takeIf { it > 0 } ?: 96
+        val height = drawable.intrinsicHeight.takeIf { it > 0 } ?: 96
+        val bitmap = android.graphics.Bitmap.createBitmap(width, height, android.graphics.Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(bitmap)
+        drawable.setBounds(0, 0, width, height)
+        drawable.draw(canvas)
+        dest.outputStream().use { out ->
+            bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 90, out)
+        }
+    }
+
+    /** Opreste fortat o aplicatie de pe Portal (`am force-stop`). */
+    suspend fun forceStopApp(context: Context, dadb: Dadb, packageName: String): Result<Unit> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                dadb.shell("am force-stop ${shellQuote(packageName)}")
+                Unit
+            }
+        }
+
+    /** Sterge datele unei aplicatii de pe Portal (`pm clear`). */
+    suspend fun clearAppData(context: Context, dadb: Dadb, packageName: String): Result<Unit> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val out = dadb.shell("pm clear ${shellQuote(packageName)}").allOutput
+                require(out.contains("Success", ignoreCase = true)) {
+                    out.ifBlank { context.getString(R.string.error_unknown) }
+                }
+                Unit
+            }
+        }
+
 
     suspend fun setOsUpdatesBlocked(dadb: Dadb, blocked: Boolean): Result<OsUpdateBlockStatus> {
         return withContext(Dispatchers.IO) {
