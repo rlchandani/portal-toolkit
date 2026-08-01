@@ -2,6 +2,7 @@ package com.portalinstaller.ui.more
 
 import android.content.Context
 import android.os.Build
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -18,6 +19,8 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
@@ -36,14 +39,18 @@ import com.portalinstaller.R
 import com.portalinstaller.ui.common.SectionCardShape
 import com.portalinstaller.util.AppLanguage
 import com.portalinstaller.data.store.HistoryEntry
-import java.util.Date
+import com.portalinstaller.data.store.ThemeMode
 
 @Composable
 internal fun MoreTab(
     context: Context,
     history: List<HistoryEntry>,
     selectedLanguage: AppLanguage,
-    onSelectLanguage: (AppLanguage) -> Unit
+    onSelectLanguage: (AppLanguage) -> Unit,
+    themeMode: ThemeMode,
+    onSelectThemeMode: (ThemeMode) -> Unit,
+    useDynamicColor: Boolean,
+    onToggleDynamicColor: (Boolean) -> Unit
 ) {
     var selectedSection by rememberSaveable { mutableIntStateOf(0) }
 
@@ -67,7 +74,11 @@ internal fun MoreTab(
             SettingsTab(
                 context = context,
                 selectedLanguage = selectedLanguage,
-                onSelectLanguage = onSelectLanguage
+                onSelectLanguage = onSelectLanguage,
+                themeMode = themeMode,
+                onSelectThemeMode = onSelectThemeMode,
+                useDynamicColor = useDynamicColor,
+                onToggleDynamicColor = onToggleDynamicColor
             )
         }
     }
@@ -141,7 +152,11 @@ internal fun HistoryTab(history: List<HistoryEntry>) {
 internal fun SettingsTab(
     context: Context,
     selectedLanguage: AppLanguage,
-    onSelectLanguage: (AppLanguage) -> Unit
+    onSelectLanguage: (AppLanguage) -> Unit,
+    themeMode: ThemeMode,
+    onSelectThemeMode: (ThemeMode) -> Unit,
+    useDynamicColor: Boolean,
+    onToggleDynamicColor: (Boolean) -> Unit
 ) {
     val versionName = remember(context) {
         runCatching {
@@ -221,6 +236,15 @@ internal fun SettingsTab(
         }
 
         item {
+            AppearanceCard(
+                themeMode = themeMode,
+                onSelectThemeMode = onSelectThemeMode,
+                useDynamicColor = useDynamicColor,
+                onToggleDynamicColor = onToggleDynamicColor
+            )
+        }
+
+        item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = SectionCardShape
@@ -249,5 +273,94 @@ internal fun SettingsTab(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun AppearanceCard(
+    themeMode: ThemeMode,
+    onSelectThemeMode: (ThemeMode) -> Unit,
+    useDynamicColor: Boolean,
+    onToggleDynamicColor: (Boolean) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = SectionCardShape
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = stringResource(R.string.settings_appearance_title),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Medium
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = stringResource(R.string.settings_theme_description),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            ThemeMode.entries.forEach { mode ->
+                ThemeModeRow(
+                    mode = mode,
+                    selected = themeMode == mode,
+                    onSelect = { onSelectThemeMode(mode) }
+                )
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onToggleDynamicColor(!useDynamicColor) }
+                        .padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(R.string.settings_dynamic_color_title),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Text(
+                            text = stringResource(R.string.settings_dynamic_color_description),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = useDynamicColor,
+                        onCheckedChange = onToggleDynamicColor
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ThemeModeRow(
+    mode: ThemeMode,
+    selected: Boolean,
+    onSelect: () -> Unit
+) {
+    val labelRes = when (mode) {
+        ThemeMode.SYSTEM -> R.string.settings_theme_system
+        ThemeMode.LIGHT -> R.string.settings_theme_light
+        ThemeMode.DARK -> R.string.settings_theme_dark
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onSelect)
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        RadioButton(selected = selected, onClick = onSelect)
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = stringResource(labelRes),
+            style = MaterialTheme.typography.bodyMedium
+        )
     }
 }

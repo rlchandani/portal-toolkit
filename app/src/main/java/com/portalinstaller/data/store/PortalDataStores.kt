@@ -40,6 +40,9 @@ object PortalDataStores {
         }
     )
 
+    // Setările de aspect sunt o funcționalitate nouă — fără migrare din prefs vechi.
+    private val Context.settingsDataStore by preferencesDataStore(name = "app_settings")
+
     private val Context.historyDataStore by preferencesDataStore(
         name = "operation_history",
         produceMigrations = { context ->
@@ -63,4 +66,7 @@ object PortalDataStores {
 
     fun history(context: Context): DataStore<Preferences> =
         context.applicationContext.historyDataStore
+
+    fun settings(context: Context): DataStore<Preferences> =
+        context.applicationContext.settingsDataStore
 }

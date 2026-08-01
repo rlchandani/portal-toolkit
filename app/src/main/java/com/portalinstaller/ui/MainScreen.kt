@@ -52,6 +52,7 @@ import com.portalinstaller.data.AppContainer
 import com.portalinstaller.data.UsbPortalHelper
 import com.portalinstaller.data.UsbPortalStatus
 import com.portalinstaller.data.store.SavedPortal
+import com.portalinstaller.data.store.ThemeMode
 import com.portalinstaller.util.AppLanguageManager
 import com.portalinstaller.viewmodel.AppsViewModel
 import com.portalinstaller.viewmodel.BackupState
@@ -117,6 +118,8 @@ fun MainScreen(
     val operationHistory by container.historyStore.history.collectAsStateWithLifecycle(initialValue = emptyList())
     val savedPortals by container.savedPortalStore.portals.collectAsStateWithLifecycle(initialValue = emptyList())
     val appProfiles by container.appProfileStore.profiles.collectAsStateWithLifecycle(initialValue = emptyList())
+    val themeMode by container.settingsStore.themeMode.collectAsStateWithLifecycle(initialValue = ThemeMode.SYSTEM)
+    val useDynamicColor by container.settingsStore.useDynamicColor.collectAsStateWithLifecycle(initialValue = false)
 
     val snackbarHostState = remember { SnackbarHostState() }
     val navController = rememberNavController()
@@ -583,6 +586,14 @@ fun MainScreen(
                             AppLanguageManager.applyLanguage(context, language)
                             (context as? Activity)?.recreate()
                         }
+                    },
+                    themeMode = themeMode,
+                    onSelectThemeMode = { mode ->
+                        scope.launch { container.settingsStore.setThemeMode(mode) }
+                    },
+                    useDynamicColor = useDynamicColor,
+                    onToggleDynamicColor = { enabled ->
+                        scope.launch { container.settingsStore.setUseDynamicColor(enabled) }
                     }
                 ) }
             }

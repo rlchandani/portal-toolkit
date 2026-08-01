@@ -214,6 +214,13 @@
     <string name="language_selected_marker">selected</string>
     <string name="settings_language_title">App language</string>
     <string name="settings_language_description">Choose the interface language. "System language" follows the phone setting.</string>
+    <string name="settings_appearance_title">Appearance</string>
+    <string name="settings_theme_description">Choose the app theme. "System" follows your phone setting.</string>
+    <string name="settings_theme_system">System theme</string>
+    <string name="settings_theme_light">Light</string>
+    <string name="settings_theme_dark">Dark</string>
+    <string name="settings_dynamic_color_title">Dynamic color</string>
+    <string name="settings_dynamic_color_description">Use colors from your wallpaper (Android 12+).</string>
     <string name="settings_about_title">About the app</string>
     <string name="settings_app_name_label">App</string>
     <string name="settings_app_name_value">App: %1$s</string>

@@ -214,6 +214,13 @@
     <string name="language_selected_marker">selectata</string>
     <string name="settings_language_title">Limba aplicatiei</string>
     <string name="settings_language_description">Alege limba interfetei. Optiunea "Limba sistemului" urmeaza setarea telefonului.</string>
+    <string name="settings_appearance_title">Aspect</string>
+    <string name="settings_theme_description">Alege tema aplicatiei. "Sistem" urmeaza setarea telefonului.</string>
+    <string name="settings_theme_system">Tema sistemului</string>
+    <string name="settings_theme_light">Deschisa</string>
+    <string name="settings_theme_dark">Intunecata</string>
+    <string name="settings_dynamic_color_title">Culoare dinamica</string>
+    <string name="settings_dynamic_color_description">Foloseste culorile din fundalul telefonului (Android 12+).</string>
     <string name="settings_about_title">Despre aplicatie</string>
     <string name="settings_app_name_label">Aplicatie</string>
     <string name="settings_app_name_value">Aplicatie: %1$s</string>
