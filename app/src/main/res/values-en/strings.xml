@@ -50,6 +50,15 @@
     <string name="logcat_jump">Jump</string>
     <string name="logcat_empty">Start streaming to see logs.</string>
     <string name="logcat_export_subject">Portal Toolkit logcat</string>
+    <string name="capture_take">Capture</string>
+    <string name="capture_saved">Saved to Pictures/PortalToolkit.</string>
+    <string name="capture_save_failed">Save failed: %1$s</string>
+    <string name="capture_save">Save</string>
+    <string name="capture_live_start">Live peek</string>
+    <string name="capture_live_stop">Stop peek</string>
+    <string name="capture_battery_note">Live peek drains the battery; stop it when not in use.</string>
+    <string name="capture_not_connected">No active connection. Connect to a Portal first.</string>
+    <string name="capture_empty">Take a capture to see the Portal screen here.</string>
     <string name="connect_over_wifi">Connect over Wi-Fi</string>
     <string name="wireless_setup_title">Set up Wireless ADB</string>
     <string name="wireless_setup_description">USB is only needed for initial setup.</string>

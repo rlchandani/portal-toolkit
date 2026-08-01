@@ -23,9 +23,11 @@ import com.portalinstaller.data.store.HistoryEntry
 import com.portalinstaller.data.store.ThemeMode
 import com.portalinstaller.ui.more.HistoryTab
 import com.portalinstaller.ui.more.SettingsTab
+import com.portalinstaller.ui.tools.capture.CaptureTab
 import com.portalinstaller.ui.tools.logcat.LogcatTab
 import com.portalinstaller.ui.tools.shell.ShellTab
 import com.portalinstaller.util.AppLanguage
+import com.portalinstaller.viewmodel.CaptureViewModel
 import com.portalinstaller.viewmodel.LogcatViewModel
 import com.portalinstaller.viewmodel.ShellEntry
 
@@ -54,7 +56,8 @@ internal fun ToolsTab(
     onShellRun: (String) -> Unit,
     onShellCancel: () -> Unit,
     onShellClear: () -> Unit,
-    logcatViewModel: LogcatViewModel
+    logcatViewModel: LogcatViewModel,
+    captureViewModel: CaptureViewModel
 ) {
     var selectedSection by rememberSaveable { mutableIntStateOf(0) }
 
@@ -92,6 +95,7 @@ internal fun ToolsTab(
                 onClear = onShellClear
             )
             1 -> LogcatTab(context = context, viewModel = logcatViewModel)
+            2 -> CaptureTab(context = context, viewModel = captureViewModel)
             3 -> HistoryTab(history)
             4 -> SettingsTab(
                 context = context,

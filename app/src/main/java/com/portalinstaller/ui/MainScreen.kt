@@ -55,6 +55,8 @@ import com.portalinstaller.data.store.SavedPortal
 import com.portalinstaller.data.store.ThemeMode
 import com.portalinstaller.util.AppLanguageManager
 import com.portalinstaller.viewmodel.AppsViewModel
+import com.portalinstaller.viewmodel.CaptureSaveState
+import com.portalinstaller.viewmodel.CaptureViewModel
 import com.portalinstaller.viewmodel.BackupState
 import com.portalinstaller.viewmodel.BackupViewModel
 import com.portalinstaller.viewmodel.ConnectionState
@@ -89,7 +91,8 @@ fun MainScreen(
     backupViewModel: BackupViewModel = viewModel(),
     photosViewModel: PhotosViewModel = viewModel(),
     shellViewModel: ShellViewModel = viewModel(),
-    logcatViewModel: LogcatViewModel = viewModel()
+    logcatViewModel: LogcatViewModel = viewModel(),
+    captureViewModel: CaptureViewModel = viewModel()
 ) {
     val context = LocalContext.current
     val container = remember { AppContainer.from(context) }
@@ -122,6 +125,9 @@ fun MainScreen(
     val shellTranscript by shellViewModel.transcript.collectAsStateWithLifecycle()
     val shellIsRunning by shellViewModel.isRunning.collectAsStateWithLifecycle()
     val shellCommandHistory by shellViewModel.commandHistory.collectAsStateWithLifecycle()
+
+    val captureSaveState by captureViewModel.saveState.collectAsStateWithLifecycle()
+    val captureNotConnected by captureViewModel.notConnected.collectAsStateWithLifecycle()
 
     val operationHistory by container.historyStore.history.collectAsStateWithLifecycle(initialValue = emptyList())
     val savedPortals by container.savedPortalStore.portals.collectAsStateWithLifecycle(initialValue = emptyList())
@@ -397,6 +403,27 @@ fun MainScreen(
         }
     }
 
+    LaunchedEffect(captureSaveState) {
+        when (val state = captureSaveState) {
+            is CaptureSaveState.Saved -> {
+                snackbarHostState.showSnackbar(context.getString(R.string.capture_saved))
+                captureViewModel.clearSaveState()
+            }
+            is CaptureSaveState.Failed -> {
+                snackbarHostState.showSnackbar(state.message)
+                captureViewModel.clearSaveState()
+            }
+            else -> Unit
+        }
+    }
+
+    LaunchedEffect(captureNotConnected) {
+        if (captureNotConnected) {
+            snackbarHostState.showSnackbar(context.getString(R.string.shell_not_connected))
+            captureViewModel.clearNotConnected()
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -552,6 +579,7 @@ fun MainScreen(
                         photosViewModel.onDisconnected()
                         shellViewModel.onDisconnected()
                         logcatViewModel.onDisconnected()
+                        captureViewModel.onDisconnected()
                     },
                     onScanPortals = {
                         showPortalScanner = true
@@ -612,7 +640,8 @@ fun MainScreen(
                     onShellRun = { command -> shellViewModel.run(context, command) },
                     onShellCancel = { shellViewModel.cancel() },
                     onShellClear = { shellViewModel.clearTranscript() },
-                    logcatViewModel = logcatViewModel
+                    logcatViewModel = logcatViewModel,
+                    captureViewModel = captureViewModel
                 ) }
             }
         }

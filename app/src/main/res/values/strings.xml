@@ -50,6 +50,15 @@
     <string name="logcat_jump">Salt</string>
     <string name="logcat_empty">Porneste streaming-ul pentru a vedea log-urile.</string>
     <string name="logcat_export_subject">Logcat Portal Toolkit</string>
+    <string name="capture_take">Captura</string>
+    <string name="capture_saved">Salvat in Poze/PortalToolkit.</string>
+    <string name="capture_save_failed">Salvarea a esuat: %1$s</string>
+    <string name="capture_save">Salveaza</string>
+    <string name="capture_live_start">Peek live</string>
+    <string name="capture_live_stop">Opreste peek</string>
+    <string name="capture_battery_note">Peek-ul live consuma bateria; opreste-l cand nu il folosesti.</string>
+    <string name="capture_not_connected">Nu exista o conexiune activa. Conecteaza-te la un Portal mai intai.</string>
+    <string name="capture_empty">Fa o captura pentru a vedea ecranul Portal aici.</string>
     <string name="connect_over_wifi">Conectare prin Wi-Fi</string>
     <string name="wireless_setup_title">Configureaza ADB wireless</string>
     <string name="wireless_setup_description">USB este necesar doar pentru configurarea initiala.</string>
