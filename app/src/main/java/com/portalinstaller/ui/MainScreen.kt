@@ -1,11 +1,10 @@
-﻿package com.portalinstaller.ui
+package com.portalinstaller.ui
 
 import android.app.Activity
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.content.SharedPreferences
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -31,6 +30,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -45,23 +45,26 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.portalinstaller.R
 import com.portalinstaller.ui.common.formatFileSize
-import com.portalinstaller.data.AppProfileStore
-import com.portalinstaller.data.SavedPortal
-import com.portalinstaller.data.SavedPortalStore
+import com.portalinstaller.data.AppContainer
 import com.portalinstaller.data.UsbPortalHelper
 import com.portalinstaller.data.UsbPortalStatus
+import com.portalinstaller.data.store.SavedPortal
 import com.portalinstaller.util.AppLanguageManager
+import com.portalinstaller.viewmodel.AppsViewModel
 import com.portalinstaller.viewmodel.BackupState
+import com.portalinstaller.viewmodel.BackupViewModel
 import com.portalinstaller.viewmodel.ConnectionState
+import com.portalinstaller.viewmodel.ConnectionViewModel
 import com.portalinstaller.viewmodel.InstallState
 import com.portalinstaller.viewmodel.PhotoUploadState
+import com.portalinstaller.viewmodel.PhotosViewModel
 import com.portalinstaller.viewmodel.PortalDiscoveryState
-import com.portalinstaller.viewmodel.PortalViewModel
 import com.portalinstaller.viewmodel.ProfileApplyState
 import com.portalinstaller.viewmodel.UninstallState
 import com.portalinstaller.viewmodel.WirelessAdbState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import com.portalinstaller.ui.apps.AppProfileEditorDialog
 import com.portalinstaller.ui.apps.AppsHubTab
 import com.portalinstaller.ui.devices.BackupAppSelectionDialog
@@ -69,34 +72,45 @@ import com.portalinstaller.ui.devices.BackupRestoreConfirmationDialog
 import com.portalinstaller.ui.devices.DevicesTab
 import com.portalinstaller.ui.devices.PortalScannerDialog
 import com.portalinstaller.ui.more.MoreTab
-import com.portalinstaller.ui.more.loadHistoryFromPrefs
-import com.portalinstaller.ui.more.saveHistoryToPrefs
 import com.portalinstaller.ui.photos.PhotosTab
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen(viewModel: PortalViewModel = viewModel()) {
+fun MainScreen(
+    connectionViewModel: ConnectionViewModel = viewModel(),
+    appsViewModel: AppsViewModel = viewModel(),
+    backupViewModel: BackupViewModel = viewModel(),
+    photosViewModel: PhotosViewModel = viewModel()
+) {
     val context = LocalContext.current
+    val container = remember { AppContainer.from(context) }
+    val scope = rememberCoroutineScope()
 
-    val connectionState by viewModel.connectionState.collectAsStateWithLifecycle()
-    val connectionMethod by viewModel.connectionMethod.collectAsStateWithLifecycle()
-    val installState by viewModel.installState.collectAsStateWithLifecycle()
-    val uninstallState by viewModel.uninstallState.collectAsStateWithLifecycle()
-    val wirelessAdbState by viewModel.wirelessAdbState.collectAsStateWithLifecycle()
-    val installedApps by viewModel.installedApps.collectAsStateWithLifecycle()
-    val selectedApkUri by viewModel.selectedApkUri.collectAsStateWithLifecycle()
-    val photoUploadState by viewModel.photoUploadState.collectAsStateWithLifecycle()
-    val selectedPhotoUris by viewModel.selectedPhotoUris.collectAsStateWithLifecycle()
-    val operationHistory by viewModel.operationHistory.collectAsStateWithLifecycle()
-    val portalPackages by viewModel.portalPackages.collectAsStateWithLifecycle()
-    val portalApps by viewModel.portalApps.collectAsStateWithLifecycle()
-    val isLoadingPortalPackages by viewModel.isLoadingPortalPackages.collectAsStateWithLifecycle()
-    val portalPackagesError by viewModel.portalPackagesError.collectAsStateWithLifecycle()
-    val deviceStatus by viewModel.deviceStatus.collectAsStateWithLifecycle()
-    val portalDiscoveryState by viewModel.portalDiscoveryState.collectAsStateWithLifecycle()
-    val backupState by viewModel.backupState.collectAsStateWithLifecycle()
-    val profileApplyState by viewModel.profileApplyState.collectAsStateWithLifecycle()
-    val osUpdateState by viewModel.osUpdateState.collectAsStateWithLifecycle()
+    val connectionState by connectionViewModel.connectionState.collectAsStateWithLifecycle()
+    val connectionMethod by connectionViewModel.connectionMethod.collectAsStateWithLifecycle()
+    val wirelessAdbState by connectionViewModel.wirelessAdbState.collectAsStateWithLifecycle()
+    val deviceStatus by connectionViewModel.deviceStatus.collectAsStateWithLifecycle()
+    val portalDiscoveryState by connectionViewModel.portalDiscoveryState.collectAsStateWithLifecycle()
+    val osUpdateState by connectionViewModel.osUpdateState.collectAsStateWithLifecycle()
+
+    val installState by appsViewModel.installState.collectAsStateWithLifecycle()
+    val uninstallState by appsViewModel.uninstallState.collectAsStateWithLifecycle()
+    val installedApps by appsViewModel.installedApps.collectAsStateWithLifecycle()
+    val selectedApkUri by appsViewModel.selectedApkUri.collectAsStateWithLifecycle()
+    val portalPackages by appsViewModel.portalPackages.collectAsStateWithLifecycle()
+    val portalApps by appsViewModel.portalApps.collectAsStateWithLifecycle()
+    val isLoadingPortalPackages by appsViewModel.isLoadingPortalPackages.collectAsStateWithLifecycle()
+    val portalPackagesError by appsViewModel.portalPackagesError.collectAsStateWithLifecycle()
+    val profileApplyState by appsViewModel.profileApplyState.collectAsStateWithLifecycle()
+
+    val backupState by backupViewModel.backupState.collectAsStateWithLifecycle()
+
+    val photoUploadState by photosViewModel.photoUploadState.collectAsStateWithLifecycle()
+    val selectedPhotoUris by photosViewModel.selectedPhotoUris.collectAsStateWithLifecycle()
+
+    val operationHistory by container.historyStore.history.collectAsStateWithLifecycle(initialValue = emptyList())
+    val savedPortals by container.savedPortalStore.portals.collectAsStateWithLifecycle(initialValue = emptyList())
+    val appProfiles by container.appProfileStore.profiles.collectAsStateWithLifecycle(initialValue = emptyList())
 
     val snackbarHostState = remember { SnackbarHostState() }
     val navController = rememberNavController()
@@ -115,8 +129,6 @@ fun MainScreen(viewModel: PortalViewModel = viewModel()) {
     var showProfileEditor by remember { mutableStateOf(false) }
     var selectedBackupPackages by remember { mutableStateOf<Set<String>?>(null) }
     var selectedLanguage by remember { mutableStateOf(AppLanguageManager.getSavedLanguage(context)) }
-    var savedPortals by remember { mutableStateOf(SavedPortalStore.load(context)) }
-    var appProfiles by remember { mutableStateOf(AppProfileStore.load(context)) }
 
     // Pastram ultimul IP si port folosite pentru reconectare rapida.
     val prefs = remember {
@@ -174,52 +186,37 @@ fun MainScreen(viewModel: PortalViewModel = viewModel()) {
     val apkPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
-        viewModel.setSelectedApkUri(uri)
+        appsViewModel.setSelectedApkUri(uri)
     }
 
     // File picker pentru poze (selectie multipla)
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetMultipleContents()
     ) { uris: List<Uri> ->
-        viewModel.setSelectedPhotoUris(uris)
+        photosViewModel.setSelectedPhotoUris(uris)
     }
 
     val backupCreateLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/zip")
     ) { uri: Uri? ->
-        uri?.let { viewModel.createBackup(context, it, selectedBackupPackages) }
+        uri?.let { backupViewModel.createBackup(context, it, selectedBackupPackages) }
     }
 
     val backupRestoreLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
-        uri?.let { viewModel.inspectBackup(context, it) }
+        uri?.let { backupViewModel.inspectBackup(context, it) }
     }
 
     // Initializeaza lista de aplicatii la prima incarcare.
     LaunchedEffect(Unit) {
-        viewModel.loadInstalledApps(context)
-    }
-
-    // Restaureaza istoricul salvat din sesiunea anterioara.
-    LaunchedEffect(Unit) {
-        val savedHistory = loadHistoryFromPrefs(prefs)
-        if (savedHistory.isNotEmpty()) {
-            viewModel.restoreHistory(savedHistory)
-        }
-    }
-
-    // Salveaza istoricul in SharedPreferences cand apar intrari noi.
-    LaunchedEffect(operationHistory) {
-        if (operationHistory.isNotEmpty()) {
-            saveHistoryToPrefs(prefs, operationHistory)
-        }
+        appsViewModel.loadInstalledApps(context)
     }
 
     // Reconectare automata la pornire daca avem deja un IP salvat.
     LaunchedEffect(Unit) {
         if (ipAddress.isNotBlank() && connectionState is ConnectionState.Disconnected) {
-            viewModel.connect(context, ipAddress, port.toIntOrNull() ?: 5555)
+            connectionViewModel.connect(context, ipAddress, port.toIntOrNull() ?: 5555)
         }
     }
 
@@ -235,8 +232,7 @@ fun MainScreen(viewModel: PortalViewModel = viewModel()) {
             val existing = savedPortals.firstOrNull {
                 it.ip == ipAddress && it.port == connectedPort
             }
-            savedPortals = SavedPortalStore.upsert(
-                context,
+            container.savedPortalStore.upsert(
                 SavedPortal(
                     name = existing?.name
                         ?: discovered?.displayName
@@ -262,7 +258,7 @@ fun MainScreen(viewModel: PortalViewModel = viewModel()) {
     LaunchedEffect(connectionState) {
         if (connectionState is ConnectionState.Error) {
             snackbarHostState.showSnackbar((connectionState as ConnectionState.Error).message)
-            viewModel.clearConnectionError()
+            connectionViewModel.clearConnectionError()
         }
     }
 
@@ -270,11 +266,11 @@ fun MainScreen(viewModel: PortalViewModel = viewModel()) {
         when (val state = installState) {
             is InstallState.Success -> {
                 snackbarHostState.showSnackbar(context.getString(R.string.snackbar_install_success))
-                viewModel.clearInstallState()
+                appsViewModel.clearInstallState()
             }
             is InstallState.Failed -> {
                 snackbarHostState.showSnackbar(state.message)
-                viewModel.clearInstallState()
+                appsViewModel.clearInstallState()
             }
             else -> {}
         }
@@ -286,11 +282,11 @@ fun MainScreen(viewModel: PortalViewModel = viewModel()) {
                 snackbarHostState.showSnackbar(
                     context.getString(R.string.snackbar_photos_success, state.count)
                 )
-                viewModel.clearPhotoUploadState()
+                photosViewModel.clearPhotoUploadState()
             }
             is PhotoUploadState.Failed -> {
                 snackbarHostState.showSnackbar(state.message)
-                viewModel.clearPhotoUploadState()
+                photosViewModel.clearPhotoUploadState()
             }
             else -> {}
         }
@@ -300,11 +296,11 @@ fun MainScreen(viewModel: PortalViewModel = viewModel()) {
         when (val state = uninstallState) {
             is UninstallState.Success -> {
                 snackbarHostState.showSnackbar(context.getString(R.string.snackbar_uninstall_success))
-                viewModel.clearUninstallState()
+                appsViewModel.clearUninstallState()
             }
             is UninstallState.Failed -> {
                 snackbarHostState.showSnackbar(state.message)
-                viewModel.clearUninstallState()
+                appsViewModel.clearUninstallState()
             }
             else -> {}
         }
@@ -316,11 +312,11 @@ fun MainScreen(viewModel: PortalViewModel = viewModel()) {
                 snackbarHostState.showSnackbar(
                     context.getString(R.string.snackbar_wireless_adb_enabled)
                 )
-                viewModel.clearWirelessAdbState()
+                connectionViewModel.clearWirelessAdbState()
             }
             is WirelessAdbState.Failed -> {
                 snackbarHostState.showSnackbar(state.message)
-                viewModel.clearWirelessAdbState()
+                connectionViewModel.clearWirelessAdbState()
             }
             else -> {}
         }
@@ -329,7 +325,7 @@ fun MainScreen(viewModel: PortalViewModel = viewModel()) {
     LaunchedEffect(portalPackagesError) {
         portalPackagesError?.let { message ->
             snackbarHostState.showSnackbar(message)
-            viewModel.clearPortalPackagesError()
+            appsViewModel.clearPortalPackagesError()
         }
     }
 
@@ -338,7 +334,7 @@ fun MainScreen(viewModel: PortalViewModel = viewModel()) {
             snackbarHostState.showSnackbar(
                 (portalDiscoveryState as PortalDiscoveryState.Failed).message
             )
-            viewModel.clearPortalDiscoveryState()
+            connectionViewModel.clearPortalDiscoveryState()
         }
     }
 
@@ -346,11 +342,11 @@ fun MainScreen(viewModel: PortalViewModel = viewModel()) {
         when (val state = backupState) {
             is BackupState.Success -> {
                 snackbarHostState.showSnackbar(state.message)
-                viewModel.clearBackupState()
+                backupViewModel.clearBackupState()
             }
             is BackupState.Failed -> {
                 snackbarHostState.showSnackbar(state.message)
-                viewModel.clearBackupState()
+                backupViewModel.clearBackupState()
             }
             else -> Unit
         }
@@ -360,11 +356,11 @@ fun MainScreen(viewModel: PortalViewModel = viewModel()) {
         when (val state = profileApplyState) {
             is ProfileApplyState.Success -> {
                 snackbarHostState.showSnackbar(state.message)
-                viewModel.clearProfileApplyState()
+                appsViewModel.clearProfileApplyState()
             }
             is ProfileApplyState.Failed -> {
                 snackbarHostState.showSnackbar(state.message)
-                viewModel.clearProfileApplyState()
+                appsViewModel.clearProfileApplyState()
             }
             else -> Unit
         }
@@ -386,7 +382,7 @@ fun MainScreen(viewModel: PortalViewModel = viewModel()) {
                             if (destination == PortalRoute.Apps &&
                                 connectionState is ConnectionState.Connected
                             ) {
-                                viewModel.loadPortalPackages(context)
+                                appsViewModel.loadPortalPackages(context)
                             }
                         },
                         icon = {
@@ -447,16 +443,16 @@ fun MainScreen(viewModel: PortalViewModel = viewModel()) {
                     onPickFile = {
                         apkPickerLauncher.launch("application/vnd.android.package-archive")
                     },
-                    onInstall = { app -> viewModel.installApp(context, app) },
-                    onInstallCustomApk = { uri -> viewModel.installApkFromUri(context, uri) },
-                    onRefreshPortalApps = { viewModel.loadPortalPackages(context) },
-                    onUninstall = { packageName -> viewModel.uninstallApp(context, packageName) },
+                    onInstall = { app -> appsViewModel.installApp(context, app) },
+                    onInstallCustomApk = { uri -> appsViewModel.installApkFromUri(context, uri) },
+                    onRefreshPortalApps = { appsViewModel.loadPortalPackages(context) },
+                    onUninstall = { packageName -> appsViewModel.uninstallApp(context, packageName) },
                     onCreateProfile = { showProfileEditor = true },
                     onApplyProfile = { profile ->
-                        viewModel.applyProfile(context, profile, installedApps)
+                        appsViewModel.applyProfile(context, profile, installedApps)
                     },
                     onDeleteProfile = { profile ->
-                        appProfiles = AppProfileStore.remove(context, profile.id)
+                        scope.launch { container.appProfileStore.remove(profile.id) }
                     }
                 ) }
                 composable(PortalRoute.Photos.route) { PhotosTab(
@@ -465,7 +461,7 @@ fun MainScreen(viewModel: PortalViewModel = viewModel()) {
                     photoUploadState = photoUploadState,
                     onOpenDevices = { navigateToTab(PortalRoute.Devices) },
                     onPickPhotos = { photoPickerLauncher.launch("image/*") },
-                    onUpload = { viewModel.uploadPhotos(context) }
+                    onUpload = { photosViewModel.uploadPhotos(context) }
                 ) }
                 composable(PortalRoute.Devices.route) { DevicesTab(
                     ipAddress = ipAddress,
@@ -488,7 +484,7 @@ fun MainScreen(viewModel: PortalViewModel = viewModel()) {
                             .putString("last_ip", ipAddress)
                             .putString("last_port", port)
                             .apply()
-                        viewModel.connect(context, ipAddress, port.toIntOrNull() ?: 5555)
+                        connectionViewModel.connect(context, ipAddress, port.toIntOrNull() ?: 5555)
                     },
                     onConnectSaved = { saved ->
                         ipAddress = saved.ip
@@ -497,18 +493,23 @@ fun MainScreen(viewModel: PortalViewModel = viewModel()) {
                             .putString("last_ip", saved.ip)
                             .putString("last_port", saved.port.toString())
                             .apply()
-                        viewModel.connect(context, saved.ip, saved.port)
+                        connectionViewModel.connect(context, saved.ip, saved.port)
                     },
                     onRemoveSaved = { saved ->
-                        savedPortals = SavedPortalStore.remove(context, saved.id)
+                        scope.launch { container.savedPortalStore.remove(saved.id) }
                     },
                     onRenameSaved = { saved, name ->
-                        savedPortals = SavedPortalStore.rename(context, saved.id, name)
+                        scope.launch { container.savedPortalStore.rename(saved.id, name) }
                     },
-                    onDisconnect = { viewModel.disconnect() },
+                    onDisconnect = {
+                        connectionViewModel.disconnect()
+                        appsViewModel.onDisconnected()
+                        backupViewModel.onDisconnected()
+                        photosViewModel.onDisconnected()
+                    },
                     onScanPortals = {
                         showPortalScanner = true
-                        viewModel.discoverWirelessPortals(context, port.toIntOrNull() ?: 5555)
+                        connectionViewModel.discoverWirelessPortals(context, port.toIntOrNull() ?: 5555)
                     },
                     onRefreshUsb = { usbRefreshTrigger++ },
                     onRequestUsbPermission = {
@@ -516,16 +517,16 @@ fun MainScreen(viewModel: PortalViewModel = viewModel()) {
                             usbRefreshTrigger++
                         }
                     },
-                    onConnectUsb = { viewModel.connectUsb(context) },
+                    onConnectUsb = { connectionViewModel.connectUsb(context) },
                     onEnableWirelessAdb = {
-                        viewModel.enableWirelessAdb(context, port.toIntOrNull() ?: 5555)
+                        connectionViewModel.enableWirelessAdb(context, port.toIntOrNull() ?: 5555)
                     },
-                    onRefreshOsUpdateStatus = { viewModel.refreshOsUpdateStatus(context) },
+                    onRefreshOsUpdateStatus = { connectionViewModel.refreshOsUpdateStatus(context) },
                     onSetOsUpdatesBlocked = { blocked ->
-                        viewModel.setOsUpdatesBlocked(context, blocked)
+                        connectionViewModel.setOsUpdatesBlocked(context, blocked)
                     },
                     onChooseBackupApps = {
-                        viewModel.loadPortalPackages(context)
+                        appsViewModel.loadPortalPackages(context)
                         showBackupAppSelector = true
                     },
                     onCreateBackup = {
@@ -560,7 +561,7 @@ fun MainScreen(viewModel: PortalViewModel = viewModel()) {
             discoveryState = portalDiscoveryState,
             port = port,
             onScan = {
-                viewModel.discoverWirelessPortals(context, port.toIntOrNull() ?: 5555)
+                connectionViewModel.discoverWirelessPortals(context, port.toIntOrNull() ?: 5555)
             },
             onConnect = { portal ->
                 ipAddress = portal.ip
@@ -569,7 +570,7 @@ fun MainScreen(viewModel: PortalViewModel = viewModel()) {
                     .putString("last_port", portal.port.toString())
                     .apply()
                 showPortalScanner = false
-                viewModel.connectDiscoveredPortal(context, portal)
+                connectionViewModel.connectDiscoveredPortal(context, portal)
             },
             onDismiss = { showPortalScanner = false }
         )
@@ -578,8 +579,13 @@ fun MainScreen(viewModel: PortalViewModel = viewModel()) {
     (backupState as? BackupState.ReadyToRestore)?.let { ready ->
         BackupRestoreConfirmationDialog(
             ready = ready,
-            onDismiss = { viewModel.clearBackupState() },
-            onConfirm = { viewModel.restoreBackup(context, ready.source) }
+            onDismiss = { backupViewModel.clearBackupState() },
+            onConfirm = {
+                backupViewModel.restoreBackup(context, ready.source) {
+                    appsViewModel.loadPortalPackages(context)
+                    connectionViewModel.refreshOsUpdateStatus(context)
+                }
+            }
         )
     }
 
@@ -604,7 +610,7 @@ fun MainScreen(viewModel: PortalViewModel = viewModel()) {
         AppProfileEditorDialog(
             apps = installedApps,
             onSave = { name, packageNames ->
-                appProfiles = AppProfileStore.saveProfile(context, name, packageNames)
+                scope.launch { container.appProfileStore.saveProfile(name, packageNames) }
                 showProfileEditor = false
             },
             onDismiss = { showProfileEditor = false }

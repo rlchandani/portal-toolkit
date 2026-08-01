@@ -51,7 +51,7 @@ import com.portalinstaller.ui.common.formatRam
 import com.portalinstaller.ui.common.formatStorage
 import com.portalinstaller.data.DeviceStatus
 import com.portalinstaller.data.DiscoveredPortal
-import com.portalinstaller.data.SavedPortal
+import com.portalinstaller.data.store.SavedPortal
 import com.portalinstaller.data.UsbPortalStatus
 import com.portalinstaller.viewmodel.BackupState
 import com.portalinstaller.viewmodel.ConnectionState

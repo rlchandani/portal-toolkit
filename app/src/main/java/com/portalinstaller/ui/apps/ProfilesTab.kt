@@ -36,7 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.portalinstaller.R
-import com.portalinstaller.data.AppProfile
+import com.portalinstaller.data.store.AppProfile
 import com.portalinstaller.data.InstalledApp
 import com.portalinstaller.viewmodel.ProfileApplyState
 

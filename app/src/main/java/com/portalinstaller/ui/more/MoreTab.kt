@@ -1,7 +1,6 @@
 package com.portalinstaller.ui.more
 
 import android.content.Context
-import android.content.SharedPreferences
 import android.os.Build
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -36,7 +35,7 @@ import androidx.compose.ui.unit.dp
 import com.portalinstaller.R
 import com.portalinstaller.ui.common.SectionCardShape
 import com.portalinstaller.util.AppLanguage
-import com.portalinstaller.viewmodel.HistoryEntry
+import com.portalinstaller.data.store.HistoryEntry
 import java.util.Date
 
 @Composable
@@ -250,45 +249,5 @@ internal fun SettingsTab(
                 }
             }
         }
-    }
-}
-
-/**
- * Serializeaza istoricul de operatii ca JSON si il salveaza in
- * SharedPreferences, ca sa persiste intre repornirile aplicatiei.
- * Limitam la ultimele 100 de intrari, ca sa nu crestem nelimitat
- * dimensiunea datelor salvate.
- */
-internal fun saveHistoryToPrefs(prefs: SharedPreferences, history: List<HistoryEntry>) {
-    val jsonArray = org.json.JSONArray()
-    history.take(100).forEach { entry ->
-        val obj = org.json.JSONObject()
-        obj.put("timestamp", entry.timestamp)
-        obj.put("description", entry.description)
-        obj.put("success", entry.success)
-        jsonArray.put(obj)
-    }
-    prefs.edit().putString("operation_history", jsonArray.toString()).apply()
-}
-
-/**
- * Deserializeaza istoricul salvat din SharedPreferences. Daca nu exista
- * date salvate sau JSON-ul este corupt, intoarce o lista goala fara sa
- * arunce o exceptie vizibila utilizatorului.
- */
-internal fun loadHistoryFromPrefs(prefs: SharedPreferences): List<HistoryEntry> {
-    val raw = prefs.getString("operation_history", null) ?: return emptyList()
-    return try {
-        val jsonArray = org.json.JSONArray(raw)
-        (0 until jsonArray.length()).map { i ->
-            val obj = jsonArray.getJSONObject(i)
-            HistoryEntry(
-                timestamp = obj.getLong("timestamp"),
-                description = obj.getString("description"),
-                success = obj.getBoolean("success")
-            )
-        }
-    } catch (e: Exception) {
-        emptyList()
     }
 }
