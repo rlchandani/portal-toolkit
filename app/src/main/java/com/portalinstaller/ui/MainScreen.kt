@@ -64,6 +64,7 @@ import com.portalinstaller.viewmodel.PhotoUploadState
 import com.portalinstaller.viewmodel.PhotosViewModel
 import com.portalinstaller.viewmodel.PortalDiscoveryState
 import com.portalinstaller.viewmodel.PowerControlState
+import com.portalinstaller.viewmodel.ShellViewModel
 import com.portalinstaller.viewmodel.ProfileApplyState
 import com.portalinstaller.viewmodel.UninstallState
 import com.portalinstaller.viewmodel.WirelessAdbState
@@ -85,7 +86,8 @@ fun MainScreen(
     connectionViewModel: ConnectionViewModel = viewModel(),
     appsViewModel: AppsViewModel = viewModel(),
     backupViewModel: BackupViewModel = viewModel(),
-    photosViewModel: PhotosViewModel = viewModel()
+    photosViewModel: PhotosViewModel = viewModel(),
+    shellViewModel: ShellViewModel = viewModel()
 ) {
     val context = LocalContext.current
     val container = remember { AppContainer.from(context) }
@@ -114,6 +116,10 @@ fun MainScreen(
 
     val photoUploadState by photosViewModel.photoUploadState.collectAsStateWithLifecycle()
     val selectedPhotoUris by photosViewModel.selectedPhotoUris.collectAsStateWithLifecycle()
+
+    val shellTranscript by shellViewModel.transcript.collectAsStateWithLifecycle()
+    val shellIsRunning by shellViewModel.isRunning.collectAsStateWithLifecycle()
+    val shellCommandHistory by shellViewModel.commandHistory.collectAsStateWithLifecycle()
 
     val operationHistory by container.historyStore.history.collectAsStateWithLifecycle(initialValue = emptyList())
     val savedPortals by container.savedPortalStore.portals.collectAsStateWithLifecycle(initialValue = emptyList())
@@ -542,6 +548,7 @@ fun MainScreen(
                         appsViewModel.onDisconnected()
                         backupViewModel.onDisconnected()
                         photosViewModel.onDisconnected()
+                        shellViewModel.onDisconnected()
                     },
                     onScanPortals = {
                         showPortalScanner = true
@@ -594,7 +601,14 @@ fun MainScreen(
                     useDynamicColor = useDynamicColor,
                     onToggleDynamicColor = { enabled ->
                         scope.launch { container.settingsStore.setUseDynamicColor(enabled) }
-                    }
+                    },
+                    shellTranscript = shellTranscript,
+                    shellIsRunning = shellIsRunning,
+                    shellCommandHistory = shellCommandHistory,
+                    shellQuickCommands = shellViewModel.quickCommands,
+                    onShellRun = { command -> shellViewModel.run(context, command) },
+                    onShellCancel = { shellViewModel.cancel() },
+                    onShellClear = { shellViewModel.clearTranscript() }
                 ) }
             }
         }

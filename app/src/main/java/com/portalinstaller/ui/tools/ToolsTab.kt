@@ -23,7 +23,9 @@ import com.portalinstaller.data.store.HistoryEntry
 import com.portalinstaller.data.store.ThemeMode
 import com.portalinstaller.ui.more.HistoryTab
 import com.portalinstaller.ui.more.SettingsTab
+import com.portalinstaller.ui.tools.shell.ShellTab
 import com.portalinstaller.util.AppLanguage
+import com.portalinstaller.viewmodel.ShellEntry
 
 /**
  * Tab-ul „Unelte”: gazduieste sculele de depanare (shell, logcat, captura) si,
@@ -42,7 +44,14 @@ internal fun ToolsTab(
     themeMode: ThemeMode,
     onSelectThemeMode: (ThemeMode) -> Unit,
     useDynamicColor: Boolean,
-    onToggleDynamicColor: (Boolean) -> Unit
+    onToggleDynamicColor: (Boolean) -> Unit,
+    shellTranscript: List<ShellEntry>,
+    shellIsRunning: Boolean,
+    shellCommandHistory: List<String>,
+    shellQuickCommands: List<String>,
+    onShellRun: (String) -> Unit,
+    onShellCancel: () -> Unit,
+    onShellClear: () -> Unit
 ) {
     var selectedSection by rememberSaveable { mutableIntStateOf(0) }
 
@@ -69,6 +78,16 @@ internal fun ToolsTab(
         }
 
         when (selectedSection) {
+            0 -> ShellTab(
+                context = context,
+                transcript = shellTranscript,
+                isRunning = shellIsRunning,
+                commandHistory = shellCommandHistory,
+                quickCommands = shellQuickCommands,
+                onRun = onShellRun,
+                onCancel = onShellCancel,
+                onClear = onShellClear
+            )
             3 -> HistoryTab(history)
             4 -> SettingsTab(
                 context = context,
