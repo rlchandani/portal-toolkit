@@ -22,6 +22,7 @@ class AppContainer(context: Context) {
     val backupManager = PortalBackupManager()
 
     val connectionHolder = ConnectionHolder()
+    val connectionMonitor = ConnectionMonitor()
 
     val savedPortalStore = SavedPortalStore(PortalDataStores.savedPortals(appContext))
     val appProfileStore = AppProfileStore(PortalDataStores.appProfiles(appContext))

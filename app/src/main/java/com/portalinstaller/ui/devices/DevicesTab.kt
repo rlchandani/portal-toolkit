@@ -74,6 +74,7 @@ internal fun DevicesTab(
     portalPackages: List<String>,
     isLoadingPortalPackages: Boolean,
     selectedBackupPackages: Set<String>?,
+    connectionEvents: List<com.portalinstaller.data.ConnectionEvent>,
     onIpChange: (String) -> Unit,
     onPortChange: (String) -> Unit,
     onConnectManual: () -> Unit,
@@ -153,6 +154,11 @@ internal fun DevicesTab(
                         onRemove = onRemoveSaved,
                         onRename = onRenameSaved
                     )
+                }
+                if (connectionEvents.isNotEmpty()) {
+                    item {
+                        ConnectionLogCard(events = connectionEvents)
+                    }
                 }
             }
         } else if (selectedSection == 1) {
@@ -543,6 +549,15 @@ internal fun ConnectionSection(
                     val statusText = when (connectionState) {
                         is ConnectionState.Connected -> stringResource(R.string.connection_status_connected)
                         is ConnectionState.Connecting -> stringResource(R.string.connection_status_connecting)
+                        is ConnectionState.Reconnecting ->
+                            if (connectionState.attempt > 0) {
+                                stringResource(
+                                    R.string.conn_status_reconnecting_attempt,
+                                    connectionState.attempt
+                                )
+                            } else {
+                                stringResource(R.string.conn_status_reconnecting)
+                            }
                         is ConnectionState.Error -> stringResource(R.string.connection_status_failed)
                         ConnectionState.Disconnected -> stringResource(R.string.connection_status_ready)
                     }
@@ -589,6 +604,22 @@ internal fun ConnectionSection(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(stringResource(R.string.connection_status_connecting))
+                    }
+                }
+                is ConnectionState.Reconnecting -> {
+                    Button(
+                        onClick = {},
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = false,
+                        shape = RoundedCornerShape(18.dp),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(stringResource(R.string.conn_status_reconnecting))
                     }
                 }
                 is ConnectionState.Connected -> Unit

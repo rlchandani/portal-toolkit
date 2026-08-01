@@ -6,8 +6,12 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.portalinstaller.R
 import com.portalinstaller.data.AppContainer
+import com.portalinstaller.data.ConnectionEvent
+import com.portalinstaller.data.ConnectionEventKind
+import com.portalinstaller.data.ConnectionMonitor
 import com.portalinstaller.data.DeviceStatus
 import com.portalinstaller.data.DiscoveredPortal
+import com.portalinstaller.data.MonitorSignal
 import com.portalinstaller.data.OsUpdateBlockStatus
 import com.portalinstaller.data.UsbPortalHelper
 import com.portalinstaller.data.store.HistoryEntry
@@ -20,6 +24,7 @@ sealed class ConnectionState {
     data object Disconnected : ConnectionState()
     data object Connecting : ConnectionState()
     data object Connected : ConnectionState()
+    data class Reconnecting(val attempt: Int, val nextRetryMs: Long) : ConnectionState()
     data class Error(val message: String) : ConnectionState()
 }
 
@@ -58,6 +63,15 @@ class ConnectionViewModel(app: Application) : AndroidViewModel(app) {
     private val discoveryManager = container.discoveryManager
     private val holder = container.connectionHolder
     private val historyStore = container.historyStore
+    private val monitor = container.connectionMonitor
+
+    /** Ultimele coordonate Wi-Fi folosite, pentru reconectarea automată. */
+    private var lastWifiHost: String? = null
+    private var lastWifiPort: Int = 5555
+    private var isUsbConnection = false
+
+    /** Jurnalul de conexiune (heartbeat + reconectări), pentru DevicesTab. */
+    val connectionEvents: StateFlow<List<ConnectionEvent>> = monitor.events
 
     private val _connectionState = MutableStateFlow<ConnectionState>(ConnectionState.Disconnected)
     val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
@@ -90,6 +104,11 @@ class ConnectionViewModel(app: Application) : AndroidViewModel(app) {
                     holder.set(d, context.getString(R.string.connection_method_wifi))
                     _connectionMethod.value = context.getString(R.string.connection_method_wifi)
                     _connectionState.value = ConnectionState.Connected
+                    lastWifiHost = ip
+                    lastWifiPort = port
+                    isUsbConnection = false
+                    monitor.logEvent(ConnectionEventKind.CONNECTED_WIFI)
+                    startMonitor(context)
                     refreshDeviceStatus()
                 }
                 .onFailure { e ->
@@ -109,7 +128,10 @@ class ConnectionViewModel(app: Application) : AndroidViewModel(app) {
                     holder.set(d, context.getString(R.string.connection_method_usb))
                     _connectionMethod.value = context.getString(R.string.connection_method_usb)
                     _connectionState.value = ConnectionState.Connected
+                    isUsbConnection = true
                     addHistory(context.getString(R.string.history_connected_usb), success = true)
+                    monitor.logEvent(ConnectionEventKind.CONNECTED_USB)
+                    startMonitor(context)
                     refreshDeviceStatus()
                 }
                 .onFailure { e ->
@@ -120,11 +142,70 @@ class ConnectionViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /**
+     * Pornește heartbeat-ul. La pierderea conexiunii încearcă reconectarea:
+     * Wi-Fi refolosește ultimul host/port; USB refolosește helper-ul USB.
+     */
+    private fun startMonitor(context: Context) {
+        monitor.start(
+            scope = viewModelScope,
+            ping = { pingConnection() },
+            reconnect = { attemptReconnect(context) },
+            onSignal = { signal -> handleMonitorSignal(context, signal) }
+        )
+    }
+
+    private fun pingConnection(): Boolean {
+        val d = holder.dadb.value ?: return false
+        return runCatching { d.shell("echo ok").output.trim() == "ok" }.getOrDefault(false)
+    }
+
+    private suspend fun attemptReconnect(context: Context): Boolean {
+        val result = if (isUsbConnection) {
+            UsbPortalHelper.connect(context)
+        } else {
+            val host = lastWifiHost ?: return false
+            connectionManager.connect(context, host, lastWifiPort)
+        }
+        return result.onSuccess { d ->
+            val label = if (isUsbConnection) {
+                context.getString(R.string.connection_method_usb)
+            } else {
+                context.getString(R.string.connection_method_wifi)
+            }
+            holder.set(d, label)
+        }.isSuccess
+    }
+
+    private fun handleMonitorSignal(context: Context, signal: MonitorSignal) {
+        when (signal) {
+            is MonitorSignal.Lost -> {
+                _connectionState.value = ConnectionState.Reconnecting(attempt = 0, nextRetryMs = 0)
+            }
+            is MonitorSignal.Reconnecting -> {
+                _connectionState.value =
+                    ConnectionState.Reconnecting(signal.attempt, signal.nextRetryMs)
+            }
+            is MonitorSignal.Reconnected -> {
+                _connectionState.value = ConnectionState.Connected
+                viewModelScope.launch {
+                    addHistory(context.getString(R.string.history_reconnected), success = true)
+                }
+                refreshDeviceStatus()
+            }
+            is MonitorSignal.Healthy -> {
+                _connectionState.value = ConnectionState.Connected
+            }
+        }
+    }
+
     fun connectDiscoveredPortal(context: Context, portal: DiscoveredPortal) {
         connect(context, portal.ip, portal.port)
     }
 
     fun disconnect() {
+        monitor.stop()
+        monitor.logEvent(ConnectionEventKind.DISCONNECTED)
         holder.clear()
         _connectionState.value = ConnectionState.Disconnected
         _connectionMethod.value = null
@@ -200,6 +281,7 @@ class ConnectionViewModel(app: Application) : AndroidViewModel(app) {
                 .onSuccess { message ->
                     _wirelessAdbState.value = WirelessAdbState.Success(message)
                     addHistory(context.getString(R.string.history_wireless_adb_enabled, port), success = true)
+                    monitor.stop()
                     holder.clear()
                     _connectionState.value = ConnectionState.Disconnected
                     _connectionMethod.value = null
@@ -249,6 +331,7 @@ class ConnectionViewModel(app: Application) : AndroidViewModel(app) {
 
     override fun onCleared() {
         super.onCleared()
+        monitor.stop()
         holder.clear()
     }
 }

@@ -9,9 +9,11 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -44,6 +46,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.portalinstaller.R
+import com.portalinstaller.ui.common.ConnectionStatusChip
 import com.portalinstaller.ui.common.formatFileSize
 import com.portalinstaller.data.AppContainer
 import com.portalinstaller.data.UsbPortalHelper
@@ -92,6 +95,7 @@ fun MainScreen(
     val deviceStatus by connectionViewModel.deviceStatus.collectAsStateWithLifecycle()
     val portalDiscoveryState by connectionViewModel.portalDiscoveryState.collectAsStateWithLifecycle()
     val osUpdateState by connectionViewModel.osUpdateState.collectAsStateWithLifecycle()
+    val connectionEvents by connectionViewModel.connectionEvents.collectAsStateWithLifecycle()
 
     val installState by appsViewModel.installState.collectAsStateWithLifecycle()
     val uninstallState by appsViewModel.uninstallState.collectAsStateWithLifecycle()
@@ -368,7 +372,13 @@ fun MainScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { AppBrandHeader() })
+            TopAppBar(
+                title = { AppBrandHeader() },
+                actions = {
+                    ConnectionStatusChip(connectionState = connectionState)
+                    Spacer(modifier = Modifier.width(12.dp))
+                }
+            )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
@@ -477,6 +487,7 @@ fun MainScreen(
                     portalPackages = portalPackages,
                     isLoadingPortalPackages = isLoadingPortalPackages,
                     selectedBackupPackages = selectedBackupPackages,
+                    connectionEvents = connectionEvents,
                     onIpChange = { ipAddress = it },
                     onPortChange = { port = it },
                     onConnectManual = {
