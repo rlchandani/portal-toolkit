@@ -64,8 +64,8 @@ import com.portalinstaller.viewmodel.ConnectionViewModel
 import com.portalinstaller.viewmodel.FileManagerViewModel
 import com.portalinstaller.viewmodel.FileTransferState
 import com.portalinstaller.viewmodel.InstallState
-import com.portalinstaller.viewmodel.PhotoUploadState
-import com.portalinstaller.viewmodel.PhotosViewModel
+import com.portalinstaller.viewmodel.ScreensaverViewModel
+import com.portalinstaller.viewmodel.UploadSummaryState
 import com.portalinstaller.viewmodel.PortalDiscoveryState
 import com.portalinstaller.viewmodel.LogcatViewModel
 import com.portalinstaller.viewmodel.PowerControlState
@@ -82,7 +82,7 @@ import com.portalinstaller.ui.devices.BackupAppSelectionDialog
 import com.portalinstaller.ui.devices.BackupRestoreConfirmationDialog
 import com.portalinstaller.ui.devices.DevicesTab
 import com.portalinstaller.ui.devices.PortalScannerDialog
-import com.portalinstaller.ui.photos.PhotosTab
+import com.portalinstaller.ui.screensaver.ScreensaverTab
 import com.portalinstaller.ui.tools.ToolsTab
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -91,7 +91,7 @@ fun MainScreen(
     connectionViewModel: ConnectionViewModel = viewModel(),
     appsViewModel: AppsViewModel = viewModel(),
     backupViewModel: BackupViewModel = viewModel(),
-    photosViewModel: PhotosViewModel = viewModel(),
+    screensaverViewModel: ScreensaverViewModel = viewModel(),
     shellViewModel: ShellViewModel = viewModel(),
     logcatViewModel: LogcatViewModel = viewModel(),
     captureViewModel: CaptureViewModel = viewModel(),
@@ -122,8 +122,9 @@ fun MainScreen(
 
     val backupState by backupViewModel.backupState.collectAsStateWithLifecycle()
 
-    val photoUploadState by photosViewModel.photoUploadState.collectAsStateWithLifecycle()
-    val selectedPhotoUris by photosViewModel.selectedPhotoUris.collectAsStateWithLifecycle()
+    val screensaverState by screensaverViewModel.state.collectAsStateWithLifecycle()
+    val screensaverUploadState by screensaverViewModel.uploadState.collectAsStateWithLifecycle()
+    val screensaverNotConnected by screensaverViewModel.notConnected.collectAsStateWithLifecycle()
 
     val shellTranscript by shellViewModel.transcript.collectAsStateWithLifecycle()
     val shellIsRunning by shellViewModel.isRunning.collectAsStateWithLifecycle()
@@ -218,11 +219,15 @@ fun MainScreen(
         appsViewModel.setSelectedApkUri(uri)
     }
 
-    // File picker pentru poze (selectie multipla)
+    // File picker pentru poze (selectie multipla). Incarcarea sare automat peste
+    // duplicate (dupa nume+dimensiune); rezumatul de la final arata cate au fost
+    // sarite. Push-ul merge in folderul de screensaver ales.
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetMultipleContents()
     ) { uris: List<Uri> ->
-        photosViewModel.setSelectedPhotoUris(uris)
+        if (uris.isNotEmpty()) {
+            screensaverViewModel.uploadPhotos(context, uris)
+        }
     }
 
     val backupCreateLauncher = rememberLauncherForActivityResult(
@@ -305,19 +310,31 @@ fun MainScreen(
         }
     }
 
-    LaunchedEffect(photoUploadState) {
-        when (val state = photoUploadState) {
-            is PhotoUploadState.Success -> {
+    LaunchedEffect(screensaverUploadState) {
+        when (val state = screensaverUploadState) {
+            is UploadSummaryState.Done -> {
                 snackbarHostState.showSnackbar(
-                    context.getString(R.string.snackbar_photos_success, state.count)
+                    context.getString(
+                        R.string.screensaver_upload_summary,
+                        state.uploaded,
+                        state.skipped,
+                        state.failed
+                    )
                 )
-                photosViewModel.clearPhotoUploadState()
+                screensaverViewModel.clearUploadState()
             }
-            is PhotoUploadState.Failed -> {
+            is UploadSummaryState.Failed -> {
                 snackbarHostState.showSnackbar(state.message)
-                photosViewModel.clearPhotoUploadState()
+                screensaverViewModel.clearUploadState()
             }
             else -> {}
+        }
+    }
+
+    LaunchedEffect(screensaverNotConnected) {
+        if (screensaverNotConnected) {
+            snackbarHostState.showSnackbar(context.getString(R.string.shell_not_connected))
+            screensaverViewModel.clearNotConnected()
         }
     }
 
@@ -548,14 +565,21 @@ fun MainScreen(
                         scope.launch { container.appProfileStore.remove(profile.id) }
                     }
                 ) }
-                composable(PortalRoute.Photos.route) { PhotosTab(
-                    selectedUris = selectedPhotoUris,
-                    isWifiConnected = isWifiConnected,
-                    photoUploadState = photoUploadState,
-                    onOpenDevices = { navigateToTab(PortalRoute.Devices) },
-                    onPickPhotos = { photoPickerLauncher.launch("image/*") },
-                    onUpload = { photosViewModel.uploadPhotos(context) }
-                ) }
+                composable(PortalRoute.Photos.route) {
+                    LaunchedEffect(isWifiConnected) {
+                        if (isWifiConnected && screensaverState.folder == null) {
+                            screensaverViewModel.loadFolders()
+                        }
+                    }
+                    ScreensaverTab(
+                        state = screensaverState,
+                        uploadState = screensaverUploadState,
+                        isWifiConnected = isWifiConnected,
+                        viewModel = screensaverViewModel,
+                        onOpenDevices = { navigateToTab(PortalRoute.Devices) },
+                        onPickPhotos = { photoPickerLauncher.launch("image/*") }
+                    )
+                }
                 composable(PortalRoute.Devices.route) { DevicesTab(
                     ipAddress = ipAddress,
                     port = port,
@@ -605,7 +629,7 @@ fun MainScreen(
                         connectionViewModel.disconnect()
                         appsViewModel.onDisconnected()
                         backupViewModel.onDisconnected()
-                        photosViewModel.onDisconnected()
+                        screensaverViewModel.onDisconnected()
                         shellViewModel.onDisconnected()
                         logcatViewModel.onDisconnected()
                         captureViewModel.onDisconnected()

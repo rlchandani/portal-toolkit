@@ -24,6 +24,7 @@ class AppContainer(context: Context) {
     val discoveryManager = PortalDiscoveryManager(connectionManager)
     val backupManager = PortalBackupManager()
     val fileManager = PortalFileManager()
+    val screensaverManager = PortalScreensaverManager()
 
     val connectionHolder = ConnectionHolder()
     val connectionMonitor = ConnectionMonitor()

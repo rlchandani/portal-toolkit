@@ -49,6 +49,8 @@ internal fun NavigationGlyph(index: Int, selected: Boolean) {
             }
 
             1 -> {
+                // Tab „Screensaver”: o rama de imagine cu soare si munte,
+                // sugerand galeria de fotografii pentru screensaver-ul Portalului.
                 drawRoundRect(
                     color = color,
                     topLeft = Offset(inset, 4.dp.toPx()),

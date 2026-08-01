@@ -17,4 +17,17 @@ object ContentUriHelper {
         }
         return name
     }
+
+    fun getSize(context: Context, uri: Uri): Long {
+        var size = 0L
+        context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+                if (sizeIndex >= 0 && !cursor.isNull(sizeIndex)) {
+                    size = cursor.getLong(sizeIndex)
+                }
+            }
+        }
+        return size
+    }
 }

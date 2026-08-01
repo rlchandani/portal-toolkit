@@ -13,7 +13,9 @@ sealed class PortalRoute(
     val glyphIndex: Int
 ) {
     data object Apps : PortalRoute("apps", R.string.tab_apps, 0)
-    data object Photos : PortalRoute("photos", R.string.tab_photos, 1)
+    // Pastram id-ul rutei „photos” pentru compatibilitate, dar eticheta si
+    // continutul sunt acum managerul de screensaver.
+    data object Photos : PortalRoute("photos", R.string.tab_screensaver, 1)
     data object Devices : PortalRoute("devices", R.string.tab_devices, 2)
     data object Tools : PortalRoute("tools", R.string.tab_tools, 3)
 
