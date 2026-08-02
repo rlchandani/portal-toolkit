@@ -19,6 +19,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items as gridItems
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
@@ -250,11 +252,13 @@ internal fun ScreensaverTab(
     }
 
     previewFile?.let { file ->
+        val startIndex = state.contents.indexOfFirst { it.path == file.path }.coerceAtLeast(0)
         PhotoPreviewDialog(
-            file = file,
-            selected = file.path in state.selection,
+            photos = state.contents,
+            initialIndex = startIndex,
+            selection = state.selection,
             viewModel = viewModel,
-            onToggleSelect = { viewModel.toggleSelect(file.path) },
+            onToggleSelect = { path -> viewModel.toggleSelect(path) },
             onDismiss = { previewFile = null }
         )
     }
@@ -353,17 +357,95 @@ private enum class GridSize(val columns: Int, val labelRes: Int) {
 }
 
 /**
- * Previzualizare la marime mare a unei poze, intr-un dialog pe tot ecranul.
- * Decodeaza fisierul din cache (deja tras integral de [ScreensaverViewModel])
- * la o rezolutie mai mare decat miniatura, ca utilizatorul sa vada detaliile.
+ * Previzualizare la marime mare intr-un dialog pe tot ecranul. Un
+ * [HorizontalPager] permite tragerea stanga/dreapta pentru poza urmatoare/
+ * anterioara. Fiecare pagina isi decodeaza propria imagine din cache (deja
+ * trasa integral de [ScreensaverViewModel]) la o rezolutie mai mare decat
+ * miniatura, ca utilizatorul sa vada detaliile.
  */
 @Composable
 private fun PhotoPreviewDialog(
-    file: RemoteFile,
-    selected: Boolean,
+    photos: List<RemoteFile>,
+    initialIndex: Int,
+    selection: Set<String>,
     viewModel: ScreensaverViewModel,
-    onToggleSelect: () -> Unit,
+    onToggleSelect: (String) -> Unit,
     onDismiss: () -> Unit
+) {
+    if (photos.isEmpty()) return
+    val pagerState = rememberPagerState(
+        initialPage = initialIndex.coerceIn(0, photos.lastIndex),
+        pageCount = { photos.size }
+    )
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.92f))
+        ) {
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize()
+            ) { page ->
+                // Apasarea pe poza (nu tragerea) inchide previzualizarea.
+                Box(
+                    modifier = Modifier.fillMaxSize().clickable(onClick = onDismiss),
+                    contentAlignment = Alignment.Center
+                ) {
+                    PhotoPreviewPage(file = photos[page], viewModel = viewModel)
+                }
+            }
+
+            val currentFile = photos[pagerState.currentPage]
+            // Indicator „3 / 12” + numele fisierului curent.
+            Text(
+                text = "${pagerState.currentPage + 1} / ${photos.size}  ·  ${currentFile.name}",
+                color = Color.White,
+                style = MaterialTheme.typography.labelMedium,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(16.dp)
+            )
+
+            val currentSelected = currentFile.path in selection
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                AssistChip(
+                    onClick = { onToggleSelect(currentFile.path) },
+                    label = {
+                        Text(
+                            stringResource(
+                                if (currentSelected) R.string.screensaver_preview_deselect
+                                else R.string.screensaver_preview_select
+                            ),
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                )
+                AssistChip(
+                    onClick = onDismiss,
+                    label = { Text(stringResource(R.string.screensaver_preview_close), maxLines = 1, softWrap = false) }
+                )
+            }
+        }
+    }
+}
+
+/** O singura pagina din previzualizare: decodeaza si afiseaza o poza mare. */
+@Composable
+private fun PhotoPreviewPage(
+    file: RemoteFile,
+    viewModel: ScreensaverViewModel
 ) {
     val bitmap by produceState<ImageBitmap?>(initialValue = null, file.path) {
         value = withContext(Dispatchers.IO) {
@@ -380,63 +462,16 @@ private fun PhotoPreviewDialog(
         }
     }
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.92f))
-                .clickable(onClick = onDismiss)
-        ) {
-            val current = bitmap
-            if (current != null) {
-                Image(
-                    bitmap = current,
-                    contentDescription = file.name,
-                    modifier = Modifier.fillMaxSize().padding(16.dp),
-                    contentScale = ContentScale.Fit
-                )
-            } else {
-                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-            }
-
-            Text(
-                text = file.name,
-                color = Color.White,
-                style = MaterialTheme.typography.labelMedium,
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(16.dp)
-            )
-
-            Row(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                AssistChip(
-                    onClick = onToggleSelect,
-                    label = {
-                        Text(
-                            stringResource(
-                                if (selected) R.string.screensaver_preview_deselect
-                                else R.string.screensaver_preview_select
-                            ),
-                            maxLines = 1,
-                            softWrap = false
-                        )
-                    }
-                )
-                AssistChip(
-                    onClick = onDismiss,
-                    label = { Text(stringResource(R.string.screensaver_preview_close), maxLines = 1, softWrap = false) }
-                )
-            }
-        }
+    val current = bitmap
+    if (current != null) {
+        Image(
+            bitmap = current,
+            contentDescription = file.name,
+            modifier = Modifier.fillMaxSize().padding(16.dp),
+            contentScale = ContentScale.Fit
+        )
+    } else {
+        CircularProgressIndicator()
     }
 }
 
