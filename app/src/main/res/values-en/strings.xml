@@ -193,6 +193,14 @@
     <string name="screensaver_upload_all">Upload all</string>
     <string name="screensaver_skip_duplicates">Skip duplicates</string>
     <string name="screensaver_folder_image_count">%1$d images</string>
+    <string name="screensaver_grid_size">Thumbnail size</string>
+    <string name="screensaver_grid_size_small">Small</string>
+    <string name="screensaver_grid_size_medium">Medium</string>
+    <string name="screensaver_grid_size_large">Large</string>
+    <string name="screensaver_preview">Preview</string>
+    <string name="screensaver_preview_close">Close</string>
+    <string name="screensaver_preview_select">Select</string>
+    <string name="screensaver_preview_deselect">Deselect</string>
     <string name="usb_host_unavailable">USB host is not available on this phone.</string>
     <string name="usb_no_portal_detected">No Portal was detected over USB. An OTG adapter on the phone is recommended; a direct cable may require several attempts.</string>
     <string name="usb_portal_ready">Portal detected over USB. You can connect it now.</string>

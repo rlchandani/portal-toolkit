@@ -4,6 +4,8 @@ import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -43,6 +46,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.portalinstaller.R
 import com.portalinstaller.data.files.RemoteFile
 import com.portalinstaller.ui.common.formatFileSize
@@ -69,6 +74,10 @@ internal fun ScreensaverTab(
     val context = LocalContext.current
     var showFolderPicker by remember { mutableStateOf(false) }
     var showMove by remember { mutableStateOf(false) }
+    // Marimea miniaturilor: cicleaza Mic (5) / Mediu (3) / Mare (2) coloane.
+    var gridSize by remember { mutableStateOf(GridSize.MEDIUM) }
+    // Poza deschisa la marime mare (previzualizare); null cand e inchisa.
+    var previewFile by remember { mutableStateOf<RemoteFile?>(null) }
 
     Column(
         modifier = Modifier
@@ -108,6 +117,10 @@ internal fun ScreensaverTab(
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.weight(1f)
             )
+            AssistChip(
+                onClick = { gridSize = gridSize.next() },
+                label = { Text(stringResource(gridSize.labelRes), maxLines = 1, softWrap = false) }
+            )
             TextButton(onClick = { showFolderPicker = true }, enabled = isWifiConnected) {
                 Text(stringResource(R.string.screensaver_change_folder))
             }
@@ -132,20 +145,24 @@ internal fun ScreensaverTab(
             modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
         )
 
-        // Bara de actiuni.
+        // Bara de actiuni. Derulare orizontala ca cip-urile sa nu se
+        // inghesuie/rupa pe doua randuri cand toate patru sunt afisate.
         Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             AssistChip(
                 onClick = onPickPhotos,
                 enabled = isWifiConnected,
-                label = { Text(stringResource(R.string.screensaver_add_photos)) }
+                label = { Text(stringResource(R.string.screensaver_add_photos), maxLines = 1, softWrap = false) }
             )
             if (state.selection.isNotEmpty()) {
-                AssistChip(onClick = { viewModel.pullSelected(context) }, label = { Text(stringResource(R.string.screensaver_pull)) })
-                AssistChip(onClick = { showMove = true }, label = { Text(stringResource(R.string.screensaver_move)) })
-                AssistChip(onClick = { viewModel.deleteSelected(context) }, label = { Text(stringResource(R.string.screensaver_delete)) })
+                AssistChip(onClick = { viewModel.pullSelected(context) }, label = { Text(stringResource(R.string.screensaver_pull), maxLines = 1, softWrap = false) })
+                AssistChip(onClick = { showMove = true }, label = { Text(stringResource(R.string.screensaver_move), maxLines = 1, softWrap = false) })
+                AssistChip(onClick = { viewModel.deleteSelected(context) }, label = { Text(stringResource(R.string.screensaver_delete), maxLines = 1, softWrap = false) })
             }
         }
 
@@ -178,7 +195,7 @@ internal fun ScreensaverTab(
                 )
             } else {
                 LazyVerticalGrid(
-                    columns = GridCells.Fixed(3),
+                    columns = GridCells.Fixed(gridSize.columns),
                     modifier = Modifier.fillMaxSize(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -188,7 +205,10 @@ internal fun ScreensaverTab(
                             file = file,
                             selected = file.path in state.selection,
                             viewModel = viewModel,
-                            onClick = { viewModel.toggleSelect(file.path) }
+                            // Apasarea pe poza o deschide mare; bifa din colt
+                            // ramane pentru selectie (salveaza/muta/sterge).
+                            onClick = { previewFile = file },
+                            onToggleSelect = { viewModel.toggleSelect(file.path) }
                         )
                     }
                 }
@@ -229,6 +249,16 @@ internal fun ScreensaverTab(
         )
     }
 
+    previewFile?.let { file ->
+        PhotoPreviewDialog(
+            file = file,
+            selected = file.path in state.selection,
+            viewModel = viewModel,
+            onToggleSelect = { viewModel.toggleSelect(file.path) },
+            onDismiss = { previewFile = null }
+        )
+    }
+
     if (showMove) {
         var dest by remember { mutableStateOf(state.folder ?: "") }
         AlertDialog(
@@ -260,7 +290,8 @@ private fun RemoteThumbnail(
     file: RemoteFile,
     selected: Boolean,
     viewModel: ScreensaverViewModel,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onToggleSelect: () -> Unit
 ) {
     val bitmap by produceState<ImageBitmap?>(initialValue = null, file.path) {
         value = withContext(Dispatchers.IO) {
@@ -294,14 +325,117 @@ private fun RemoteThumbnail(
                 contentScale = ContentScale.Crop
             )
         }
-        if (selected) {
+        // Bifa din colt: comuta selectia fara sa deschida previzualizarea.
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(4.dp)
+                .clip(RoundedCornerShape(50))
+                .background(
+                    if (selected) MaterialTheme.colorScheme.primary
+                    else Color.Black.copy(alpha = 0.35f)
+                )
+                .clickable(onClick = onToggleSelect)
+                .padding(horizontal = 6.dp, vertical = 2.dp)
+        ) {
+            Text(text = if (selected) "✓" else "○", color = Color.White)
+        }
+    }
+}
+
+/** Marimile disponibile pentru grila de miniaturi (numar de coloane). */
+private enum class GridSize(val columns: Int, val labelRes: Int) {
+    SMALL(5, R.string.screensaver_grid_size_small),
+    MEDIUM(3, R.string.screensaver_grid_size_medium),
+    LARGE(2, R.string.screensaver_grid_size_large);
+
+    fun next(): GridSize = entries[(ordinal + 1) % entries.size]
+}
+
+/**
+ * Previzualizare la marime mare a unei poze, intr-un dialog pe tot ecranul.
+ * Decodeaza fisierul din cache (deja tras integral de [ScreensaverViewModel])
+ * la o rezolutie mai mare decat miniatura, ca utilizatorul sa vada detaliile.
+ */
+@Composable
+private fun PhotoPreviewDialog(
+    file: RemoteFile,
+    selected: Boolean,
+    viewModel: ScreensaverViewModel,
+    onToggleSelect: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val bitmap by produceState<ImageBitmap?>(initialValue = null, file.path) {
+        value = withContext(Dispatchers.IO) {
+            runCatching {
+                val cached = viewModel.thumbnailFile(file) ?: return@runCatching null
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeFile(cached.absolutePath, bounds)
+                // Tinta 1600px: mult mai clara decat miniatura de 256px, dar tot
+                // subesantionata ca sa nu incarce o imagine uriasa in memorie.
+                val sample = calculateInSampleSize(bounds, 1600, 1600)
+                val opts = BitmapFactory.Options().apply { inSampleSize = sample }
+                BitmapFactory.decodeFile(cached.absolutePath, opts)?.asImageBitmap()
+            }.getOrNull()
+        }
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.92f))
+                .clickable(onClick = onDismiss)
+        ) {
+            val current = bitmap
+            if (current != null) {
+                Image(
+                    bitmap = current,
+                    contentDescription = file.name,
+                    modifier = Modifier.fillMaxSize().padding(16.dp),
+                    contentScale = ContentScale.Fit
+                )
+            } else {
+                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+            }
+
             Text(
-                text = "✓",
+                text = file.name,
                 color = Color.White,
+                style = MaterialTheme.typography.labelMedium,
                 modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(4.dp)
+                    .align(Alignment.TopStart)
+                    .padding(16.dp)
             )
+
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                AssistChip(
+                    onClick = onToggleSelect,
+                    label = {
+                        Text(
+                            stringResource(
+                                if (selected) R.string.screensaver_preview_deselect
+                                else R.string.screensaver_preview_select
+                            ),
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                )
+                AssistChip(
+                    onClick = onDismiss,
+                    label = { Text(stringResource(R.string.screensaver_preview_close), maxLines = 1, softWrap = false) }
+                )
+            }
         }
     }
 }

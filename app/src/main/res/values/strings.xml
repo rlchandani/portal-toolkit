@@ -193,6 +193,14 @@
     <string name="screensaver_upload_all">Incarca tot</string>
     <string name="screensaver_skip_duplicates">Sari peste duplicate</string>
     <string name="screensaver_folder_image_count">%1$d imagini</string>
+    <string name="screensaver_grid_size">Marime miniaturi</string>
+    <string name="screensaver_grid_size_small">Mic</string>
+    <string name="screensaver_grid_size_medium">Mediu</string>
+    <string name="screensaver_grid_size_large">Mare</string>
+    <string name="screensaver_preview">Previzualizare</string>
+    <string name="screensaver_preview_close">Inchide</string>
+    <string name="screensaver_preview_select">Selecteaza</string>
+    <string name="screensaver_preview_deselect">Deselecteaza</string>
     <string name="usb_host_unavailable">USB host nu este disponibil pe acest telefon.</string>
     <string name="usb_no_portal_detected">Nu a fost detectat niciun Portal prin USB. Se recomanda un adaptor OTG la telefon; cu un cablu direct pot fi necesare mai multe incercari.</string>
     <string name="usb_portal_ready">Portal detectat prin USB. Il poti conecta acum.</string>
