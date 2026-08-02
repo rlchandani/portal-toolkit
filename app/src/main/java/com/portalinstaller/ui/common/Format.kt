@@ -49,8 +49,14 @@ internal fun formatStorage(deviceStatus: DeviceStatus): String {
 }
 
 @Composable
-internal fun formatRam(ramFreeBytes: Long?): String {
-    return ramFreeBytes?.let {
-        stringResource(R.string.ram_free_amount, formatFileSize(it))
-    } ?: stringResource(R.string.unavailable)
+internal fun formatRam(ramFreeBytes: Long?, ramTotalBytes: Long? = null): String {
+    return when {
+        ramFreeBytes != null && ramTotalBytes != null -> stringResource(
+            R.string.ram_used_of_total,
+            formatFileSize(ramTotalBytes - ramFreeBytes),
+            formatFileSize(ramTotalBytes)
+        )
+        ramFreeBytes != null -> stringResource(R.string.ram_free_amount, formatFileSize(ramFreeBytes))
+        else -> stringResource(R.string.unavailable)
+    }
 }

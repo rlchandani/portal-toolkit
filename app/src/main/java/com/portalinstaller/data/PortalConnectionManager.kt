@@ -16,6 +16,7 @@ data class DeviceStatus(
     val storageFreeBytes: Long?,
     val storageTotalBytes: Long?,
     val ramFreeBytes: Long?,
+    val ramTotalBytes: Long?,
     val manufacturer: String,
     val model: String,
     val sdk: String,
@@ -332,12 +333,13 @@ class PortalConnectionManager {
     suspend fun getDeviceStatus(dadb: Dadb): DeviceStatus {
         return withContext(Dispatchers.IO) {
             val storage = runCatching { parseDf(dadb.shell("df /sdcard").output) }.getOrNull()
-            val ramFree = runCatching { parseMemAvailable(dadb.shell("cat /proc/meminfo").output) }.getOrNull()
+            val memInfo = runCatching { MemInfoParser.parse(dadb.shell("cat /proc/meminfo").output) }.getOrNull()
             val uptime = runCatching { parseUptimeSeconds(dadb.shell("cat /proc/uptime").output) }.getOrNull()
             DeviceStatus(
                 storageFreeBytes = storage?.first,
                 storageTotalBytes = storage?.second,
-                ramFreeBytes = ramFree,
+                ramFreeBytes = memInfo?.availableBytes,
+                ramTotalBytes = memInfo?.totalBytes,
                 manufacturer = readProperty(dadb, "ro.product.manufacturer"),
                 model = readProperty(dadb, "ro.product.model"),
                 sdk = readProperty(dadb, "ro.build.version.sdk"),
@@ -600,12 +602,6 @@ class PortalConnectionManager {
         val totalKb = columns[1].toLongOrNull() ?: return null
         val availableKb = columns[3].toLongOrNull() ?: return null
         return (availableKb * 1024) to (totalKb * 1024)
-    }
-
-    private fun parseMemAvailable(output: String): Long? {
-        val line = output.lines().firstOrNull { it.startsWith("MemAvailable") } ?: return null
-        val kb = Regex("""\d+""").find(line)?.value?.toLongOrNull() ?: return null
-        return kb * 1024
     }
 
     private fun detectPortalIpAddress(dadb: Dadb): String? {

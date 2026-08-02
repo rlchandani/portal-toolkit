@@ -107,12 +107,26 @@ internal fun DashboardCard(
             )
 
             val ramFree = deviceStatus?.ramFreeBytes
+            val ramTotal = deviceStatus?.ramTotalBytes
+            // Ca la stocare: inelul arata RAM folosit / total, nu un inel plin fals.
+            val ramUsedFraction = if (ramFree != null && ramTotal != null && ramTotal > 0) {
+                ((ramTotal - ramFree).toFloat() / ramTotal).coerceIn(0f, 1f)
+            } else {
+                0f
+            }
             DonutGauge(
-                // Nu avem RAM total sigur; arătăm liber ca inel plin informativ.
-                fraction = if (ramFree != null) 1f else 0f,
+                fraction = ramUsedFraction,
                 label = stringResource(R.string.dashboard_ram),
-                center = if (ramFree != null) formatFileSize(ramFree) else stringResource(R.string.unavailable),
-                subtitle = "",
+                center = if (ramFree != null && ramTotal != null) {
+                    "${(ramUsedFraction * 100).toInt()}%"
+                } else {
+                    stringResource(R.string.unavailable)
+                },
+                subtitle = if (ramFree != null && ramTotal != null) {
+                    "${formatFileSize(ramTotal - ramFree)} / ${formatFileSize(ramTotal)}"
+                } else {
+                    ""
+                },
                 color = MaterialTheme.colorScheme.tertiary
             )
         }

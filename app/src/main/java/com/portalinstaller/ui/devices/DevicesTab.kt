@@ -502,7 +502,7 @@ internal fun ConnectionSection(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 Text(
-                                    text = formatRam(deviceStatus.ramFreeBytes),
+                                    text = formatRam(deviceStatus.ramFreeBytes, deviceStatus.ramTotalBytes),
                                     style = MaterialTheme.typography.bodySmall,
                                     fontWeight = FontWeight.Medium,
                                     maxLines = 1,
