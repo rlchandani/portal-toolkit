@@ -122,6 +122,7 @@ class ConnectionViewModel(app: Application) : AndroidViewModel(app) {
                     monitor.logEvent(ConnectionEventKind.CONNECTED_WIFI)
                     startMonitor(context)
                     refreshDeviceStatus()
+                    refreshOsUpdateStatus(context)
                 }
                 .onFailure { e ->
                     _connectionState.value = ConnectionState.Error(
@@ -145,6 +146,7 @@ class ConnectionViewModel(app: Application) : AndroidViewModel(app) {
                     monitor.logEvent(ConnectionEventKind.CONNECTED_USB)
                     startMonitor(context)
                     refreshDeviceStatus()
+                    refreshOsUpdateStatus(context)
                 }
                 .onFailure { e ->
                     val msg = e.message ?: context.getString(R.string.error_usb_connection_open_failed)
@@ -211,6 +213,7 @@ class ConnectionViewModel(app: Application) : AndroidViewModel(app) {
                     addHistory(context.getString(R.string.history_reconnected), success = true)
                 }
                 refreshDeviceStatus()
+                refreshOsUpdateStatus(context)
             }
             is MonitorSignal.Healthy -> {
                 _connectionState.value = ConnectionState.Connected

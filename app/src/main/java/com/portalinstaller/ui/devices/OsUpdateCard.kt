@@ -13,7 +13,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -31,10 +30,11 @@ internal fun OsUpdateBlockCard(
     onRefresh: () -> Unit,
     onSetBlocked: (Boolean) -> Unit
 ) {
-    LaunchedEffect(connectionState) {
-        if (connectionState is ConnectionState.Connected) onRefresh()
-    }
-
+    // Incarcarea initiala a starii se face din ConnectionViewModel la
+    // conectare/reconectare, NU aici. Un LaunchedEffect in acest card ar rula
+    // din nou de fiecare data cand cardul reintra in compozitie (ex. dupa ce
+    // e derulat in afara ecranului intr-un LazyColumn), reincarcand starea si
+    // resetand vizual comutatorul. Cardul ramane pur prezentational.
     val isConnected = connectionState is ConnectionState.Connected
     val isLoading = state is OsUpdateState.Loading
     val status = state as? OsUpdateState.Ready

@@ -44,6 +44,8 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -577,7 +579,12 @@ fun MainScreen(
 
             NavHost(
                 navController = navController,
-                startDestination = PortalRoute.START_DESTINATION
+                startDestination = PortalRoute.START_DESTINATION,
+                // Fara fade in/out la schimbarea taburilor: comutare instantanee.
+                enterTransition = { EnterTransition.None },
+                exitTransition = { ExitTransition.None },
+                popEnterTransition = { EnterTransition.None },
+                popExitTransition = { ExitTransition.None }
             ) {
                 composable(PortalRoute.Apps.route) { AppsHubTab(
                     isWifiConnected = isWifiConnected,
