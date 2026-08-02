@@ -125,9 +125,13 @@ internal fun FilesTab(
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             if (browser.entries.isEmpty() && !browser.isLoading) {
                 Text(
-                    text = stringResource(R.string.files_empty),
+                    text = browser.error ?: stringResource(R.string.files_empty),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = if (browser.error != null) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
                     modifier = Modifier.align(Alignment.Center)
                 )
             } else {

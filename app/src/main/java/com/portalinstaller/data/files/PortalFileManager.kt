@@ -13,8 +13,11 @@ import java.io.File
 class PortalFileManager {
 
     suspend fun list(dadb: Dadb, path: String): List<RemoteFile> = withContext(Dispatchers.IO) {
-        val out = dadb.shell("ls -la ${shellQuote(path)}").allOutput
-        LsParser.parse(path, out)
+        // -A include fisierele ascunse (fara . si ..). Verificam codul de iesire:
+        // altfel un director inaccesibil (permisiune refuzata) ar parea gol.
+        val resp = dadb.shell("ls -laA ${shellQuote(path)}")
+        require(resp.exitCode == 0) { resp.allOutput.ifBlank { "ls a esuat pentru $path" } }
+        LsParser.parse(path, resp.allOutput)
     }
 
     suspend fun delete(dadb: Dadb, file: RemoteFile, advancedMode: Boolean) = withContext(Dispatchers.IO) {

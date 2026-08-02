@@ -22,7 +22,9 @@ data class FileBrowserState(
     val entries: List<RemoteFile> = emptyList(),
     val isLoading: Boolean = false,
     val selection: Set<String> = emptySet(),
-    val advancedMode: Boolean = false
+    val advancedMode: Boolean = false,
+    /** Mesaj de eroare la listare (ex. permisiune refuzata), null cand e ok. */
+    val error: String? = null
 )
 
 /** Starea unui transfer de fisiere (pull/push) cu progres per-element. */
@@ -59,6 +61,20 @@ class FileManagerViewModel(app: Application) : AndroidViewModel(app) {
 
     private var transferJob: Job? = null
 
+    init {
+        // Incarcam radacina automat cand apare o conexiune. Inainte, nimic nu
+        // apela open() la deschiderea tabului, deci lista ramanea mereu goala pe
+        // /sdcard. Observand holder-ul (care traieste dincolo de compozitie),
+        // listarea ruleaza exact o data per conexiune, fara LaunchedEffect fragil.
+        viewModelScope.launch {
+            holder.dadb.collect { d ->
+                if (d != null && _browser.value.entries.isEmpty()) {
+                    open(_browser.value.path)
+                }
+            }
+        }
+    }
+
     fun open(path: String) {
         val d = holder.dadb.value
         if (d == null) {
@@ -66,10 +82,28 @@ class FileManagerViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         _notConnected.value = false
-        _browser.value = _browser.value.copy(path = path, isLoading = true, selection = emptySet())
+        _browser.value = _browser.value.copy(
+            path = path, isLoading = true, selection = emptySet(), error = null
+        )
         viewModelScope.launch {
-            val entries = runCatching { fileManager.list(d, path) }.getOrDefault(emptyList())
-            _browser.value = _browser.value.copy(entries = entries, isLoading = false)
+            val result = runCatching { fileManager.list(d, path) }
+            _browser.value = result.fold(
+                onSuccess = { entries ->
+                    _browser.value.copy(entries = entries, isLoading = false, error = null)
+                },
+                onFailure = { t ->
+                    // Nu inghitim eroarea in lista goala: o aratam utilizatorului.
+                    _browser.value.copy(
+                        entries = emptyList(),
+                        isLoading = false,
+                        error = AdbErrors.formatReason(
+                            getApplication(),
+                            t.message,
+                            getApplication<Application>().getString(R.string.error_unknown)
+                        )
+                    )
+                }
+            )
         }
     }
 
