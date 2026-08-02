@@ -44,10 +44,24 @@ data class OsUpdateBlockStatus(
             blockedPackages.containsAll(supportedPackages)
 }
 
-class PortalConnectionManager {
+class PortalConnectionManager(
+    private val connectRetry: ConnectRetry = ConnectRetry()
+) {
 
     companion object {
         const val PORTAL_PHOTOS_DIR = "/sdcard/Pictures/PortalInstaller"
+
+        /** Timeout pentru handshake-ul TCP (ms). */
+        private const val CONNECT_TIMEOUT_MS = 8_000
+
+        /**
+         * Timeout pe citirile socket-ului (ms). Zero (implicit dadb) inseamna
+         * infinit: blocheaza la nesfarsit daca dialogul de autorizare de pe
+         * Portal e deschis sau daca linkul devine „half-dead”. O valoare finita
+         * transforma blocajul intr-un SocketTimeoutException pe care il prindem.
+         */
+        private const val SOCKET_TIMEOUT_MS = 8_000
+
         private val OTA_PACKAGES = listOf(
             "com.facebook.aloha.alohaotasetup",
             "com.facebook.aloha.otaui"
@@ -56,28 +70,51 @@ class PortalConnectionManager {
 
     suspend fun connect(context: Context, ip: String, port: Int = 5555): Result<Dadb> {
         return withContext(Dispatchers.IO) {
-            try {
-                val keyPair = AdbKeyPairProvider.getOrCreate(context)
-                val dadb = Dadb.create(ip, port, keyPair)
-                val identity = readPortalIdentity(dadb)
-                if (!looksLikePortal(identity)) {
-                    runCatching { dadb.close() }
-                    return@withContext Result.failure(
-                        AdbError.NotPortal(
-                            context.getString(
-                                R.string.error_not_portal_device,
-                                ip,
-                                port,
-                                identity.displayName
-                            )
+            connectRetry.run(
+                // Un „nu e un Portal” e definitiv — nu reincercam. Orice altceva
+                // (timeout/socket picat la accept-ul dialogului) merita reincercat.
+                isRetryable = { it !is AdbError.NotPortal },
+                attempt = { attemptConnect(context, ip, port) }
+            )
+        }
+    }
+
+    /**
+     * O singura incercare de conectare TCP. Foloseste timeout-uri finite:
+     * daca dialogul „Permiteti depanarea USB?” e deschis pe Portal, citirea de
+     * auth ar bloca la infinit cu socketTimeout=0 (implicit dadb) — de aceea
+     * cerem [SOCKET_TIMEOUT_MS], iar keepAlive tine socket-ul cald contra
+     * economiei de energie Wi-Fi a Portal-ului.
+     */
+    private fun attemptConnect(context: Context, ip: String, port: Int): Result<Dadb> {
+        return try {
+            val keyPair = AdbKeyPairProvider.getOrCreate(context)
+            val dadb = Dadb.create(
+                ip,
+                port,
+                keyPair,
+                CONNECT_TIMEOUT_MS,
+                SOCKET_TIMEOUT_MS,
+                true
+            )
+            val identity = readPortalIdentity(dadb)
+            if (!looksLikePortal(identity)) {
+                runCatching { dadb.close() }
+                return Result.failure(
+                    AdbError.NotPortal(
+                        context.getString(
+                            R.string.error_not_portal_device,
+                            ip,
+                            port,
+                            identity.displayName
                         )
                     )
-                }
-                Result.success(dadb)
-            } catch (e: Exception) {
-                android.util.Log.e("PortalDebug", "Eroare conectare: ${e.javaClass.name} - ${e.message}", e)
-                Result.failure(AdbError.ConnectionRefused(ip, port, e, context))
+                )
             }
+            Result.success(dadb)
+        } catch (e: Exception) {
+            android.util.Log.e("PortalDebug", "Eroare conectare: ${e.javaClass.name} - ${e.message}", e)
+            Result.failure(AdbError.ConnectionRefused(ip, port, e, context))
         }
     }
 

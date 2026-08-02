@@ -15,10 +15,12 @@ import com.portalinstaller.data.MonitorSignal
 import com.portalinstaller.data.OsUpdateBlockStatus
 import com.portalinstaller.data.UsbPortalHelper
 import com.portalinstaller.data.store.HistoryEntry
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 sealed class ConnectionState {
     data object Disconnected : ConnectionState()
@@ -165,9 +167,16 @@ class ConnectionViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
-    private fun pingConnection(): Boolean {
-        val d = holder.dadb.value ?: return false
-        return runCatching { d.shell("echo ok").output.trim() == "ok" }.getOrDefault(false)
+    /**
+     * Heartbeat. `shell` este I/O de retea, deci TREBUIE rulat pe
+     * [Dispatchers.IO]: pe firul principal ar arunca NetworkOnMainThreadException
+     * la fiecare ping, ar fi inghitit de runCatching si conexiunea ar parea
+     * mereu pierduta (ciclul deconectare/reconectare la ~24s). Cu socketTimeout
+     * finit pe conexiune, un link mort esueaza rapid in loc sa blocheze firul.
+     */
+    private suspend fun pingConnection(): Boolean = withContext(Dispatchers.IO) {
+        val d = holder.dadb.value ?: return@withContext false
+        runCatching { d.shell("echo ok").output.trim() == "ok" }.getOrDefault(false)
     }
 
     private suspend fun attemptReconnect(context: Context): Boolean {
