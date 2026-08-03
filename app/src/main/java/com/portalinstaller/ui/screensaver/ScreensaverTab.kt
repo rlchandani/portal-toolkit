@@ -131,16 +131,6 @@ internal fun ScreensaverTab(
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.weight(1f)
             )
-            AssistChip(
-                onClick = { gridSize = gridSize.next() },
-                label = {
-                    Text(
-                        stringResource(R.string.screensaver_grid_size_label, stringResource(gridSize.labelRes)),
-                        maxLines = 1,
-                        softWrap = false
-                    )
-                }
-            )
             TextButton(onClick = { showFolderPicker = true }, enabled = isWifiConnected) {
                 Text(stringResource(R.string.screensaver_change_folder))
             }
@@ -210,6 +200,19 @@ internal fun ScreensaverTab(
                     onClick = onPickPhotos,
                     enabled = isWifiConnected,
                     label = { Text(stringResource(R.string.screensaver_add_photos), maxLines = 1, softWrap = false) }
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                // Marimea grilei tine de afisare, nu de folder, deci sta langa
+                // „Adauga poze”, nu langa „Schimba folder”.
+                AssistChip(
+                    onClick = { gridSize = gridSize.next() },
+                    label = {
+                        Text(
+                            stringResource(R.string.screensaver_grid_size_label, stringResource(gridSize.labelRes)),
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
                 )
             }
         }
