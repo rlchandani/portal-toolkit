@@ -201,6 +201,11 @@
     <string name="screensaver_preview_close">Inchide</string>
     <string name="screensaver_preview_select">Selecteaza</string>
     <string name="screensaver_preview_deselect">Deselecteaza</string>
+    <string name="screensaver_grid_size_label">Marime: %1$s</string>
+    <string name="screensaver_selected_count">%1$d selectate</string>
+    <string name="screensaver_deselect_all">Deselecteaza tot</string>
+    <string name="screensaver_actions">Actiuni</string>
+    <string name="screensaver_delete_confirm">Stergi %1$d poze (%2$s)? Actiunea nu poate fi anulata.</string>
     <string name="usb_host_unavailable">USB host nu este disponibil pe acest telefon.</string>
     <string name="usb_no_portal_detected">Nu a fost detectat niciun Portal prin USB. Se recomanda un adaptor OTG la telefon; cu un cablu direct pot fi necesare mai multe incercari.</string>
     <string name="usb_portal_ready">Portal detectat prin USB. Il poti conecta acum.</string>

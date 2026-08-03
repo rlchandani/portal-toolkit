@@ -201,6 +201,11 @@
     <string name="screensaver_preview_close">Close</string>
     <string name="screensaver_preview_select">Select</string>
     <string name="screensaver_preview_deselect">Deselect</string>
+    <string name="screensaver_grid_size_label">Size: %1$s</string>
+    <string name="screensaver_selected_count">%1$d selected</string>
+    <string name="screensaver_deselect_all">Deselect all</string>
+    <string name="screensaver_actions">Actions</string>
+    <string name="screensaver_delete_confirm">Delete %1$d photos (%2$s)? This cannot be undone.</string>
     <string name="usb_host_unavailable">USB host is not available on this phone.</string>
     <string name="usb_no_portal_detected">No Portal was detected over USB. An OTG adapter on the phone is recommended; a direct cable may require several attempts.</string>
     <string name="usb_portal_ready">Portal detected over USB. You can connect it now.</string>

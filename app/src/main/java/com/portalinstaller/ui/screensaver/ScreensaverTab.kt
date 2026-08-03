@@ -1,11 +1,11 @@
 package com.portalinstaller.ui.screensaver
 
 import android.graphics.BitmapFactory
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,16 +16,21 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -76,10 +81,17 @@ internal fun ScreensaverTab(
     val context = LocalContext.current
     var showFolderPicker by remember { mutableStateOf(false) }
     var showMove by remember { mutableStateOf(false) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+    var showActionsMenu by remember { mutableStateOf(false) }
     // Marimea miniaturilor: cicleaza Mic (5) / Mediu (3) / Mare (2) coloane.
     var gridSize by remember { mutableStateOf(GridSize.MEDIUM) }
     // Poza deschisa la marime mare (previzualizare); null cand e inchisa.
     var previewFile by remember { mutableStateOf<RemoteFile?>(null) }
+
+    // Modul de selectie e derivat: activ cat timp exista macar o poza selectata.
+    val selectionMode = state.selection.isNotEmpty()
+    val selectedFiles = state.contents.filter { it.path in state.selection }
+    val selectedBytes = selectedFiles.sumOf { it.sizeBytes }
 
     Column(
         modifier = Modifier
@@ -121,7 +133,13 @@ internal fun ScreensaverTab(
             )
             AssistChip(
                 onClick = { gridSize = gridSize.next() },
-                label = { Text(stringResource(gridSize.labelRes), maxLines = 1, softWrap = false) }
+                label = {
+                    Text(
+                        stringResource(R.string.screensaver_grid_size_label, stringResource(gridSize.labelRes)),
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                }
             )
             TextButton(onClick = { showFolderPicker = true }, enabled = isWifiConnected) {
                 Text(stringResource(R.string.screensaver_change_folder))
@@ -147,24 +165,52 @@ internal fun ScreensaverTab(
             modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
         )
 
-        // Bara de actiuni. Derulare orizontala ca cip-urile sa nu se
-        // inghesuie/rupa pe doua randuri cand toate patru sunt afisate.
+        // Bara de actiuni: in mod normal doar „Adauga poze”; in mod selectie
+        // aratam numarul, „Deselecteaza tot” si un meniu ⋮ cu actiunile, ca
+        // butoanele sa nu se reverse in afara ecranului.
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .padding(vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            AssistChip(
-                onClick = onPickPhotos,
-                enabled = isWifiConnected,
-                label = { Text(stringResource(R.string.screensaver_add_photos), maxLines = 1, softWrap = false) }
-            )
-            if (state.selection.isNotEmpty()) {
-                AssistChip(onClick = { viewModel.pullSelected(context) }, label = { Text(stringResource(R.string.screensaver_pull), maxLines = 1, softWrap = false) })
-                AssistChip(onClick = { showMove = true }, label = { Text(stringResource(R.string.screensaver_move), maxLines = 1, softWrap = false) })
-                AssistChip(onClick = { viewModel.deleteSelected(context) }, label = { Text(stringResource(R.string.screensaver_delete), maxLines = 1, softWrap = false) })
+            if (selectionMode) {
+                Text(
+                    text = stringResource(R.string.screensaver_selected_count, state.selection.size),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(onClick = { viewModel.clearSelection() }) {
+                    Text(stringResource(R.string.screensaver_deselect_all))
+                }
+                Box {
+                    IconButton(onClick = { showActionsMenu = true }) {
+                        Text(text = "⋮", style = MaterialTheme.typography.titleLarge)
+                    }
+                    DropdownMenu(
+                        expanded = showActionsMenu,
+                        onDismissRequest = { showActionsMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.screensaver_pull)) },
+                            onClick = { showActionsMenu = false; viewModel.pullSelected(context) }
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.screensaver_move)) },
+                            onClick = { showActionsMenu = false; showMove = true }
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.screensaver_delete)) },
+                            onClick = { showActionsMenu = false; showDeleteConfirm = true }
+                        )
+                    }
+                }
+            } else {
+                AssistChip(
+                    onClick = onPickPhotos,
+                    enabled = isWifiConnected,
+                    label = { Text(stringResource(R.string.screensaver_add_photos), maxLines = 1, softWrap = false) }
+                )
             }
         }
 
@@ -206,11 +252,16 @@ internal fun ScreensaverTab(
                         RemoteThumbnail(
                             file = file,
                             selected = file.path in state.selection,
+                            selectionMode = selectionMode,
                             viewModel = viewModel,
-                            // Apasarea pe poza o deschide mare; bifa din colt
-                            // ramane pentru selectie (salveaza/muta/sterge).
-                            onClick = { previewFile = file },
-                            onToggleSelect = { viewModel.toggleSelect(file.path) }
+                            // In mod selectie, apasarea comuta selectia; altfel
+                            // deschide previzualizarea. Apasarea lunga porneste
+                            // selectia (comportament standard de galerie).
+                            onClick = {
+                                if (selectionMode) viewModel.toggleSelect(file.path)
+                                else previewFile = file
+                            },
+                            onLongClick = { viewModel.toggleSelect(file.path) }
                         )
                     }
                 }
@@ -263,6 +314,31 @@ internal fun ScreensaverTab(
         )
     }
 
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text(stringResource(R.string.screensaver_delete)) },
+            text = {
+                Text(
+                    stringResource(
+                        R.string.screensaver_delete_confirm,
+                        state.selection.size,
+                        formatFileSize(selectedBytes)
+                    )
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDeleteConfirm = false
+                    viewModel.deleteSelected(context)
+                }) { Text(stringResource(R.string.confirm)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) { Text(stringResource(R.string.cancel)) }
+            }
+        )
+    }
+
     if (showMove) {
         var dest by remember { mutableStateOf(state.folder ?: "") }
         AlertDialog(
@@ -289,13 +365,15 @@ internal fun ScreensaverTab(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun RemoteThumbnail(
     file: RemoteFile,
     selected: Boolean,
+    selectionMode: Boolean,
     viewModel: ScreensaverViewModel,
     onClick: () -> Unit,
-    onToggleSelect: () -> Unit
+    onLongClick: () -> Unit
 ) {
     val bitmap by produceState<ImageBitmap?>(initialValue = null, file.path) {
         value = withContext(Dispatchers.IO) {
@@ -318,7 +396,8 @@ private fun RemoteThumbnail(
                 if (selected) MaterialTheme.colorScheme.secondaryContainer
                 else MaterialTheme.colorScheme.surfaceVariant
             )
-            .clickable(onClick = onClick)
+            // Apasare = onClick; apasare lunga = porneste/comuta selectia.
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
     ) {
         val current = bitmap
         if (current != null) {
@@ -329,20 +408,24 @@ private fun RemoteThumbnail(
                 contentScale = ContentScale.Crop
             )
         }
-        // Bifa din colt: comuta selectia fara sa deschida previzualizarea.
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(4.dp)
-                .clip(RoundedCornerShape(50))
-                .background(
-                    if (selected) MaterialTheme.colorScheme.primary
-                    else Color.Black.copy(alpha = 0.35f)
-                )
-                .clickable(onClick = onToggleSelect)
-                .padding(horizontal = 6.dp, vertical = 2.dp)
-        ) {
-            Text(text = if (selected) "✓" else "○", color = Color.White)
+        // Bifa din colt doar in mod selectie. Cerc real: Box patrat (size)
+        // cu colturi complet rotunjite, fara padding asimetric (care il facea
+        // sa arate ca un oval vertical).
+        if (selectionMode) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(4.dp)
+                    .size(24.dp)
+                    .clip(CircleShape)
+                    .background(
+                        if (selected) MaterialTheme.colorScheme.primary
+                        else Color.Black.copy(alpha = 0.35f)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                if (selected) Text(text = "✓", color = Color.White)
+            }
         }
     }
 }
