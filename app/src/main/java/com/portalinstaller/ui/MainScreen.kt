@@ -306,215 +306,34 @@ fun MainScreen(
         }
     }
 
-    // Afiseaza Snackbar pentru stari importante si erori.
-    LaunchedEffect(connectionState) {
-        if (connectionState is ConnectionState.Error) {
-            snackbarHostState.showSnackbar((connectionState as ConnectionState.Error).message)
-            connectionViewModel.clearConnectionError()
-        }
-    }
-
-    LaunchedEffect(installState) {
-        when (val state = installState) {
-            is InstallState.Success -> {
-                snackbarHostState.showSnackbar(context.getString(R.string.snackbar_install_success))
-                appsViewModel.clearInstallState()
-            }
-            is InstallState.Failed -> {
-                snackbarHostState.showSnackbar(state.message)
-                appsViewModel.clearInstallState()
-            }
-            else -> {}
-        }
-    }
-
-    LaunchedEffect(screensaverUploadState) {
-        when (val state = screensaverUploadState) {
-            is UploadSummaryState.Done -> {
-                snackbarHostState.showSnackbar(
-                    context.getString(
-                        R.string.screensaver_upload_summary,
-                        state.uploaded,
-                        state.skipped,
-                        state.failed
-                    )
-                )
-                screensaverViewModel.clearUploadState()
-            }
-            is UploadSummaryState.Failed -> {
-                snackbarHostState.showSnackbar(state.message)
-                screensaverViewModel.clearUploadState()
-            }
-            else -> {}
-        }
-    }
-
-    LaunchedEffect(screensaverNotConnected) {
-        if (screensaverNotConnected) {
-            snackbarHostState.showSnackbar(context.getString(R.string.shell_not_connected))
-            screensaverViewModel.clearNotConnected()
-        }
-    }
-
-    LaunchedEffect(uninstallState) {
-        when (val state = uninstallState) {
-            is UninstallState.Success -> {
-                snackbarHostState.showSnackbar(context.getString(R.string.snackbar_uninstall_success))
-                appsViewModel.clearUninstallState()
-            }
-            is UninstallState.Failed -> {
-                snackbarHostState.showSnackbar(state.message)
-                appsViewModel.clearUninstallState()
-            }
-            else -> {}
-        }
-    }
-
-    LaunchedEffect(wirelessAdbState) {
-        when (val state = wirelessAdbState) {
-            is WirelessAdbState.Success -> {
-                snackbarHostState.showSnackbar(
-                    context.getString(R.string.snackbar_wireless_adb_enabled)
-                )
-                connectionViewModel.clearWirelessAdbState()
-            }
-            is WirelessAdbState.Failed -> {
-                snackbarHostState.showSnackbar(state.message)
-                connectionViewModel.clearWirelessAdbState()
-            }
-            else -> {}
-        }
-    }
-
-    LaunchedEffect(portalPackagesError) {
-        portalPackagesError?.let { message ->
-            snackbarHostState.showSnackbar(message)
-            appsViewModel.clearPortalPackagesError()
-        }
-    }
-
-    LaunchedEffect(portalDiscoveryState) {
-        if (portalDiscoveryState is PortalDiscoveryState.Failed) {
-            snackbarHostState.showSnackbar(
-                (portalDiscoveryState as PortalDiscoveryState.Failed).message
-            )
-            connectionViewModel.clearPortalDiscoveryState()
-        }
-    }
-
-    LaunchedEffect(backupState) {
-        when (val state = backupState) {
-            is BackupState.Success -> {
-                snackbarHostState.showSnackbar(state.message)
-                backupViewModel.clearBackupState()
-            }
-            is BackupState.Failed -> {
-                snackbarHostState.showSnackbar(state.message)
-                backupViewModel.clearBackupState()
-            }
-            else -> Unit
-        }
-    }
-
-    LaunchedEffect(profileApplyState) {
-        when (val state = profileApplyState) {
-            is ProfileApplyState.Done -> {
-                val message = if (state.failed.isEmpty()) {
-                    context.getString(
-                        R.string.profile_apply_success,
-                        state.profileName,
-                        state.succeeded.size
-                    )
-                } else {
-                    context.getString(
-                        R.string.profile_apply_partial,
-                        state.profileName,
-                        state.succeeded.size,
-                        state.failed.size
-                    )
-                }
-                snackbarHostState.showSnackbar(message)
-                appsViewModel.clearProfileApplyState()
-            }
-            is ProfileApplyState.Failed -> {
-                snackbarHostState.showSnackbar(state.message)
-                appsViewModel.clearProfileApplyState()
-            }
-            else -> Unit
-        }
-    }
-
-    LaunchedEffect(appActionState) {
-        when (val state = appActionState) {
-            is AppActionState.Done -> {
-                snackbarHostState.showSnackbar(state.message)
-                appsViewModel.clearAppActionState()
-            }
-            is AppActionState.Failed -> {
-                snackbarHostState.showSnackbar(state.message)
-                appsViewModel.clearAppActionState()
-            }
-            else -> Unit
-        }
-    }
-
-    LaunchedEffect(powerControlState) {
-        when (val state = powerControlState) {
-            is PowerControlState.Success -> {
-                snackbarHostState.showSnackbar(state.message)
-                connectionViewModel.clearPowerControlState()
-            }
-            is PowerControlState.Failed -> {
-                snackbarHostState.showSnackbar(state.message)
-                connectionViewModel.clearPowerControlState()
-            }
-            else -> Unit
-        }
-    }
-
-    LaunchedEffect(captureSaveState) {
-        when (val state = captureSaveState) {
-            is CaptureSaveState.Saved -> {
-                snackbarHostState.showSnackbar(context.getString(R.string.capture_saved))
-                captureViewModel.clearSaveState()
-            }
-            is CaptureSaveState.Failed -> {
-                snackbarHostState.showSnackbar(state.message)
-                captureViewModel.clearSaveState()
-            }
-            else -> Unit
-        }
-    }
-
-    LaunchedEffect(captureNotConnected) {
-        if (captureNotConnected) {
-            snackbarHostState.showSnackbar(context.getString(R.string.shell_not_connected))
-            captureViewModel.clearNotConnected()
-        }
-    }
-
-    LaunchedEffect(fileTransferState) {
-        when (val state = fileTransferState) {
-            is FileTransferState.Done -> {
-                snackbarHostState.showSnackbar(
-                    context.getString(R.string.files_transfer_done, state.pulled, state.pushed)
-                )
-                fileManagerViewModel.clearTransferState()
-            }
-            is FileTransferState.Failed -> {
-                snackbarHostState.showSnackbar(state.message)
-                fileManagerViewModel.clearTransferState()
-            }
-            else -> Unit
-        }
-    }
-
-    LaunchedEffect(fileNotConnected) {
-        if (fileNotConnected) {
-            snackbarHostState.showSnackbar(context.getString(R.string.shell_not_connected))
-            fileManagerViewModel.clearNotConnected()
-        }
-    }
+    // Toate efectele care traduc starile ViewModel in Snackbar sunt grupate in
+    // MainScreenSnackbarEffects (fara UI proprie), ca sa tinem acest fisier focusat.
+    MainScreenSnackbarEffects(
+        snackbarHostState = snackbarHostState,
+        context = context,
+        connectionState = connectionState,
+        installState = installState,
+        uninstallState = uninstallState,
+        screensaverUploadState = screensaverUploadState,
+        screensaverNotConnected = screensaverNotConnected,
+        wirelessAdbState = wirelessAdbState,
+        portalPackagesError = portalPackagesError,
+        portalDiscoveryState = portalDiscoveryState,
+        backupState = backupState,
+        profileApplyState = profileApplyState,
+        appActionState = appActionState,
+        powerControlState = powerControlState,
+        captureSaveState = captureSaveState,
+        captureNotConnected = captureNotConnected,
+        fileTransferState = fileTransferState,
+        fileNotConnected = fileNotConnected,
+        connectionViewModel = connectionViewModel,
+        appsViewModel = appsViewModel,
+        backupViewModel = backupViewModel,
+        screensaverViewModel = screensaverViewModel,
+        captureViewModel = captureViewModel,
+        fileManagerViewModel = fileManagerViewModel
+    )
 
     Scaffold(
         topBar = {
