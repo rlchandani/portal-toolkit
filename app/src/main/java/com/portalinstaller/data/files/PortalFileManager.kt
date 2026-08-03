@@ -1,5 +1,6 @@
 package com.portalinstaller.data.files
 
+import com.portalinstaller.data.adb.shellQuote
 import dadb.Dadb
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -29,7 +30,7 @@ class PortalFileManager {
 
     suspend fun rename(dadb: Dadb, file: RemoteFile, newName: String, advancedMode: Boolean) = withContext(Dispatchers.IO) {
         PathSafety.requireAllowed(file.path, advancedMode)
-        val dest = "${file.path.substringBeforeLast('/')}/$newName"
+        val dest = RemotePaths.renameDest(file.path, newName)
         val resp = dadb.shell("mv ${shellQuote(file.path)} ${shellQuote(dest)}")
         require(resp.exitCode == 0) { resp.allOutput }
     }
@@ -37,13 +38,13 @@ class PortalFileManager {
     suspend fun move(dadb: Dadb, file: RemoteFile, destDir: String, advancedMode: Boolean) = withContext(Dispatchers.IO) {
         PathSafety.requireAllowed(file.path, advancedMode)
         PathSafety.requireAllowed(destDir, advancedMode)
-        val dest = "${destDir.trimEnd('/')}/${file.name}"
+        val dest = RemotePaths.moveDest(destDir, file.name)
         val resp = dadb.shell("mv ${shellQuote(file.path)} ${shellQuote(dest)}")
         require(resp.exitCode == 0) { resp.allOutput }
     }
 
     suspend fun mkdir(dadb: Dadb, parentPath: String, name: String, advancedMode: Boolean) = withContext(Dispatchers.IO) {
-        val dest = "${parentPath.trimEnd('/')}/$name"
+        val dest = RemotePaths.join(parentPath, name)
         PathSafety.requireAllowed(dest, advancedMode)
         val resp = dadb.shell("mkdir ${shellQuote(dest)}")
         require(resp.exitCode == 0) { resp.allOutput }
@@ -60,7 +61,7 @@ class PortalFileManager {
     suspend fun push(dadb: Dadb, localFile: File, destDir: String, advancedMode: Boolean): String =
         withContext(Dispatchers.IO) {
             PathSafety.requireAllowed(destDir, advancedMode)
-            val remote = "${destDir.trimEnd('/')}/${localFile.name}"
+            val remote = RemotePaths.join(destDir, localFile.name)
             try {
                 dadb.push(localFile, remote)
             } catch (e: Exception) {
@@ -70,6 +71,4 @@ class PortalFileManager {
             }
             remote
         }
-
-    private fun shellQuote(arg: String): String = "'" + arg.replace("'", "'\\''") + "'"
 }

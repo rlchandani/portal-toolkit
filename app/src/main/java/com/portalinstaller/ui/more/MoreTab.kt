@@ -63,7 +63,7 @@ internal fun HistoryTab(history: List<HistoryEntry>) {
         contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        items(history) { entry ->
+        items(history, key = { "${it.timestamp}-${it.description}" }) { entry ->
             Card(modifier = Modifier.fillMaxWidth()) {
                 Row(
                     modifier = Modifier

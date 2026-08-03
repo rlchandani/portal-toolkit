@@ -90,8 +90,11 @@ internal fun ScreensaverTab(
 
     // Modul de selectie e derivat: activ cat timp exista macar o poza selectata.
     val selectionMode = state.selection.isNotEmpty()
-    val selectedFiles = state.contents.filter { it.path in state.selection }
-    val selectedBytes = selectedFiles.sumOf { it.sizeBytes }
+    // Memoizam filtrul + suma pe (continut, selectie): altfel se recalculeaza
+    // la fiecare recompozitie, chiar si cand nimic relevant nu s-a schimbat.
+    val selectedBytes = remember(state.contents, state.selection) {
+        state.contents.filter { it.path in state.selection }.sumOf { it.sizeBytes }
+    }
 
     Column(
         modifier = Modifier

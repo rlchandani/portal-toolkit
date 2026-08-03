@@ -1,5 +1,6 @@
 package com.portalinstaller.data
 
+import com.portalinstaller.data.adb.shellQuote
 import com.portalinstaller.data.screensaver.ImageFolder
 import com.portalinstaller.data.screensaver.ImageFolderScanner
 import dadb.Dadb
@@ -56,6 +57,4 @@ class PortalScreensaverManager {
         val availKib = cols.getOrNull(3)?.toLongOrNull() ?: 0L
         availKib * 1024L
     }
-
-    private fun shellQuote(arg: String): String = "'" + arg.replace("'", "'\\''") + "'"
 }

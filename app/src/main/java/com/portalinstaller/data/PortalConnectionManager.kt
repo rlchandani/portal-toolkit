@@ -3,6 +3,7 @@ package com.portalinstaller.data
 import android.content.Context
 import android.content.pm.PackageManager
 import com.portalinstaller.R
+import com.portalinstaller.data.adb.shellQuote
 import com.portalinstaller.data.apps.AppMetadataCache
 import dadb.Dadb
 import kotlinx.coroutines.Dispatchers
@@ -148,7 +149,7 @@ class PortalConnectionManager(
                     AdbError.InstallFailed(
                         context.getString(
                             R.string.error_install_failed_reason,
-                            formatAdbReason(
+                            AdbErrors.formatReason(
                                 context,
                                 "${e.javaClass.simpleName}: ${e.message}",
                                 context.getString(R.string.error_install_failed_generic)
@@ -168,42 +169,11 @@ class PortalConnectionManager(
             } catch (e: Exception) {
                 Result.failure(
                     AdbError.InstallFailed(
-                        formatAdbReason(
+                        AdbErrors.formatReason(
                             context,
                             e.message,
                             context.getString(R.string.error_install_failed_generic)
                         )
-                    )
-                )
-            }
-        }
-    }
-
-    suspend fun pushPhoto(
-        context: Context,
-        dadb: Dadb,
-        localFile: File,
-        remoteDir: String = PORTAL_PHOTOS_DIR
-    ): Result<Unit> {
-        return withContext(Dispatchers.IO) {
-            try {
-                dadb.shell("mkdir -p ${shellQuote(remoteDir)}")
-                val remotePath = "$remoteDir/${localFile.name}"
-                dadb.push(localFile, remotePath)
-                dadb.shell(
-                    "am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d ${shellQuote("file://$remotePath")}"
-                )
-                Result.success(Unit)
-            } catch (e: Exception) {
-                Result.failure(
-                    AdbError.UploadFailed(
-                        localFile.name,
-                        formatAdbReason(
-                            context,
-                            e.message,
-                            context.getString(R.string.error_unknown)
-                        ),
-                        context
                     )
                 )
             }
@@ -227,7 +197,7 @@ class PortalConnectionManager(
             } catch (e: Exception) {
                 Result.failure(
                     AdbError.Unknown(
-                        formatAdbReason(
+                        AdbErrors.formatReason(
                             context,
                             e.message,
                             context.getString(R.string.error_list_portal_apps)
@@ -258,7 +228,7 @@ class PortalConnectionManager(
             } catch (e: Exception) {
                 Result.failure(
                     AdbError.Unknown(
-                        formatAdbReason(
+                        AdbErrors.formatReason(
                             context,
                             e.message,
                             context.getString(R.string.error_list_portal_apps)
@@ -272,13 +242,13 @@ class PortalConnectionManager(
     suspend fun uninstallApp(context: Context, dadb: Dadb, packageName: String): Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
-                val output = dadb.shell("pm uninstall $packageName").output
+                val output = dadb.shell("pm uninstall ${shellQuote(packageName)}").output
                 if (output.contains("Success", ignoreCase = true)) {
                     Result.success(Unit)
                 } else {
                     Result.failure(
                         AdbError.InstallFailed(
-                            formatAdbReason(
+                            AdbErrors.formatReason(
                                 context,
                                 output.trim(),
                                 context.getString(R.string.error_uninstall_failed_generic)
@@ -289,7 +259,7 @@ class PortalConnectionManager(
             } catch (e: Exception) {
                 Result.failure(
                     AdbError.InstallFailed(
-                        formatAdbReason(
+                        AdbErrors.formatReason(
                             context,
                             e.message,
                             context.getString(R.string.error_uninstall_failed_generic)
@@ -356,7 +326,7 @@ class PortalConnectionManager(
             } catch (e: Exception) {
                 Result.failure(
                     AdbError.Unknown(
-                        formatAdbReason(
+                        AdbErrors.formatReason(
                             context,
                             e.message,
                             context.getString(R.string.error_enable_wireless_adb)
@@ -458,10 +428,16 @@ class PortalConnectionManager(
             val labelFile = AppMetadataCache.labelFile(cacheDir, key)
 
             if (AppMetadataCache.isCached(cacheDir, key)) {
-                return@withContext app.copy(
-                    label = labelFile.readText().ifBlank { app.name },
-                    iconCachePath = iconFile.absolutePath
-                )
+                // Contract: intoarce app neschimbat daca ceva pica. Fisierul de
+                // eticheta poate fi golit/sters intre isCached si readText (evict
+                // de cache), deci il citim tot sub runCatching, ca ramura de
+                // extragere de mai jos.
+                return@withContext runCatching {
+                    app.copy(
+                        label = labelFile.readText().ifBlank { app.name },
+                        iconCachePath = iconFile.absolutePath
+                    )
+                }.getOrDefault(app)
             }
 
             runCatching {
@@ -473,25 +449,31 @@ class PortalConnectionManager(
                     ?: return@runCatching app
 
                 val tempApk = File(cacheDir, "meta_${key.replace('/', '_')}.apk")
-                dadb.pull(tempApk, apkPath)
+                // finally: sterge APK-ul temporar pe orice iesire (inclusiv daca
+                // pull sau parsarea arunca), altfel cacheDir se umple cu meta_*.apk
+                // versionate pe Wi-Fi instabil.
+                try {
+                    dadb.pull(tempApk, apkPath)
 
-                val pm = context.packageManager
-                val info = pm.getPackageArchiveInfo(tempApk.absolutePath, 0)
-                val appInfo = info?.applicationInfo
-                if (appInfo != null) {
-                    appInfo.sourceDir = tempApk.absolutePath
-                    appInfo.publicSourceDir = tempApk.absolutePath
-                    val label = appInfo.loadLabel(pm).toString().ifBlank { app.name }
-                    labelFile.writeText(label)
-                    runCatching { writeIconPng(appInfo.loadIcon(pm), iconFile) }
+                    val pm = context.packageManager
+                    val info = pm.getPackageArchiveInfo(tempApk.absolutePath, 0)
+                    val appInfo = info?.applicationInfo
+                    if (appInfo != null) {
+                        appInfo.sourceDir = tempApk.absolutePath
+                        appInfo.publicSourceDir = tempApk.absolutePath
+                        val label = appInfo.loadLabel(pm).toString().ifBlank { app.name }
+                        labelFile.writeText(label)
+                        runCatching { writeIconPng(appInfo.loadIcon(pm), iconFile) }
+                        app.copy(
+                            label = label,
+                            iconCachePath = if (iconFile.exists()) iconFile.absolutePath else null
+                        )
+                    } else {
+                        app
+                    }
+                } finally {
                     tempApk.delete()
-                    return@runCatching app.copy(
-                        label = label,
-                        iconCachePath = if (iconFile.exists()) iconFile.absolutePath else null
-                    )
                 }
-                tempApk.delete()
-                app
             }.getOrDefault(app)
         }
     }
@@ -500,11 +482,16 @@ class PortalConnectionManager(
         val width = drawable.intrinsicWidth.takeIf { it > 0 } ?: 96
         val height = drawable.intrinsicHeight.takeIf { it > 0 } ?: 96
         val bitmap = android.graphics.Bitmap.createBitmap(width, height, android.graphics.Bitmap.Config.ARGB_8888)
-        val canvas = android.graphics.Canvas(bitmap)
-        drawable.setBounds(0, 0, width, height)
-        drawable.draw(canvas)
-        dest.outputStream().use { out ->
-            bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 90, out)
+        try {
+            val canvas = android.graphics.Canvas(bitmap)
+            drawable.setBounds(0, 0, width, height)
+            drawable.draw(canvas)
+            dest.outputStream().use { out ->
+                bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 90, out)
+            }
+        } finally {
+            // Elibereaza memoria nativa imediat; nu ne bazam pe GC pe API 29 low-RAM.
+            bitmap.recycle()
         }
     }
 
@@ -512,7 +499,10 @@ class PortalConnectionManager(
     suspend fun forceStopApp(context: Context, dadb: Dadb, packageName: String): Result<Unit> =
         withContext(Dispatchers.IO) {
             runCatching {
-                dadb.shell("am force-stop ${shellQuote(packageName)}")
+                val resp = dadb.shell("am force-stop ${shellQuote(packageName)}")
+                require(resp.exitCode == 0) {
+                    resp.allOutput.ifBlank { context.getString(R.string.error_unknown) }
+                }
                 Unit
             }
         }
@@ -539,9 +529,9 @@ class PortalConnectionManager(
                 }
                 before.supportedPackages.forEach { packageName ->
                     val command = if (blocked) {
-                        "pm disable-user --user 0 $packageName"
+                        "pm disable-user --user 0 ${shellQuote(packageName)}"
                     } else {
-                        "pm enable --user 0 $packageName"
+                        "pm enable --user 0 ${shellQuote(packageName)}"
                     }
                     val output = dadb.shell(command).allOutput.trim()
                     require(!output.contains("Exception", ignoreCase = true)) {
@@ -569,7 +559,8 @@ class PortalConnectionManager(
         return withContext(Dispatchers.IO) {
             runCatching {
                 val keyevent = if (on) 224 else 223
-                dadb.shell("input keyevent $keyevent")
+                val resp = dadb.shell("input keyevent $keyevent")
+                require(resp.exitCode == 0) { resp.allOutput.ifBlank { "input keyevent a esuat" } }
                 Unit
             }
         }
@@ -628,10 +619,6 @@ class PortalConnectionManager(
         }
     }
 
-    private fun shellQuote(value: String): String {
-        return "'" + value.replace("'", "'\\''") + "'"
-    }
-
     private fun parseDf(output: String): Pair<Long, Long>? {
         val dataLine = output.lines().drop(1).firstOrNull { it.isNotBlank() } ?: return null
         val columns = dataLine.trim().split(Regex("\\s+"))
@@ -660,10 +647,6 @@ class PortalConnectionManager(
 
         return null
     }
-
-    // Delegat catre formatterul partajat; pastrat privat pentru call-site-urile existente.
-    private fun formatAdbReason(context: Context, rawMessage: String?, fallback: String): String =
-        AdbErrors.formatReason(context, rawMessage, fallback)
 }
 
 sealed class AdbError(override val message: String) : Exception(message) {
@@ -677,9 +660,6 @@ sealed class AdbError(override val message: String) : Exception(message) {
     data class InstallFailed(val reason: String) : AdbError(reason)
 
     data class NotPortal(val reason: String) : AdbError(reason)
-
-    data class UploadFailed(val fileName: String, val reason: String, val context: Context) :
-        AdbError(context.getString(R.string.error_upload_failed_reason, fileName, reason))
 
     data class Unknown(val detail: String) : AdbError(detail)
 }

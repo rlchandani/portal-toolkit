@@ -32,13 +32,14 @@ import androidx.compose.ui.unit.dp
 import com.portalinstaller.R
 import com.portalinstaller.ui.common.SectionCard
 import com.portalinstaller.data.UsbPortalStatus
+import com.portalinstaller.viewmodel.ConnectionMethod
 import com.portalinstaller.viewmodel.ConnectionState
 import com.portalinstaller.viewmodel.WirelessAdbState
 
 @Composable
 internal fun WirelessAdbGuideTab(
     connectionState: ConnectionState,
-    connectionMethod: String?,
+    connectionMethod: ConnectionMethod?,
     usbStatus: UsbPortalStatus,
     wirelessAdbState: WirelessAdbState,
     port: String,
@@ -50,7 +51,7 @@ internal fun WirelessAdbGuideTab(
     val context = LocalContext.current
     var showDiagnostics by remember { mutableStateOf(false) }
     val isUsbConnected = connectionState is ConnectionState.Connected &&
-        connectionMethod == context.getString(R.string.connection_method_usb)
+        connectionMethod == ConnectionMethod.USB
     val isConnecting = connectionState is ConnectionState.Connecting
     val isEnabling = wirelessAdbState is WirelessAdbState.Enabling
     val currentStep = when {

@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.os.Build
 import com.portalinstaller.R
+import com.portalinstaller.data.adb.shellQuote
 import dadb.Dadb
 import org.json.JSONArray
 import org.json.JSONObject
@@ -472,9 +473,5 @@ class PortalBackupManager {
 
     private fun isSafeSettingValue(value: String): Boolean {
         return value.length <= 64 && value.matches(Regex("[A-Za-z0-9._+-]+"))
-    }
-
-    private fun shellQuote(value: String): String {
-        return "'" + value.replace("'", "'\\''") + "'"
     }
 }

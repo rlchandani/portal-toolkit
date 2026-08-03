@@ -136,6 +136,10 @@ class AppsViewModel(app: Application) : AndroidViewModel(app) {
     // Retinem Job-urile operatiunilor lungi ca sa le putem anula din UI.
     private var installJob: Job? = null
     private var profileApplyJob: Job? = null
+    // Incarcarea + imbogatirea listei Portal: o retinem ca sa anulam o rulare
+    // veche cand pornim una noua sau cand conexiunea se schimba (altfel doua
+    // pase scriu concurent in _portalApps).
+    private var portalLoadJob: Job? = null
 
     fun setPortalAppsSort(sort: PortalAppsSort) {
         _portalAppsSort.value = sort
@@ -154,7 +158,10 @@ class AppsViewModel(app: Application) : AndroidViewModel(app) {
 
     fun loadInstalledApps(context: Context) {
         viewModelScope.launch {
-            _installedApps.value = connectionManager.loadInstalledApps(context)
+            // PackageManager poate arunca (ex. TransactionTooLarge pe liste mari);
+            // fara runCatching coroutina moare in tacere si lista ramane goala.
+            runCatching { connectionManager.loadInstalledApps(context) }
+                .onSuccess { _installedApps.value = it }
         }
     }
 
@@ -167,6 +174,9 @@ class AppsViewModel(app: Application) : AndroidViewModel(app) {
 
     fun installApp(context: Context, app: InstalledApp) {
         val d = holder.dadb.value ?: return
+        // Garda de reintrare: un dublu-tap sau un apel programatic poate ajunge
+        // aici inainte ca UI-ul sa dezactiveze butonul. Nu pornim o a doua instalare.
+        if (_installState.value is InstallState.Installing) return
         if (_profileApplyState.value is ProfileApplyState.Applying) {
             _installState.value = InstallState.Failed(context.getString(R.string.profile_install_busy))
             return
@@ -218,6 +228,8 @@ class AppsViewModel(app: Application) : AndroidViewModel(app) {
 
     fun installApkFromUri(context: Context, uri: Uri) {
         val d = holder.dadb.value ?: return
+        // Aceeasi garda de reintrare ca la installApp.
+        if (_installState.value is InstallState.Installing) return
         if (_profileApplyState.value is ProfileApplyState.Applying) {
             _installState.value = InstallState.Failed(context.getString(R.string.profile_install_busy))
             return
@@ -286,7 +298,9 @@ class AppsViewModel(app: Application) : AndroidViewModel(app) {
             _portalPackagesError.value = context.getString(R.string.error_connect_first_for_portal_apps)
             return
         }
-        viewModelScope.launch {
+        // Anulam o incarcare anterioara ca sa nu se suprapuna scrierile in _portalApps.
+        portalLoadJob?.cancel()
+        portalLoadJob = viewModelScope.launch {
             _isLoadingPortalPackages.value = true
             _portalPackagesError.value = null
             connectionManager.listPortalPackages(context, d)
@@ -296,15 +310,13 @@ class AppsViewModel(app: Application) : AndroidViewModel(app) {
                     _portalPackagesError.value = null
                     _isLoadingPortalPackages.value = false
 
-                    // Imbogatirea este deliberat separata: lista de pachete trebuie
-                    // sa apara chiar daca metadatele unei aplicatii sunt lente.
-                    viewModelScope.launch {
-                        connectionManager.listPortalApps(context, d)
-                            .onSuccess { details ->
-                                _portalApps.value = sortPortalApps(details, _portalAppsSort.value)
-                                enrichPortalApps(context, d)
-                            }
-                    }
+                    // Imbogatirea ruleaza in acelasi Job (nu un launch orfan), ca
+                    // anularea incarcarii sa opreasca si detaliile + iconitele.
+                    connectionManager.listPortalApps(context, d)
+                        .onSuccess { details ->
+                            _portalApps.value = sortPortalApps(details, _portalAppsSort.value)
+                            enrichPortalApps(context, d)
+                        }
                 }
                 .onFailure { e ->
                     _portalApps.value = emptyList()
@@ -436,10 +448,13 @@ class AppsViewModel(app: Application) : AndroidViewModel(app) {
      * ce APK-urile sunt descarcate si puse in cache. Actualizeaza fluxul dupa
      * fiecare aplicatie, ca UI-ul sa afiseze iconitele progresiv.
      */
-    private fun enrichPortalApps(context: Context, d: Dadb) {
-        viewModelScope.launch(Dispatchers.IO) {
+    private suspend fun enrichPortalApps(context: Context, d: Dadb) {
+        withContext(Dispatchers.IO) {
             val current = _portalApps.value
             current.forEach { app ->
+                // isActive respecta anularea portalLoadJob-ului: cand pornim o
+                // noua incarcare, aceasta bucla se opreste curat.
+                if (!isActive) return@forEach
                 val enriched = connectionManager.enrichPortalApp(context, d, app)
                 if (enriched != app) {
                     _portalApps.value = sortPortalApps(
@@ -524,6 +539,8 @@ class AppsViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Resetează starea dependentă de conexiune când Portal-ul se deconectează. */
     fun onDisconnected() {
+        portalLoadJob?.cancel()
+        portalLoadJob = null
         _installState.value = InstallState.Idle
         _profileApplyState.value = ProfileApplyState.Idle
         _portalPackagesError.value = null

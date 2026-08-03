@@ -55,6 +55,7 @@ import com.portalinstaller.data.DiscoveredPortal
 import com.portalinstaller.data.store.SavedPortal
 import com.portalinstaller.data.UsbPortalStatus
 import com.portalinstaller.viewmodel.BackupState
+import com.portalinstaller.viewmodel.ConnectionMethod
 import com.portalinstaller.viewmodel.ConnectionState
 import com.portalinstaller.viewmodel.OsUpdateState
 import com.portalinstaller.viewmodel.PortalDiscoveryState
@@ -65,7 +66,7 @@ internal fun DevicesTab(
     ipAddress: String,
     port: String,
     connectionState: ConnectionState,
-    connectionMethod: String?,
+    connectionMethod: ConnectionMethod?,
     deviceStatus: DeviceStatus?,
     savedPortals: List<SavedPortal>,
     usbStatus: UsbPortalStatus,
@@ -395,7 +396,7 @@ internal fun ConnectionSection(
     ipAddress: String,
     port: String,
     connectionState: ConnectionState,
-    connectionMethod: String?,
+    connectionMethod: ConnectionMethod?,
     deviceStatus: DeviceStatus?,
     onIpChange: (String) -> Unit,
     onPortChange: (String) -> Unit,
@@ -471,7 +472,8 @@ internal fun ConnectionSection(
                     if (deviceStatus != null) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = connectionMethod ?: stringResource(R.string.connection_method_adb),
+                            text = connectionMethod?.let { stringResource(it.labelRes) }
+                                ?: stringResource(R.string.connection_method_adb),
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.primary

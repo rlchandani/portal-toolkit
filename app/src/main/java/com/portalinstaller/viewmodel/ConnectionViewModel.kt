@@ -22,6 +22,16 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/**
+ * Metoda de conectare curenta. Inainte tineam un String localizat si il comparam
+ * cu getString(...) prin egalitate — o simpla editare de traducere rupea logica
+ * in tacere. Enum-ul tine adevarul intern; UI-ul rezolva eticheta prin [labelRes].
+ */
+enum class ConnectionMethod(val labelRes: Int) {
+    WIFI(R.string.connection_method_wifi),
+    USB(R.string.connection_method_usb)
+}
+
 sealed class ConnectionState {
     data object Disconnected : ConnectionState()
     data object Connecting : ConnectionState()
@@ -85,8 +95,8 @@ class ConnectionViewModel(app: Application) : AndroidViewModel(app) {
     private val _connectionState = MutableStateFlow<ConnectionState>(ConnectionState.Disconnected)
     val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
 
-    private val _connectionMethod = MutableStateFlow<String?>(null)
-    val connectionMethod: StateFlow<String?> = _connectionMethod.asStateFlow()
+    private val _connectionMethod = MutableStateFlow<ConnectionMethod?>(null)
+    val connectionMethod: StateFlow<ConnectionMethod?> = _connectionMethod.asStateFlow()
 
     private val _wirelessAdbState = MutableStateFlow<WirelessAdbState>(WirelessAdbState.Idle)
     val wirelessAdbState: StateFlow<WirelessAdbState> = _wirelessAdbState.asStateFlow()
@@ -108,13 +118,16 @@ class ConnectionViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun connect(context: Context, ip: String, port: Int = 5555) {
+        // Setam sentinela SINCRON, inainte de launch: altfel doua apeluri rapide
+        // trec amandoua de garda (starea Connecting se scria abia in coroutina),
+        // lansand doua conectari si scapand un Dadb neinchis.
         if (_connectionState.value is ConnectionState.Connecting) return
+        _connectionState.value = ConnectionState.Connecting
         viewModelScope.launch {
-            _connectionState.value = ConnectionState.Connecting
             connectionManager.connect(context, ip, port)
                 .onSuccess { d ->
                     holder.set(d, context.getString(R.string.connection_method_wifi))
-                    _connectionMethod.value = context.getString(R.string.connection_method_wifi)
+                    _connectionMethod.value = ConnectionMethod.WIFI
                     _connectionState.value = ConnectionState.Connected
                     lastWifiHost = ip
                     lastWifiPort = port
@@ -133,13 +146,14 @@ class ConnectionViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun connectUsb(context: Context) {
+        // Aceeasi sentinela sincrona ca la connect() pentru a evita TOCTOU.
         if (_connectionState.value is ConnectionState.Connecting) return
+        _connectionState.value = ConnectionState.Connecting
         viewModelScope.launch {
-            _connectionState.value = ConnectionState.Connecting
             UsbPortalHelper.connect(context)
                 .onSuccess { d ->
                     holder.set(d, context.getString(R.string.connection_method_usb))
-                    _connectionMethod.value = context.getString(R.string.connection_method_usb)
+                    _connectionMethod.value = ConnectionMethod.USB
                     _connectionState.value = ConnectionState.Connected
                     isUsbConnection = true
                     addHistory(context.getString(R.string.history_connected_usb), success = true)
@@ -239,7 +253,10 @@ class ConnectionViewModel(app: Application) : AndroidViewModel(app) {
     private fun refreshDeviceStatus() {
         val d = holder.dadb.value ?: return
         viewModelScope.launch {
-            _deviceStatus.value = connectionManager.getDeviceStatus(d)
+            // Un link mort poate arunca in mijlocul citirii getprop; fara
+            // runCatching coroutina moare si dashboard-ul ramane inghetat.
+            runCatching { connectionManager.getDeviceStatus(d) }
+                .onSuccess { _deviceStatus.value = it }
         }
     }
 

@@ -177,9 +177,11 @@ internal fun InstalledAppsTab(
         Spacer(modifier = Modifier.height(6.dp))
 
         if (selectedUri != null) {
-            val fileName = remember(selectedUri) {
-                ContentUriHelper.getDisplayName(context, selectedUri)
-                    ?: context.getString(R.string.unknown_apk_file)
+            // Interogarea ContentResolver e pe IO (suspend), nu in compozitie;
+            // pana se rezolva aratam numele implicit.
+            val fallbackName = stringResource(R.string.unknown_apk_file)
+            val fileName by produceState(fallbackName, selectedUri) {
+                value = ContentUriHelper.getDisplayName(context, selectedUri) ?: fallbackName
             }
 
             SectionCard {

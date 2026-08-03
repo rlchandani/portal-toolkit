@@ -3,6 +3,7 @@ package com.portalinstaller.data
 import dadb.Dadb
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -21,6 +22,11 @@ class NotConnectedException : IllegalStateException("Nu există o conexiune ADB 
  */
 class ConnectionHolder {
 
+    // Un singur scope la nivel de aplicatie pentru inchiderile in fundal, in loc
+    // sa cream un CoroutineScope orfan (fara owner) la fiecare set(). Holder-ul e
+    // singleton in AppContainer, deci scope-ul traieste cat procesul.
+    private val closeScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     private val _dadb = MutableStateFlow<Dadb?>(null)
     val dadb: StateFlow<Dadb?> = _dadb.asStateFlow()
 
@@ -33,7 +39,7 @@ class ConnectionHolder {
         _dadb.value = dadb
         _deviceLabel.value = label
         if (previous != null && previous !== dadb) {
-            CoroutineScope(Dispatchers.IO).launch {
+            closeScope.launch {
                 runCatching { previous.close() }
             }
         }

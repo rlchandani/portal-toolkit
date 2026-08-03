@@ -153,6 +153,10 @@ class CaptureViewModel(app: Application) : AndroidViewModel(app) {
 
     fun onDisconnected() {
         stopLive()
+        _notConnected.value = false
+        // Golim ultimul cadru: apartine sesiunii vechi, nu il aratam la reconectare.
+        _frame.value = null
+        _saveState.value = CaptureSaveState.Idle
     }
 
     override fun onCleared() {

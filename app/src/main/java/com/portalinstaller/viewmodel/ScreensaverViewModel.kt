@@ -172,6 +172,9 @@ class ScreensaverViewModel(app: Application) : AndroidViewModel(app) {
     fun uploadPhotos(context: Context, uris: List<Uri>, overrideDuplicates: Set<String> = emptySet()) {
         val d = holder.dadb.value ?: run { _notConnected.value = true; return }
         if (uris.isEmpty()) return
+        // Garda de reintrare: nu pornim o a doua incarcare peste una in curs,
+        // altfel referinta uploadJob veche se pierde si nu mai poate fi anulata.
+        if (uploadJob?.isActive == true) return
         val folder = _state.value.folder ?: defaultFolder()
 
         uploadJob = viewModelScope.launch {
@@ -189,8 +192,11 @@ class ScreensaverViewModel(app: Application) : AndroidViewModel(app) {
                 existing = existing,
                 overrides = overrideDuplicates
             )
-            val planNames = plan.map { it.first }.toSet()
-            val toUpload = picked.filter { it.first in planNames }
+            // Filtram dupa cheia completa (nume + dimensiune), nu doar nume:
+            // altfel doua poze cu acelasi nume dar dimensiuni diferite s-ar
+            // amesteca, iar un duplicat deja incarcat ar reintra in plan.
+            val planKeys = plan.map { DedupeKey(it.first, it.second) }.toSet()
+            val toUpload = picked.filter { DedupeKey(it.first, it.second) in planKeys }
             val skipped = picked.size - toUpload.size
 
             var uploaded = 0
@@ -286,6 +292,7 @@ class ScreensaverViewModel(app: Application) : AndroidViewModel(app) {
 
     fun onDisconnected() {
         cancelUpload()
+        _notConnected.value = false
         _state.value = ScreensaverState()
     }
 

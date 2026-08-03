@@ -289,7 +289,6 @@
     <string name="history_wireless_adb_failed">Esuat ADB wireless: %1$s</string>
     <string name="error_discovery_failed">Nu s-a putut scana reteaua locala.</string>
     <string name="error_portal_sdk_incompatible">%1$s necesita Android API %2$d+, iar Portal suporta cel mult API %3$d.</string>
-    <string name="error_upload_failed_reason">Eroare la trimiterea %1$s: %2$s</string>
     <string name="error_device_offline">Portalul este offline sau a inchis conexiunea ADB.</string>
     <string name="error_connection_closed">Conexiunea ADB a fost inchisa in timpul operatiei.</string>
     <string name="error_operation_timed_out">Operatia ADB a expirat inainte sa primeasca raspuns de la Portal.</string>

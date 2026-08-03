@@ -51,6 +51,9 @@ class LogcatViewModel(app: Application) : AndroidViewModel(app) {
     val notConnected: StateFlow<Boolean> = _notConnected.asStateFlow()
 
     private var streamJob: Job? = null
+    // Scris pe firul IO (in start), citit/inchis pe firul principal (in stop).
+    // @Volatile garanteaza vizibilitatea inter-fir a referintei.
+    @Volatile
     private var stream: AdbStream? = null
 
     fun start() {
@@ -69,16 +72,22 @@ class LogcatViewModel(app: Application) : AndroidViewModel(app) {
                 runCatching {
                     val opened = d.open(destination)
                     stream = opened
-                    val source = opened.source
-                    while (coroutineContext.isActive) {
-                        val raw = source.readUtf8Line() ?: break
-                        val line = LogcatParser.parseLine(raw)
-                        val updated = _buffer.value.append(line)
-                        _buffer.value = updated
-                        if (raw.contains(CRASH_MARKER)) {
-                            _crashLineIndex.value = updated.lines.size - 1
+                    try {
+                        val source = opened.source
+                        while (coroutineContext.isActive) {
+                            val raw = source.readUtf8Line() ?: break
+                            val line = LogcatParser.parseLine(raw)
+                            val updated = _buffer.value.append(line)
+                            _buffer.value = updated
+                            if (raw.contains(CRASH_MARKER)) {
+                                _crashLineIndex.value = updated.lines.size - 1
+                            }
+                            coroutineContext.ensureActive()
                         }
-                        coroutineContext.ensureActive()
+                    } finally {
+                        // Inchidem stream-ul aici indiferent daca bucla a iesit
+                        // normal, prin exceptie sau anulare — nu lasam socketul deschis.
+                        closeStream()
                     }
                 }
             }
@@ -138,6 +147,7 @@ class LogcatViewModel(app: Application) : AndroidViewModel(app) {
 
     fun onDisconnected() {
         stop()
+        _notConnected.value = false
     }
 
     override fun onCleared() {

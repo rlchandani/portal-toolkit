@@ -215,7 +215,6 @@
     <string name="usb_adb_interface_not_ready">The Portal is connected, but its USB ADB interface did not become available. Check that ADB is enabled on the Portal and leave the cable connected for a few seconds.</string>
     <string name="usb_permission_missing">The app does not have USB permission for the Portal.</string>
     <string name="discovery_network_unavailable">Could not determine the local network of the phone.</string>
-    <string name="error_upload_failed_reason">Error sending %1$s: %2$s</string>
     <string name="error_unknown">Unknown error</string>
     <string name="error_install_failed_reason">Install failed: %1$s</string>
     <string name="error_install_failed_generic">Install failed</string>

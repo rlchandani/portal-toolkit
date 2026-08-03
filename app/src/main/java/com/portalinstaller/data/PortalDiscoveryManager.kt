@@ -19,6 +19,10 @@ import java.net.Socket
 import java.util.concurrent.atomic.AtomicInteger
 
 private const val DISCOVERY_CONNECT_TIMEOUT_MS = 500
+// Dupa ce TCP connect a reusit, handshake-ul ADB + cele 3 getprop au nevoie de
+// un buget de citire realist; 500 ms ar arunca SocketTimeout pe Wi-Fi aglomerat
+// si ar omite un Portal real din rezultate.
+private const val DISCOVERY_READ_TIMEOUT_MS = 2500
 private const val DISCOVERY_BATCH_SIZE = 48
 private const val MAX_DISCOVERY_HOSTS = 65_534
 
@@ -109,7 +113,9 @@ class PortalDiscoveryManager(
         val socket = Socket()
         return try {
             socket.connect(InetSocketAddress(ip, port), DISCOVERY_CONNECT_TIMEOUT_MS)
-            socket.soTimeout = DISCOVERY_CONNECT_TIMEOUT_MS
+            // Timeout scurt doar pentru connect(); largim pentru faza de citire
+            // (handshake + getprop), altfel un Portal prezent dar lent e omis.
+            socket.soTimeout = DISCOVERY_READ_TIMEOUT_MS
             DadbConnections.connectTcp(socket, keyPair)
         } catch (_: Throwable) {
             runCatching { socket.close() }

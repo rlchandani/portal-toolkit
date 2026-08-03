@@ -7,6 +7,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
@@ -129,13 +130,15 @@ class ConnectionMonitor(
     fun logEvent(kind: ConnectionEventKind) = append(kind)
 
     fun clearLog() {
-        _events.value = emptyList()
+        _events.update { emptyList() }
     }
 
     private fun append(kind: ConnectionEventKind, attempt: Int? = null) {
         val entry = ConnectionEvent(now(), kind, attempt)
-        // Cele mai noi primele, plafonat la MAX_EVENTS.
-        _events.value = (listOf(entry) + _events.value).take(MAX_EVENTS)
+        // append (pe coroutina heartbeat) si logEvent (pe firul ViewModel) pot
+        // rula concurent; update{} face un CAS atomic, altfel un read-modify-write
+        // pe _events.value ar putea pierde un eveniment CONNECTED/RECONNECTED.
+        _events.update { current -> (listOf(entry) + current).take(MAX_EVENTS) }
     }
 
     companion object {

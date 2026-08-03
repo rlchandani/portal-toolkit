@@ -42,4 +42,29 @@ class LsParserTest {
         val files = LsParser.parse("/sdcard/", "drwxrwx--x 2 root sdcard_rw 3452 2024-08-01 12:04 DCIM")
         assertEquals("/sdcard/DCIM", files.single().path)
     }
+
+    @Test fun `line with too few columns is skipped`() {
+        // Doar 4 campuri: nu are size/data/nume, deci nu producem un RemoteFile fals.
+        assertEquals(emptyList<RemoteFile>(), LsParser.parse("/sdcard", "drwxrwx--x 2 root sdcard_rw"))
+    }
+
+    @Test fun `non-numeric size falls back to zero`() {
+        val files = LsParser.parse(
+            "/sdcard",
+            "-rw-rw---- 1 root sdcard_rw ????? 2024-07-30 09:11 weird.bin"
+        )
+        assertEquals(0L, files.single().sizeBytes)
+        assertEquals("weird.bin", files.single().name)
+    }
+
+    @Test fun `garbage line among valid lines does not break parse`() {
+        val mixed = """
+            total 8
+            garbage-without-columns
+            -rw-rw---- 1 root sdcard_rw 10 2024-07-30 09:11 ok.txt
+        """.trimIndent()
+        val files = LsParser.parse("/sdcard", mixed)
+        assertEquals(1, files.size)
+        assertEquals("ok.txt", files.single().name)
+    }
 }

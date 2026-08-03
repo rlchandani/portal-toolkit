@@ -57,8 +57,11 @@ internal fun FilesTab(
     var renameTarget by remember { mutableStateOf<RemoteFile?>(null) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
-    val selectedFiles = browser.entries.filter { it.path in browser.selection }
-    val selectedBytes = selectedFiles.sumOf { it.sizeBytes }
+    // Memoizam pe (intrari, selectie) ca sa nu refiltram la fiecare recompozitie.
+    val selectedFiles = remember(browser.entries, browser.selection) {
+        browser.entries.filter { it.path in browser.selection }
+    }
+    val selectedBytes = remember(selectedFiles) { selectedFiles.sumOf { it.sizeBytes } }
 
     Column(modifier = Modifier.fillMaxSize().padding(12.dp)) {
         Text(

@@ -26,6 +26,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -41,6 +42,8 @@ import com.portalinstaller.ui.common.formatFileSize
 import com.portalinstaller.data.PortalAppInfo
 import com.portalinstaller.viewmodel.PortalAppsSort
 import com.portalinstaller.viewmodel.UninstallState
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 
 @Composable
@@ -259,19 +262,24 @@ private fun PortalAppCard(
  */
 @Composable
 private fun AppIcon(app: PortalAppInfo) {
-    val bitmap = remember(app.iconCachePath) {
-        app.iconCachePath
-            ?.let { File(it) }
-            ?.takeIf { it.exists() }
-            ?.let { BitmapFactory.decodeFile(it.absolutePath) }
+    // Decodarea PNG-ului atinge discul; o mutam pe IO via produceState ca sa nu
+    // blocam firul principal la prima compozitie a fiecarui card.
+    val bitmap by produceState<android.graphics.Bitmap?>(initialValue = null, app.iconCachePath) {
+        value = withContext(Dispatchers.IO) {
+            app.iconCachePath
+                ?.let { File(it) }
+                ?.takeIf { it.exists() }
+                ?.let { BitmapFactory.decodeFile(it.absolutePath) }
+        }
     }
+    val loaded = bitmap
     Box(
         modifier = Modifier.size(44.dp),
         contentAlignment = Alignment.Center
     ) {
-        if (bitmap != null) {
+        if (loaded != null) {
             androidx.compose.foundation.Image(
-                bitmap = bitmap.asImageBitmap(),
+                bitmap = loaded.asImageBitmap(),
                 contentDescription = app.label ?: app.name,
                 contentScale = ContentScale.Fit,
                 modifier = Modifier.size(40.dp)

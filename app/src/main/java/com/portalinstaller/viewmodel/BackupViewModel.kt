@@ -194,8 +194,10 @@ class BackupViewModel(app: Application) : AndroidViewModel(app) {
         _backupState.value = BackupState.Idle
     }
 
-    /** Resetează la deconectare. */
+    /** Resetează la deconectare, anulând orice backup/restore în curs. */
     fun onDisconnected() {
+        backupJob?.cancel()
+        backupJob = null
         _backupState.value = BackupState.Idle
     }
 }

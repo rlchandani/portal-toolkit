@@ -61,6 +61,11 @@ class FileManagerViewModel(app: Application) : AndroidViewModel(app) {
 
     private var transferJob: Job? = null
 
+    // Toate operatiile (delete/rename/move/mkdir/pull/push) impart transferJob.
+    // Daca am porni una noua peste alta in curs, referinta veche s-ar pierde si
+    // n-am mai putea-o anula. Refuzam suprapunerea.
+    private fun operationInFlight(): Boolean = transferJob?.isActive == true
+
     init {
         // Incarcam radacina automat cand apare o conexiune. Inainte, nimic nu
         // apela open() la deschiderea tabului, deci lista ramanea mereu goala pe
@@ -133,6 +138,7 @@ class FileManagerViewModel(app: Application) : AndroidViewModel(app) {
 
     fun deleteSelected(context: Context) {
         val d = holder.dadb.value ?: run { _notConnected.value = true; return }
+        if (operationInFlight()) return
         val state = _browser.value
         val targets = state.entries.filter { it.path in state.selection }
         if (targets.isEmpty()) return
@@ -148,8 +154,9 @@ class FileManagerViewModel(app: Application) : AndroidViewModel(app) {
 
     fun rename(context: Context, file: RemoteFile, newName: String) {
         val d = holder.dadb.value ?: run { _notConnected.value = true; return }
+        if (operationInFlight()) return
         val advanced = _browser.value.advancedMode
-        viewModelScope.launch {
+        transferJob = viewModelScope.launch {
             val result = runCatching { fileManager.rename(d, file, newName, advanced) }
             reportBatch(context, result)
             refresh()
@@ -159,6 +166,7 @@ class FileManagerViewModel(app: Application) : AndroidViewModel(app) {
     fun moveSelected(context: Context, destDir: String) {
         val d = holder.dadb.value ?: run { _notConnected.value = true; return }
         val state = _browser.value
+        if (operationInFlight()) return
         val targets = state.entries.filter { it.path in state.selection }
         if (targets.isEmpty()) return
         transferJob = viewModelScope.launch {
@@ -173,8 +181,9 @@ class FileManagerViewModel(app: Application) : AndroidViewModel(app) {
 
     fun mkdir(context: Context, name: String) {
         val d = holder.dadb.value ?: run { _notConnected.value = true; return }
+        if (operationInFlight()) return
         val state = _browser.value
-        viewModelScope.launch {
+        transferJob = viewModelScope.launch {
             val result = runCatching { fileManager.mkdir(d, state.path, name, state.advancedMode) }
             reportBatch(context, result)
             refresh()
@@ -184,6 +193,7 @@ class FileManagerViewModel(app: Application) : AndroidViewModel(app) {
     fun pullSelected(context: Context) {
         val d = holder.dadb.value ?: run { _notConnected.value = true; return }
         val state = _browser.value
+        if (operationInFlight()) return
         val targets = state.entries.filter { it.path in state.selection && !it.isDirectory }
         if (targets.isEmpty()) return
         transferJob = viewModelScope.launch {
@@ -212,6 +222,7 @@ class FileManagerViewModel(app: Application) : AndroidViewModel(app) {
 
     fun pushLocal(context: Context, localFile: java.io.File) {
         val d = holder.dadb.value ?: run { _notConnected.value = true; return }
+        if (operationInFlight()) return
         val state = _browser.value
         transferJob = viewModelScope.launch {
             _transferState.value = FileTransferState.Working(

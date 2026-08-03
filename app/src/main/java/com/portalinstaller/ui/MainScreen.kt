@@ -64,6 +64,7 @@ import com.portalinstaller.viewmodel.CaptureSaveState
 import com.portalinstaller.viewmodel.CaptureViewModel
 import com.portalinstaller.viewmodel.BackupState
 import com.portalinstaller.viewmodel.BackupViewModel
+import com.portalinstaller.viewmodel.ConnectionMethod
 import com.portalinstaller.viewmodel.ConnectionState
 import com.portalinstaller.viewmodel.ConnectionViewModel
 import com.portalinstaller.viewmodel.FileManagerViewModel
@@ -183,8 +184,16 @@ fun MainScreen(
             deviceLabel = null,
             details = context.getString(R.string.usb_checking_devices)
         ),
-        key1 = usbRefreshTrigger
+        key1 = usbRefreshTrigger,
+        key2 = connectionState
     ) {
+        // Sondam USB-ul doar cat timp NU suntem conectati: cand exista deja o
+        // conexiune, cardul de conectare nu se vede, deci nu are rost sa trezim
+        // procesul la fiecare 750 ms si sa recompunem.
+        if (connectionState is ConnectionState.Connected) {
+            value = UsbPortalHelper.getStatus(context)
+            return@produceState
+        }
         while (isActive) {
             value = UsbPortalHelper.getStatus(context)
             delay(750L)
@@ -265,7 +274,7 @@ fun MainScreen(
 
     LaunchedEffect(connectionState, connectionMethod, deviceStatus) {
         if (connectionState is ConnectionState.Connected &&
-            connectionMethod == context.getString(R.string.connection_method_wifi) &&
+            connectionMethod == ConnectionMethod.WIFI &&
             ipAddress.isNotBlank()
         ) {
             val connectedPort = port.toIntOrNull() ?: 5555
@@ -572,7 +581,7 @@ fun MainScreen(
             }
 
             val isWifiConnected = connectionState is ConnectionState.Connected &&
-                connectionMethod == context.getString(R.string.connection_method_wifi)
+                connectionMethod == ConnectionMethod.WIFI
             val activePortalName = savedPortals.firstOrNull {
                 it.ip == ipAddress && it.port == (port.toIntOrNull() ?: 5555)
             }?.name
