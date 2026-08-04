@@ -9,8 +9,8 @@ import com.portalinstaller.viewmodel.AppActionState
 import com.portalinstaller.viewmodel.AppsViewModel
 import com.portalinstaller.viewmodel.BackupState
 import com.portalinstaller.viewmodel.BackupViewModel
-import com.portalinstaller.viewmodel.CaptureSaveState
-import com.portalinstaller.viewmodel.CaptureViewModel
+import com.portalinstaller.viewmodel.MirrorSaveState
+import com.portalinstaller.viewmodel.MirrorViewModel
 import com.portalinstaller.viewmodel.ConnectionState
 import com.portalinstaller.viewmodel.ConnectionViewModel
 import com.portalinstaller.viewmodel.FileManagerViewModel
@@ -49,15 +49,15 @@ internal fun MainScreenSnackbarEffects(
     profileApplyState: ProfileApplyState,
     appActionState: AppActionState,
     powerControlState: PowerControlState,
-    captureSaveState: CaptureSaveState,
-    captureNotConnected: Boolean,
+    mirrorSaveState: MirrorSaveState,
+    mirrorNotConnected: Boolean,
     fileTransferState: FileTransferState,
     fileNotConnected: Boolean,
     connectionViewModel: ConnectionViewModel,
     appsViewModel: AppsViewModel,
     backupViewModel: BackupViewModel,
     screensaverViewModel: ScreensaverViewModel,
-    captureViewModel: CaptureViewModel,
+    mirrorViewModel: MirrorViewModel,
     fileManagerViewModel: FileManagerViewModel
 ) {
     // Afiseaza Snackbar pentru stari importante si erori.
@@ -224,24 +224,24 @@ internal fun MainScreenSnackbarEffects(
         }
     }
 
-    LaunchedEffect(captureSaveState) {
-        when (val state = captureSaveState) {
-            is CaptureSaveState.Saved -> {
-                snackbarHostState.showSnackbar(context.getString(R.string.capture_saved))
-                captureViewModel.clearSaveState()
+    LaunchedEffect(mirrorSaveState) {
+        when (val state = mirrorSaveState) {
+            is MirrorSaveState.Saved -> {
+                snackbarHostState.showSnackbar(context.getString(R.string.mirror_saved))
+                mirrorViewModel.clearSaveState()
             }
-            is CaptureSaveState.Failed -> {
+            is MirrorSaveState.Failed -> {
                 snackbarHostState.showSnackbar(state.message)
-                captureViewModel.clearSaveState()
+                mirrorViewModel.clearSaveState()
             }
             else -> Unit
         }
     }
 
-    LaunchedEffect(captureNotConnected) {
-        if (captureNotConnected) {
-            snackbarHostState.showSnackbar(context.getString(R.string.shell_not_connected))
-            captureViewModel.clearNotConnected()
+    LaunchedEffect(mirrorNotConnected) {
+        if (mirrorNotConnected) {
+            snackbarHostState.showSnackbar(context.getString(R.string.mirror_not_connected))
+            mirrorViewModel.clearNotConnected()
         }
     }
 

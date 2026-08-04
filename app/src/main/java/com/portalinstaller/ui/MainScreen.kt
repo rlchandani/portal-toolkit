@@ -60,8 +60,8 @@ import com.portalinstaller.data.store.SavedPortal
 import com.portalinstaller.data.store.ThemeMode
 import com.portalinstaller.util.AppLanguageManager
 import com.portalinstaller.viewmodel.AppsViewModel
-import com.portalinstaller.viewmodel.CaptureSaveState
-import com.portalinstaller.viewmodel.CaptureViewModel
+import com.portalinstaller.viewmodel.MirrorSaveState
+import com.portalinstaller.viewmodel.MirrorViewModel
 import com.portalinstaller.viewmodel.BackupState
 import com.portalinstaller.viewmodel.BackupViewModel
 import com.portalinstaller.viewmodel.ConnectionMethod
@@ -102,7 +102,7 @@ fun MainScreen(
     screensaverViewModel: ScreensaverViewModel = viewModel(),
     shellViewModel: ShellViewModel = viewModel(),
     logcatViewModel: LogcatViewModel = viewModel(),
-    captureViewModel: CaptureViewModel = viewModel(),
+    mirrorViewModel: MirrorViewModel = viewModel(),
     fileManagerViewModel: FileManagerViewModel = viewModel()
 ) {
     val context = LocalContext.current
@@ -140,8 +140,8 @@ fun MainScreen(
     val shellIsRunning by shellViewModel.isRunning.collectAsStateWithLifecycle()
     val shellCommandHistory by shellViewModel.commandHistory.collectAsStateWithLifecycle()
 
-    val captureSaveState by captureViewModel.saveState.collectAsStateWithLifecycle()
-    val captureNotConnected by captureViewModel.notConnected.collectAsStateWithLifecycle()
+    val mirrorSaveState by mirrorViewModel.saveState.collectAsStateWithLifecycle()
+    val mirrorNotConnected by mirrorViewModel.notConnected.collectAsStateWithLifecycle()
 
     val fileTransferState by fileManagerViewModel.transferState.collectAsStateWithLifecycle()
     val fileNotConnected by fileManagerViewModel.notConnected.collectAsStateWithLifecycle()
@@ -323,15 +323,15 @@ fun MainScreen(
         profileApplyState = profileApplyState,
         appActionState = appActionState,
         powerControlState = powerControlState,
-        captureSaveState = captureSaveState,
-        captureNotConnected = captureNotConnected,
+        mirrorSaveState = mirrorSaveState,
+        mirrorNotConnected = mirrorNotConnected,
         fileTransferState = fileTransferState,
         fileNotConnected = fileNotConnected,
         connectionViewModel = connectionViewModel,
         appsViewModel = appsViewModel,
         backupViewModel = backupViewModel,
         screensaverViewModel = screensaverViewModel,
-        captureViewModel = captureViewModel,
+        mirrorViewModel = mirrorViewModel,
         fileManagerViewModel = fileManagerViewModel
     )
 
@@ -518,7 +518,7 @@ fun MainScreen(
                         screensaverViewModel.onDisconnected()
                         shellViewModel.onDisconnected()
                         logcatViewModel.onDisconnected()
-                        captureViewModel.onDisconnected()
+                        mirrorViewModel.onDisconnected()
                         fileManagerViewModel.onDisconnected()
                     },
                     onScanPortals = {
@@ -582,7 +582,7 @@ fun MainScreen(
                     onShellCancel = { shellViewModel.cancel() },
                     onShellClear = { shellViewModel.clearTranscript() },
                     logcatViewModel = logcatViewModel,
-                    captureViewModel = captureViewModel,
+                    mirrorViewModel = mirrorViewModel,
                     fileManagerViewModel = fileManagerViewModel
                 ) }
             }
