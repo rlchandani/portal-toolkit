@@ -29,6 +29,7 @@ class H264Decoder {
     private val pending = ConcurrentLinkedQueue<ByteArray>()
     // Indecsii buffer-elor de intrare libere, oferite de codec prin callback.
     private val freeInputs = ConcurrentLinkedQueue<Int>()
+    private val drainLock = Any()
 
     @Synchronized
     fun start(surface: Surface, width: Int, height: Int) {
@@ -59,46 +60,31 @@ class H264Decoder {
     /**
      * Trimite din coada in orice buffer de intrare liber. Apelat de callback-ul
      * codec-ului (thread-ul intern MediaCodec) si de submit() (thread-ul coroutinei).
-     * Verifica stopped si codec-ul inainte de queueInputBuffer ca sa evite folosirea
-     * unui codec eliberat dupa stop().
+     * Serializat sub drainLock pentru a mentine ordinea trimiterii chunk-urilor.
      */
-    private fun drain() {
-        // Verificare timpurie: daca am oprit, renuntam imediat.
+    private fun drain() = synchronized(drainLock) {
         if (stopped) return
         val mc = codec ?: return
         while (true) {
-            // Verificam daca avem si index liber si chunk in coada INAINTE de poll().
-            val index = freeInputs.peek() ?: break
-            val chunk = pending.peek() ?: break
-            // Acum extragem atomic: daca cineva a luat index-ul/chunk-ul intre timp,
-            // vom detecta si ne vom opri.
-            val actualIndex = freeInputs.poll() ?: break
-            val actualChunk = pending.poll()
-            if (actualChunk == null) {
-                // Cineva a luat chunk-ul dupa peek(): punem indexul inapoi si iesim.
-                freeInputs.add(actualIndex)
+            val index = freeInputs.poll() ?: break
+            val chunk = pending.poll()
+            if (chunk == null) {
+                freeInputs.add(index)
                 break
             }
-            // Reverifim stopped si codec inainte de a folosi codec-ul: daca stop()
-            // a fost apelat intre timp, renuntam (evitam use-after-release).
             if (stopped || codec == null) {
-                // Punem chunk-ul si indexul inapoi (nu s-au trimis).
-                pending.add(actualChunk)
-                freeInputs.add(actualIndex)
+                pending.add(chunk)
+                freeInputs.add(index)
                 break
             }
             try {
-                val input = mc.getInputBuffer(actualIndex) ?: continue
+                val input = mc.getInputBuffer(index) ?: continue
                 input.clear()
-                input.put(actualChunk)
-                // Ultima verificare inainte de queueInputBuffer: codec-ul trebuie sa fie inca activ.
+                input.put(chunk)
                 if (!stopped && codec != null) {
-                    mc.queueInputBuffer(actualIndex, 0, actualChunk.size, 0, 0)
-                } else {
-                    // Oprit intre timp: chunk-ul si indexul sunt deja pierduti (codec-ul se inchide).
+                    mc.queueInputBuffer(index, 0, chunk.size, 0, 0)
                 }
             } catch (e: Exception) {
-                // Daca nu suntem in shutdown curat (stopped=false), raportam eroarea.
                 if (!stopped) {
                     _error.value = e.message ?: "Eroare trimitere cadru"
                 }
@@ -109,17 +95,17 @@ class H264Decoder {
 
     @Synchronized
     fun stop() {
-        val mc = codec ?: return
-        // Marcam stopped=true si punem codec=null SUB LOCK, apoi eliberam codec-ul
-        // FARA LOCK ca sa evitam deadlock (callback-ul poate fi blocat asteptand
-        // lock-ul in drain(), iar mc.release() asteapta ca callback-urile sa se termine).
-        stopped = true
-        codec = null
-        pending.clear()
-        freeInputs.clear()
-        // Acum eliberam codec-ul FARA lock: drain() nu va mai folosi mc dupa ce vede
-        // stopped=true sau codec=null. Orice callback in executie va vedea stopped=true
-        // si va iesi fara sa apeleze queueInputBuffer.
+        val mc = synchronized(drainLock) {
+            val c = codec ?: return
+            stopped = true
+            codec = null
+            pending.clear()
+            freeInputs.clear()
+            c
+        }
+        // Eliberam codec-ul fara drainLock: drain() vede stopped si iese imediat,
+        // iar callback-urile in curs nu mai asteapta lock-ul. mc.release() asteapta
+        // terminarea callback-urilor fara sa creeze deadlock.
         runCatching { mc.stop() }
         runCatching { mc.release() }
     }

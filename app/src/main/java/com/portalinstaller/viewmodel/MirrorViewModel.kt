@@ -70,18 +70,44 @@ class MirrorViewModel(app: Application) : AndroidViewModel(app) {
     val firstFrameRendered: StateFlow<Boolean> = decoder.firstFrameRendered
 
     private var mirrorJob: Job? = null
+    private var currentSurface: Surface? = null
     private var deviceWidth = 0
     private var deviceHeight = 0
 
+    init {
+        viewModelScope.launch {
+            holder.dadb.collect { d ->
+                if (d == null) {
+                    stopMirror()
+                    if (currentSurface != null) {
+                        _state.value = MirrorState.NotConnected
+                    }
+                } else {
+                    _notConnected.value = false
+                    val surface = currentSurface
+                    if (surface != null && mirrorJob == null) {
+                        startMirror(surface, d)
+                    }
+                }
+            }
+        }
+    }
+
     /** Chemat cand SurfaceView-ul are o suprafata gata: pornim oglindirea. */
     fun onSurfaceAvailable(surface: Surface) {
-        if (mirrorJob != null) return
+        currentSurface = surface
         val d = holder.dadb.value
         if (d == null) {
-            _notConnected.value = true
             _state.value = MirrorState.NotConnected
             return
         }
+        if (mirrorJob == null) {
+            startMirror(surface, d)
+        }
+    }
+
+    private fun startMirror(surface: Surface, d: Dadb) {
+        if (mirrorJob != null) return
         _notConnected.value = false
         mirrorJob = viewModelScope.launch {
             _state.value = MirrorState.Starting
@@ -96,16 +122,20 @@ class MirrorViewModel(app: Application) : AndroidViewModel(app) {
                 ScreenMirrorManager.stream(d, size).collect { chunk ->
                     decoder.submit(chunk)
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: MirrorUnsupportedException) {
                 _state.value = MirrorState.Unsupported(
                     e.message ?: getApplication<Application>().getString(R.string.mirror_unsupported)
                 )
                 decoder.stop()
+                mirrorJob = null
             } catch (e: Exception) {
                 _state.value = MirrorState.Error(
                     e.message ?: getApplication<Application>().getString(R.string.error_unknown)
                 )
                 decoder.stop()
+                mirrorJob = null
             }
         }
     }
@@ -126,6 +156,7 @@ class MirrorViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun onSurfaceDestroyed() {
+        currentSurface = null
         stopMirror()
     }
 

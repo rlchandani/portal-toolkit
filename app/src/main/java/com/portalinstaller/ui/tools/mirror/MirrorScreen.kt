@@ -68,6 +68,21 @@ internal fun MirrorScreen(
             modifier = Modifier.weight(1f).fillMaxWidth(),
             contentAlignment = Alignment.Center
         ) {
+            MirrorSurface(
+                onViewSize = { viewSize = it },
+                onSurface = { holder -> viewModel.onSurfaceAvailable(holder.surface) },
+                onSurfaceDestroyed = { viewModel.onSurfaceDestroyed() },
+                onTap = { o -> viewModel.tap(o.x, o.y, viewSize.width, viewSize.height) },
+                onDrag = { start, end ->
+                    viewModel.swipe(
+                        start.x, start.y, end.x, end.y,
+                        viewSize.width, viewSize.height, 200
+                    )
+                },
+                onLongPress = { o ->
+                    viewModel.longPress(o.x, o.y, viewSize.width, viewSize.height)
+                }
+            )
             when (val s = state) {
                 is MirrorState.Unsupported -> {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -81,21 +96,6 @@ internal fun MirrorScreen(
                 is MirrorState.NotConnected ->
                     Text(stringResource(R.string.mirror_not_connected))
                 else -> {
-                    MirrorSurface(
-                        onViewSize = { viewSize = it },
-                        onSurface = { holder -> viewModel.onSurfaceAvailable(holder.surface) },
-                        onSurfaceDestroyed = { viewModel.onSurfaceDestroyed() },
-                        onTap = { o -> viewModel.tap(o.x, o.y, viewSize.width, viewSize.height) },
-                        onDrag = { start, end ->
-                            viewModel.swipe(
-                                start.x, start.y, end.x, end.y,
-                                viewSize.width, viewSize.height, 200
-                            )
-                        },
-                        onLongPress = { o ->
-                            viewModel.longPress(o.x, o.y, viewSize.width, viewSize.height)
-                        }
-                    )
                     if (!firstFrame) CircularProgressIndicator()
                 }
             }
@@ -136,7 +136,8 @@ internal fun MirrorScreen(
 
 /**
  * SurfaceView-ul propriu-zis plus detectia gesturilor. Masuram dimensiunea
- * view-ului pentru maparea coordonatelor din VM.
+ * view-ului pentru maparea coordonatelor din VM. Drag trimite o singura comanda
+ * swipe la sfarsitul gestului pentru a evita supraincarcarea ADB.
  */
 @Composable
 private fun MirrorSurface(
@@ -148,6 +149,7 @@ private fun MirrorSurface(
     onLongPress: (Offset) -> Unit
 ) {
     var dragStart by remember { mutableStateOf(Offset.Zero) }
+    var dragCurrent by remember { mutableStateOf(Offset.Zero) }
     AndroidView(
         modifier = Modifier
             .fillMaxSize()
@@ -160,10 +162,14 @@ private fun MirrorSurface(
             }
             .pointerInput(Unit) {
                 detectDragGestures(
-                    onDragStart = { dragStart = it },
-                    onDragEnd = { /* end pozitia curenta este trimisa in onDrag */ }
+                    onDragStart = {
+                        dragStart = it
+                        dragCurrent = it
+                    },
+                    onDragEnd = { onDrag(dragStart, dragCurrent) }
                 ) { change, _ ->
-                    onDrag(dragStart, change.position)
+                    dragCurrent = change.position
+                    change.consume()
                 }
             },
         factory = { ctx ->

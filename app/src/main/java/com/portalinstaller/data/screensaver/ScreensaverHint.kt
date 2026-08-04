@@ -5,13 +5,13 @@ const val RECOMMENDED_MIN = 20
 
 /** Nivelul indiciului afisat pe tab-ul de screensaver. */
 sealed class HintLevel {
-    /** Fara indiciu (0 poze — starea goala acopera deja cazul). */
+    /** Fara indiciu (0 poze - starea goala acopera deja cazul). */
     data object None : HintLevel()
 
     /** Prea putine poze: sugereaza adaugarea a [needed] poze in plus. */
     data class AddMore(val needed: Int) : HintLevel()
 
-    /** Suficiente poze: fara mesaj de tip „adauga mai multe". */
+    /** Suficiente poze: fara mesaj de tip "adauga mai multe". */
     data object Ok : HintLevel()
 }
 
