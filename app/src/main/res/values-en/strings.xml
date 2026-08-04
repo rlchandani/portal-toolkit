@@ -411,4 +411,21 @@
     <string name="profile_connect_hint">You can create profiles offline. Connect a Portal over Wi-Fi to apply them.</string>
     <string name="profile_delete_title">Delete profile?</string>
     <string name="profile_delete_message">Profile %1$s will be removed from this phone.</string>
+    <string name="mirror_unsupported">Mirroring is not supported on this screen.</string>
+    <string name="mirror_connecting">Connecting to the Portal screen...</string>
+    <string name="mirror_fallback_peek">Use static capture</string>
+    <string name="mirror_save">Save frame</string>
+    <string name="mirror_saved">Saved to Pictures/PortalToolkit.</string>
+    <string name="mirror_not_connected">No active connection. Connect to a Portal first.</string>
+    <string name="mirror_battery_note">Mirroring drains the battery; stop it when unused.</string>
+    <string name="mirror_key_back">Back</string>
+    <string name="mirror_key_home">Home</string>
+    <string name="mirror_key_recents">Recents</string>
+    <string name="mirror_key_power">Power</string>
+    <string name="mirror_key_volume_up">Vol +</string>
+    <string name="mirror_key_volume_down">Vol -</string>
+    <string name="mirror_text_hint">Text to send</string>
+    <string name="mirror_text_send">Send</string>
+    <string name="mirror_text_open">Keyboard</string>
+    <string name="tools_section_mirror">Mirror</string>
 </resources>

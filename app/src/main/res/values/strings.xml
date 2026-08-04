@@ -411,4 +411,21 @@
     <string name="profile_connect_hint">Poti crea profiluri offline. Conecteaza un Portal prin Wi-Fi pentru a le aplica.</string>
     <string name="profile_delete_title">Sterge profilul?</string>
     <string name="profile_delete_message">Profilul %1$s va fi eliminat de pe telefon.</string>
+    <string name="mirror_unsupported">Oglindirea nu este acceptata pe acest ecran.</string>
+    <string name="mirror_connecting">Se conecteaza la ecranul Portal...</string>
+    <string name="mirror_fallback_peek">Foloseste captura statica</string>
+    <string name="mirror_save">Salveaza cadrul</string>
+    <string name="mirror_saved">Salvat in Poze/PortalToolkit.</string>
+    <string name="mirror_not_connected">Nu exista o conexiune activa. Conecteaza-te la un Portal mai intai.</string>
+    <string name="mirror_battery_note">Oglindirea consuma bateria; opreste-o cand nu o folosesti.</string>
+    <string name="mirror_key_back">Inapoi</string>
+    <string name="mirror_key_home">Acasa</string>
+    <string name="mirror_key_recents">Recente</string>
+    <string name="mirror_key_power">Pornire</string>
+    <string name="mirror_key_volume_up">Vol +</string>
+    <string name="mirror_key_volume_down">Vol -</string>
+    <string name="mirror_text_hint">Text de trimis</string>
+    <string name="mirror_text_send">Trimite</string>
+    <string name="mirror_text_open">Tastatura</string>
+    <string name="tools_section_mirror">Oglindire</string>
 </resources>
