@@ -412,9 +412,6 @@
     <string name="mirror_key_back">Inapoi</string>
     <string name="mirror_key_home">Acasa</string>
     <string name="mirror_key_recents">Recente</string>
-    <string name="mirror_key_power">Pornire</string>
-    <string name="mirror_key_volume_up">Vol +</string>
-    <string name="mirror_key_volume_down">Vol -</string>
     <string name="mirror_text_hint">Text de trimis</string>
     <string name="mirror_text_send">Trimite</string>
     <string name="mirror_text_open">Tastatura</string>

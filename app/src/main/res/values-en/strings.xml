@@ -412,9 +412,6 @@
     <string name="mirror_key_back">Back</string>
     <string name="mirror_key_home">Home</string>
     <string name="mirror_key_recents">Recents</string>
-    <string name="mirror_key_power">Power</string>
-    <string name="mirror_key_volume_up">Vol +</string>
-    <string name="mirror_key_volume_down">Vol -</string>
     <string name="mirror_text_hint">Text to send</string>
     <string name="mirror_text_send">Send</string>
     <string name="mirror_text_open">Keyboard</string>

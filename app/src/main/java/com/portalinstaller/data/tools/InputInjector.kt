@@ -2,7 +2,11 @@ package com.portalinstaller.data.tools
 
 import com.portalinstaller.data.adb.shellQuote
 
-/** Taste hardware ale Portal-ului si codurile lor KeyEvent. */
+/**
+ * Taste hardware ale Portal-ului si codurile lor KeyEvent. POWER/VOLUME_UP/
+ * VOLUME_DOWN sunt definite intentionat dar nu sunt expuse in ControlBar:
+ * POWER poate stinge ecranul Portal-ului in timpul oglindirii.
+ */
 enum class PortalKey(val code: Int) {
     BACK(4),
     HOME(3),
