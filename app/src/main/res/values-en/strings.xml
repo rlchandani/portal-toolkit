@@ -183,6 +183,7 @@
     <string name="screensaver_upload_all">Upload all</string>
     <string name="screensaver_skip_duplicates">Skip duplicates</string>
     <string name="screensaver_folder_image_count">%1$d images</string>
+    <string name="screensaver_hint_add_more">%1$d photos. The Portal repeats small sets — add about %2$d more for a varied slideshow.</string>
     <string name="screensaver_grid_size">Thumbnail size</string>
     <string name="screensaver_grid_size_small">Small</string>
     <string name="screensaver_grid_size_medium">Medium</string>

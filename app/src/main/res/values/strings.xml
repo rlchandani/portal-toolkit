@@ -183,6 +183,7 @@
     <string name="screensaver_upload_all">Incarca tot</string>
     <string name="screensaver_skip_duplicates">Sari peste duplicate</string>
     <string name="screensaver_folder_image_count">%1$d imagini</string>
+    <string name="screensaver_hint_add_more">%1$d poze. Portal-ul repeta seturile mici — adauga inca aproximativ %2$d pentru un slideshow variat.</string>
     <string name="screensaver_grid_size">Marime miniaturi</string>
     <string name="screensaver_grid_size_small">Mic</string>
     <string name="screensaver_grid_size_medium">Mediu</string>

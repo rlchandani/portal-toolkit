@@ -57,6 +57,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.portalinstaller.R
 import com.portalinstaller.data.files.RemoteFile
+import com.portalinstaller.data.screensaver.HintLevel
+import com.portalinstaller.data.screensaver.screensaverHint
 import com.portalinstaller.ui.common.formatFileSize
 import com.portalinstaller.viewmodel.ScreensaverState
 import com.portalinstaller.viewmodel.ScreensaverViewModel
@@ -157,6 +159,22 @@ internal fun ScreensaverTab(
             progress = { usedFraction },
             modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
         )
+
+        // Indiciu de numar de poze: firmware-ul Portal repeta seturile mici, deci
+        // sugeram un set mai mare de poze unice (nu putem controla bucla de afisare).
+        val hint = screensaverHint(state.contents.size)
+        if (hint is HintLevel.AddMore) {
+            Text(
+                text = stringResource(
+                    R.string.screensaver_hint_add_more,
+                    state.contents.size,
+                    hint.needed
+                ),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(vertical = 4.dp)
+            )
+        }
 
         // Bara de actiuni: in mod normal doar „Adauga poze”; in mod selectie
         // aratam numarul, „Deselecteaza tot” si un meniu ⋮ cu actiunile, ca
