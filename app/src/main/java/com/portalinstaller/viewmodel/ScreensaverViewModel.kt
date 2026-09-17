@@ -12,6 +12,9 @@ import com.portalinstaller.data.ContentUriHelper
 import com.portalinstaller.data.PortalConnectionManager
 import com.portalinstaller.data.files.RemoteFile
 import com.portalinstaller.data.screensaver.DedupeKey
+import com.portalinstaller.data.screensaver.GooglePhotoAlbum
+import com.portalinstaller.data.screensaver.GooglePhotoEntry
+import com.portalinstaller.data.screensaver.GooglePhotosAlbumReader
 import com.portalinstaller.data.screensaver.ImageFolder
 import com.portalinstaller.data.store.HistoryEntry
 import com.portalinstaller.data.transfer.TransferProgress
@@ -45,7 +48,11 @@ data class ScreensaverState(
     val selection: Set<String> = emptySet(),
     val folderBytes: Long = 0L,
     val deviceFreeBytes: Long = 0L,
-    val isLoading: Boolean = false
+    val isLoading: Boolean = false,
+    // Google Photos album sync state
+    val albums: List<GooglePhotoAlbum> = emptyList(),
+    val albumsLoading: Boolean = false,
+    val albumsError: String? = null,
 )
 
 /** Rezumatul unei sesiuni de incarcare pe Portal. */
@@ -284,6 +291,82 @@ class ScreensaverViewModel(app: Application) : AndroidViewModel(app) {
 
     fun clearUploadState() {
         _uploadState.value = UploadSummaryState.Idle
+    }
+
+    // ── Google Photos album sync ──────────────────────────────────────────────────
+
+    /** Load the device's image albums (MediaStore buckets) into [ScreensaverState.albums]. */
+    fun loadAlbums(context: Context) {
+        _state.value = _state.value.copy(albumsLoading = true, albumsError = null)
+        viewModelScope.launch {
+            val result = runCatching { GooglePhotosAlbumReader.listAlbums(context) }
+            _state.value = _state.value.copy(
+                albums = result.getOrDefault(emptyList()),
+                albumsLoading = false,
+                albumsError = result.exceptionOrNull()?.message,
+            )
+        }
+    }
+
+    /**
+     * Sync all photos from a MediaStore album bucket to the Portal's screensaver folder.
+     * Reuses the existing upload pipeline: deduplication, progress, history, cancel support.
+     */
+    fun syncAlbum(context: Context, album: GooglePhotoAlbum) {
+        val d = holder.dadb.value ?: run { _notConnected.value = true; return }
+        if (uploadJob?.isActive == true) return
+        val folder = _state.value.folder ?: defaultFolder()
+
+        uploadJob = viewModelScope.launch {
+            _uploadState.value = UploadSummaryState.Uploading(0, album.photoCount, TransferProgress(0, 0))
+            val photos: List<GooglePhotoEntry> = withContext(Dispatchers.IO) {
+                runCatching { GooglePhotosAlbumReader.listPhotos(context, album.bucketId) }
+                    .getOrDefault(emptyList())
+            }
+            if (photos.isEmpty()) {
+                _uploadState.value = UploadSummaryState.Done(0, 0, 0)
+                return@launch
+            }
+
+            // Deduplicate against what's already on the Portal
+            val existing = _state.value.contents.map { DedupeKey(it.name, it.sizeBytes) }.toSet()
+            val toUpload = photos.filter { DedupeKey(it.displayName, it.sizeBytes) !in existing }
+            val skipped = photos.size - toUpload.size
+
+            var uploaded = 0; var failed = 0; var lastError: String? = null
+
+            toUpload.forEachIndexed { index, entry ->
+                _uploadState.value = UploadSummaryState.Uploading(
+                    current = index + 1, total = toUpload.size,
+                    progress = TransferProgress(0L, entry.sizeBytes),
+                )
+                val local = withContext(Dispatchers.IO) {
+                    runCatching {
+                        val input = context.contentResolver.openInputStream(entry.uri) ?: return@runCatching null
+                        val tmp = File(context.cacheDir, entry.displayName)
+                        tmp.outputStream().use { out -> input.copyTo(out) }
+                        input.close()
+                        tmp
+                    }.getOrNull()
+                }
+                if (local == null) { failed++; lastError = context.getString(R.string.error_read_photo_failed); return@forEachIndexed }
+                runCatching { fileManager.push(d, local, folder, advancedMode = false) }
+                    .onSuccess {
+                        uploaded++
+                        _uploadState.value = UploadSummaryState.Uploading(index + 1, toUpload.size, TransferProgress(entry.sizeBytes, entry.sizeBytes))
+                    }
+                    .onFailure { failed++; lastError = reason(context, it) }
+                local.delete()
+            }
+
+            _uploadState.value = UploadSummaryState.Done(uploaded, skipped, failed)
+            historyStore.add(HistoryEntry(
+                timestamp = System.currentTimeMillis(),
+                description = context.getString(R.string.history_photo_upload, uploaded, toUpload.size),
+                success = failed == 0,
+            ))
+            refreshContents()
+        }
     }
 
     fun clearNotConnected() {
