@@ -71,6 +71,13 @@ dependencies {
     // https://github.com/mobile-dev-inc/dadb
     implementation("dev.mobile:dadb:1.2.10")
 
+    // Google Photos Picker feature: OAuth authorization (AuthorizationClient),
+    // Custom Tabs to host Google's picker UI, and OkHttp for the picker REST calls
+    // + photo byte downloads. JSON is parsed with the built-in org.json.
+    implementation("com.google.android.gms:play-services-auth:21.3.0")
+    implementation("androidx.browser:browser:1.8.0")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
     // Real org.json impl so store serialize/parse runs on the JVM instead of

@@ -9,15 +9,10 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
-    <!-- Read photos from MediaStore for the Google Photos album sync feature.
-         API 33+: READ_MEDIA_IMAGES targets only images (no other media).
-         API 26–32: READ_EXTERNAL_STORAGE is the legacy equivalent. -->
-    <uses-permission
-        android:name="android.permission.READ_MEDIA_IMAGES"
-        android:minSdkVersion="33" />
-    <uses-permission
-        android:name="android.permission.READ_EXTERNAL_STORAGE"
-        android:maxSdkVersion="32" />
+    <!-- Google Photos import uses the session-based Picker API: the user selects
+         photos in Google's own hosted UI (Custom Tab), so NO media-read permission
+         (READ_MEDIA_IMAGES / READ_EXTERNAL_STORAGE) is required. INTERNET above is
+         enough to talk to photospicker.googleapis.com and download the picked bytes. -->
 
     <!--
          QUERY_ALL_PACKAGES is needed to list installed apps and send them

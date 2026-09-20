@@ -7,7 +7,9 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -42,6 +44,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.animation.EnterTransition
@@ -72,6 +77,7 @@ import com.portalinstaller.viewmodel.FileTransferState
 import com.portalinstaller.viewmodel.InstallState
 import com.portalinstaller.viewmodel.ScreensaverViewModel
 import com.portalinstaller.viewmodel.UploadSummaryState
+import com.portalinstaller.viewmodel.PickerEvent
 import com.portalinstaller.viewmodel.PortalDiscoveryState
 import com.portalinstaller.viewmodel.LogcatViewModel
 import com.portalinstaller.viewmodel.PowerControlState
@@ -246,6 +252,38 @@ fun MainScreen(
         if (uris.isNotEmpty()) {
             screensaverViewModel.uploadPhotos(context, uris)
         }
+    }
+
+    // Google Photos import: launcher for the OAuth consent screen (when Google needs
+    // the user to grant the picker scope), then the events that open Google's picker.
+    val photosAuthLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        screensaverViewModel.onAuthResolved(context, result.data)
+    }
+    LaunchedEffect(Unit) {
+        screensaverViewModel.pickerEvents.collect { event ->
+            when (event) {
+                is PickerEvent.NeedsAuthResolution ->
+                    photosAuthLauncher.launch(
+                        IntentSenderRequest.Builder(event.pendingIntent).build()
+                    )
+                is PickerEvent.OpenPicker ->
+                    CustomTabsIntent.Builder().build().launchUrl(context, Uri.parse(event.uri))
+            }
+        }
+    }
+    // When the user returns from Google's picker (or any resume), ask the ViewModel to
+    // continue the import. It no-ops unless a picker session is actually pending.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                screensaverViewModel.onPickerReturned(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     val backupCreateLauncher = rememberLauncherForActivityResult(
@@ -463,7 +501,8 @@ fun MainScreen(
                         isWifiConnected = isWifiConnected,
                         viewModel = screensaverViewModel,
                         onOpenDevices = { navigateToTab(PortalRoute.Devices) },
-                        onPickPhotos = { photoPickerLauncher.launch("image/*") }
+                        onPickPhotos = { photoPickerLauncher.launch("image/*") },
+                        onAddGooglePhotos = { screensaverViewModel.startGooglePhotosImport(context) }
                     )
                 }
                 composable(PortalRoute.Devices.route) { DevicesTab(

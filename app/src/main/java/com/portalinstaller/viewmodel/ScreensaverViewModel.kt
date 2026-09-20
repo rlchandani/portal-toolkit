@@ -1,7 +1,9 @@
 package com.portalinstaller.viewmodel
 
 import android.app.Application
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -11,17 +13,24 @@ import com.portalinstaller.data.AppContainer
 import com.portalinstaller.data.ContentUriHelper
 import com.portalinstaller.data.PortalConnectionManager
 import com.portalinstaller.data.files.RemoteFile
+import com.portalinstaller.data.photos.AuthOutcome
+import com.portalinstaller.data.photos.OkHttpPickerHttp
+import com.portalinstaller.data.photos.PhotosAuth
+import com.portalinstaller.data.photos.PhotosPickerClient
+import com.portalinstaller.data.photos.PickerApi
+import com.portalinstaller.data.photos.PickerException
 import com.portalinstaller.data.screensaver.DedupeKey
-import com.portalinstaller.data.screensaver.GooglePhotoAlbum
-import com.portalinstaller.data.screensaver.GooglePhotoEntry
-import com.portalinstaller.data.screensaver.GooglePhotosAlbumReader
 import com.portalinstaller.data.screensaver.ImageFolder
 import com.portalinstaller.data.store.HistoryEntry
 import com.portalinstaller.data.transfer.TransferProgress
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -49,10 +58,6 @@ data class ScreensaverState(
     val folderBytes: Long = 0L,
     val deviceFreeBytes: Long = 0L,
     val isLoading: Boolean = false,
-    // Google Photos album sync state
-    val albums: List<GooglePhotoAlbum> = emptyList(),
-    val albumsLoading: Boolean = false,
-    val albumsError: String? = null,
 )
 
 /** Rezumatul unei sesiuni de incarcare pe Portal. */
@@ -61,6 +66,16 @@ sealed class UploadSummaryState {
     data class Uploading(val current: Int, val total: Int, val progress: TransferProgress) : UploadSummaryState()
     data class Done(val uploaded: Int, val skipped: Int, val failed: Int) : UploadSummaryState()
     data class Failed(val message: String) : UploadSummaryState()
+}
+
+/**
+ * Evenimente one-shot pentru importul din Google Photos: cer UI-ului sa lanseze un
+ * ecran de sistem (consimtamant OAuth sau UI-ul de picker gazduit de Google), lucru
+ * pe care un ViewModel nu il poate face singur.
+ */
+sealed class PickerEvent {
+    data class NeedsAuthResolution(val pendingIntent: PendingIntent) : PickerEvent()
+    data class OpenPicker(val uri: String) : PickerEvent()
 }
 
 /**
@@ -86,6 +101,19 @@ class ScreensaverViewModel(app: Application) : AndroidViewModel(app) {
     val notConnected: StateFlow<Boolean> = _notConnected.asStateFlow()
 
     private var uploadJob: Job? = null
+
+    // ── Google Photos import (Picker API) ─────────────────────────────────────────
+    private val photosAuth = PhotosAuth(app)
+    private val pickerClient = PhotosPickerClient(OkHttpPickerHttp())
+    private val _pickerEvents = MutableSharedFlow<PickerEvent>(extraBufferCapacity = 4)
+    val pickerEvents: SharedFlow<PickerEvent> = _pickerEvents.asSharedFlow()
+
+    // Sesiunea de picker in curs, pastrata intre "deschide picker" si intoarcerea
+    // utilizatorului in aplicatie (cand incepem sa interogam si sa descarcam).
+    private var pendingToken: String? = null
+    private var pendingSessionId: String? = null
+    private var pendingPollMillis = PickerApi.DEFAULT_POLL_MILLIS
+    private var pickerImporting = false
 
     private fun defaultFolder(): String = PortalConnectionManager.PORTAL_PHOTOS_DIR
 
@@ -286,6 +314,7 @@ class ScreensaverViewModel(app: Application) : AndroidViewModel(app) {
     fun cancelUpload() {
         uploadJob?.cancel()
         uploadJob = null
+        pickerImporting = false
         _uploadState.value = UploadSummaryState.Idle
     }
 
@@ -293,79 +322,139 @@ class ScreensaverViewModel(app: Application) : AndroidViewModel(app) {
         _uploadState.value = UploadSummaryState.Idle
     }
 
-    // ── Google Photos album sync ──────────────────────────────────────────────────
+    // ── Google Photos import (Picker API) ─────────────────────────────────────────
 
-    /** Load the device's image albums (MediaStore buckets) into [ScreensaverState.albums]. */
-    fun loadAlbums(context: Context) {
-        _state.value = _state.value.copy(albumsLoading = true, albumsError = null)
+    /**
+     * Porneste importul din Google Photos: cere autorizarea, iar apoi fie deschide
+     * direct sesiunea de picker (daca avem deja token), fie cere UI-ului sa lanseze
+     * ecranul de consimtamant.
+     */
+    fun startGooglePhotosImport(context: Context) {
+        holder.dadb.value ?: run { _notConnected.value = true; return }
+        if (uploadJob?.isActive == true || pickerImporting) return
         viewModelScope.launch {
-            val result = runCatching { GooglePhotosAlbumReader.listAlbums(context) }
-            _state.value = _state.value.copy(
-                albums = result.getOrDefault(emptyList()),
-                albumsLoading = false,
-                albumsError = result.exceptionOrNull()?.message,
+            when (val outcome = photosAuth.authorize()) {
+                is AuthOutcome.Token -> openPickerSession(context, outcome.accessToken)
+                is AuthOutcome.NeedsResolution ->
+                    _pickerEvents.tryEmit(PickerEvent.NeedsAuthResolution(outcome.pendingIntent))
+                is AuthOutcome.Failed ->
+                    _uploadState.value = UploadSummaryState.Failed(outcome.message)
+            }
+        }
+    }
+
+    /** Continua dupa ecranul de consimtamant OAuth lansat de UI. */
+    fun onAuthResolved(context: Context, data: Intent?) {
+        when (val outcome = photosAuth.tokenFromResult(data)) {
+            is AuthOutcome.Token -> viewModelScope.launch { openPickerSession(context, outcome.accessToken) }
+            is AuthOutcome.NeedsResolution ->
+                _uploadState.value = UploadSummaryState.Failed(context.getString(R.string.google_photos_signin_failed))
+            is AuthOutcome.Failed ->
+                _uploadState.value = UploadSummaryState.Failed(outcome.message)
+        }
+    }
+
+    private suspend fun openPickerSession(context: Context, token: String) {
+        try {
+            val session = pickerClient.createSession(token)
+            pendingToken = token
+            pendingSessionId = session.id
+            pendingPollMillis = session.pollIntervalMillis
+            pickerImporting = false
+            _pickerEvents.tryEmit(PickerEvent.OpenPicker(session.pickerUri))
+        } catch (e: PickerException) {
+            _uploadState.value = UploadSummaryState.Failed(
+                context.getString(R.string.google_photos_error, e.message ?: "")
             )
         }
     }
 
     /**
-     * Sync all photos from a MediaStore album bucket to the Portal's screensaver folder.
-     * Reuses the existing upload pipeline: deduplication, progress, history, cancel support.
+     * Apelat cand utilizatorul se intoarce in aplicatie din picker. Interogheaza
+     * sesiunea pana cand alegerea e gata, apoi descarca pozele alese si le impinge
+     * pe Portal prin pipeline-ul existent (deduplicare dupa nume, progres, istoric).
      */
-    fun syncAlbum(context: Context, album: GooglePhotoAlbum) {
+    fun onPickerReturned(context: Context) {
+        val token = pendingToken ?: return
+        val sessionId = pendingSessionId ?: return
+        if (pickerImporting || uploadJob?.isActive == true) return
         val d = holder.dadb.value ?: run { _notConnected.value = true; return }
-        if (uploadJob?.isActive == true) return
         val folder = _state.value.folder ?: defaultFolder()
+        pickerImporting = true
+        val pollMillis = pendingPollMillis
 
         uploadJob = viewModelScope.launch {
-            _uploadState.value = UploadSummaryState.Uploading(0, album.photoCount, TransferProgress(0, 0))
-            val photos: List<GooglePhotoEntry> = withContext(Dispatchers.IO) {
-                runCatching { GooglePhotosAlbumReader.listPhotos(context, album.bucketId) }
-                    .getOrDefault(emptyList())
-            }
-            if (photos.isEmpty()) {
-                _uploadState.value = UploadSummaryState.Done(0, 0, 0)
-                return@launch
-            }
+            try {
+                _uploadState.value = UploadSummaryState.Uploading(0, 0, TransferProgress(0L, 0L))
 
-            // Deduplicate against what's already on the Portal
-            val existing = _state.value.contents.map { DedupeKey(it.name, it.sizeBytes) }.toSet()
-            val toUpload = photos.filter { DedupeKey(it.displayName, it.sizeBytes) !in existing }
-            val skipped = photos.size - toUpload.size
-
-            var uploaded = 0; var failed = 0; var lastError: String? = null
-
-            toUpload.forEachIndexed { index, entry ->
-                _uploadState.value = UploadSummaryState.Uploading(
-                    current = index + 1, total = toUpload.size,
-                    progress = TransferProgress(0L, entry.sizeBytes),
-                )
-                val local = withContext(Dispatchers.IO) {
-                    runCatching {
-                        val input = context.contentResolver.openInputStream(entry.uri) ?: return@runCatching null
-                        val tmp = File(context.cacheDir, entry.displayName)
-                        tmp.outputStream().use { out -> input.copyTo(out) }
-                        input.close()
-                        tmp
-                    }.getOrNull()
+                // Asteptam ca utilizatorul sa termine de ales. La intoarcerea din
+                // picker (auto-close) alegerea e de obicei deja setata; punem un plafon
+                // ca sa nu blocam la nesfarsit daca utilizatorul a anulat.
+                var session = pickerClient.getSession(token, sessionId)
+                var waited = 0L
+                while (!session.mediaItemsSet && waited < PICKER_RETURN_WAIT_MILLIS) {
+                    delay(pollMillis)
+                    waited += pollMillis
+                    session = pickerClient.getSession(token, sessionId)
                 }
-                if (local == null) { failed++; lastError = context.getString(R.string.error_read_photo_failed); return@forEachIndexed }
-                runCatching { fileManager.push(d, local, folder, advancedMode = false) }
-                    .onSuccess {
-                        uploaded++
-                        _uploadState.value = UploadSummaryState.Uploading(index + 1, toUpload.size, TransferProgress(entry.sizeBytes, entry.sizeBytes))
-                    }
-                    .onFailure { failed++; lastError = reason(context, it) }
-                local.delete()
-            }
+                if (!session.mediaItemsSet) {
+                    _uploadState.value = UploadSummaryState.Done(0, 0, 0)
+                    return@launch
+                }
 
-            _uploadState.value = UploadSummaryState.Done(uploaded, skipped, failed)
-            historyStore.add(HistoryEntry(
-                timestamp = System.currentTimeMillis(),
-                description = context.getString(R.string.history_photo_upload, uploaded, toUpload.size),
-                success = failed == 0,
-            ))
-            refreshContents()
+                val photos = pickerClient.listAllPhotos(token, sessionId)
+                if (photos.isEmpty()) {
+                    _uploadState.value = UploadSummaryState.Done(0, 0, 0)
+                    return@launch
+                }
+
+                // Deduplicare dupa nume fata de ce e deja pe Portal (nu stim dimensiunea
+                // in octeti inainte de descarcare, deci nu putem folosi cheia nume+dimensiune).
+                val existingNames = _state.value.contents.map { it.name }.toSet()
+                val toDownload = photos.filter { it.filename !in existingNames }
+                val skipped = photos.size - toDownload.size
+
+                var uploaded = 0
+                var failed = 0
+                toDownload.forEachIndexed { index, item ->
+                    _uploadState.value = UploadSummaryState.Uploading(
+                        current = index + 1,
+                        total = toDownload.size,
+                        progress = TransferProgress(0L, 0L),
+                    )
+                    val local = File(context.cacheDir, item.filename)
+                    val downloaded = withContext(Dispatchers.IO) {
+                        runCatching { pickerClient.downloadPhoto(token, item, local) }.isSuccess
+                    }
+                    if (!downloaded) {
+                        failed++
+                        return@forEachIndexed
+                    }
+                    runCatching { fileManager.push(d, local, folder, advancedMode = false) }
+                        .onSuccess { uploaded++ }
+                        .onFailure { failed++ }
+                    local.delete()
+                }
+
+                _uploadState.value = UploadSummaryState.Done(uploaded, skipped, failed)
+                historyStore.add(
+                    HistoryEntry(
+                        timestamp = System.currentTimeMillis(),
+                        description = context.getString(R.string.history_photo_upload, uploaded, toDownload.size),
+                        success = failed == 0,
+                    )
+                )
+                refreshContents()
+            } catch (e: PickerException) {
+                _uploadState.value = UploadSummaryState.Failed(
+                    context.getString(R.string.google_photos_error, e.message ?: "")
+                )
+            } finally {
+                pickerClient.deleteSession(token, sessionId)
+                pendingToken = null
+                pendingSessionId = null
+                pickerImporting = false
+            }
         }
     }
 
@@ -375,6 +464,9 @@ class ScreensaverViewModel(app: Application) : AndroidViewModel(app) {
 
     fun onDisconnected() {
         cancelUpload()
+        pendingToken = null
+        pendingSessionId = null
+        pickerImporting = false
         _notConnected.value = false
         _state.value = ScreensaverState()
     }
@@ -388,4 +480,10 @@ class ScreensaverViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun reason(context: Context, t: Throwable): String =
         AdbErrors.formatReason(context, t.message, context.getString(R.string.error_unknown))
+
+    private companion object {
+        // Cat asteptam alegerea dupa ce utilizatorul se intoarce din picker inainte
+        // sa renuntam (in caz ca a inchis picker-ul fara sa aleaga nimic).
+        const val PICKER_RETURN_WAIT_MILLIS = 90_000L
+    }
 }

@@ -173,6 +173,9 @@
     <string name="screensaver_storage">%1$s folosit • %2$s liber</string>
     <string name="screensaver_empty">Niciun fisier in acest folder.</string>
     <string name="screensaver_add_photos">Adauga poze</string>
+    <string name="screensaver_add_google_photos">Google Photos</string>
+    <string name="google_photos_error">Google Photos: %1$s</string>
+    <string name="google_photos_signin_failed">Google sign-in failed. Please try again.</string>
     <string name="screensaver_delete">Sterge</string>
     <string name="screensaver_move">Muta</string>
     <string name="screensaver_move_hint">Folder destinatie (ex. /sdcard/DCIM)</string>

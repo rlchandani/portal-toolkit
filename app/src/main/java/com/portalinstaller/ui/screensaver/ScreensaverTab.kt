@@ -57,7 +57,6 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.portalinstaller.R
 import com.portalinstaller.data.files.RemoteFile
-import com.portalinstaller.data.screensaver.GooglePhotoAlbum
 import com.portalinstaller.data.screensaver.HintLevel
 import com.portalinstaller.data.screensaver.screensaverHint
 import com.portalinstaller.ui.common.formatFileSize
@@ -79,7 +78,8 @@ internal fun ScreensaverTab(
     isWifiConnected: Boolean,
     viewModel: ScreensaverViewModel,
     onOpenDevices: () -> Unit,
-    onPickPhotos: () -> Unit
+    onPickPhotos: () -> Unit,
+    onAddGooglePhotos: () -> Unit
 ) {
     val context = LocalContext.current
     var showFolderPicker by remember { mutableStateOf(false) }
@@ -223,6 +223,11 @@ internal fun ScreensaverTab(
                     enabled = isWifiConnected,
                     label = { Text(stringResource(R.string.screensaver_add_photos), maxLines = 1, softWrap = false) }
                 )
+                AssistChip(
+                    onClick = onAddGooglePhotos,
+                    enabled = isWifiConnected,
+                    label = { Text(stringResource(R.string.screensaver_add_google_photos), maxLines = 1, softWrap = false) }
+                )
                 Spacer(modifier = Modifier.weight(1f))
                 // Marimea grilei tine de afisare, nu de folder, deci sta langa
                 // „Adauga poze”, nu langa „Schimba folder”.
@@ -255,16 +260,6 @@ internal fun ScreensaverTab(
                 modifier = Modifier.fillMaxWidth()
             )
         }
-
-        // ── Google Photos album sync ──────────────────────────────────────────────
-        GooglePhotosSection(
-            albums = state.albums,
-            albumsLoading = state.albumsLoading,
-            isWifiConnected = isWifiConnected,
-            uploadActive = uploadState is UploadSummaryState.Uploading,
-            onLoadAlbums = { viewModel.loadAlbums(context) },
-            onSyncAlbum = { album -> viewModel.syncAlbum(context, album) },
-        )
 
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -590,138 +585,6 @@ private fun PhotoPreviewPage(
         )
     } else {
         CircularProgressIndicator()
-    }
-}
-
-/**
- * Google Photos album section — shows a collapsible list of MediaStore image buckets.
- * No OAuth required: Google Photos syncs albums to MediaStore on the phone. The user
- * taps an album and it pushes directly to the Portal via the existing ADB upload pipeline.
- *
- * Needs READ_MEDIA_IMAGES (API 33+) or READ_EXTERNAL_STORAGE (older), both declared in
- * AndroidManifest.xml. If the permission is denied the section shows a rationale card.
- */
-@Composable
-private fun GooglePhotosSection(
-    albums: List<GooglePhotoAlbum>,
-    albumsLoading: Boolean,
-    isWifiConnected: Boolean,
-    uploadActive: Boolean,
-    onLoadAlbums: () -> Unit,
-    onSyncAlbum: (GooglePhotoAlbum) -> Unit,
-) {
-    var expanded by remember { mutableStateOf(false) }
-    var confirmAlbum by remember { mutableStateOf<GooglePhotoAlbum?>(null) }
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-    ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            // Header row — tap to expand/collapse and load albums on first open
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable {
-                        expanded = !expanded
-                        if (expanded && albums.isEmpty() && !albumsLoading) onLoadAlbums()
-                    },
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text(
-                    text = "Google Photos",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.weight(1f),
-                )
-                Text(
-                    text = if (expanded) "▲" else "▼",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            if (expanded) {
-                Spacer(modifier = Modifier.height(8.dp))
-                when {
-                    albumsLoading -> {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                            Text("Loading albums…", style = MaterialTheme.typography.bodySmall)
-                        }
-                    }
-                    albums.isEmpty() -> {
-                        Text(
-                            text = "No albums found. Make sure Google Photos is installed and photos are synced to your phone.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        TextButton(onClick = onLoadAlbums) { Text("Refresh") }
-                    }
-                    else -> {
-                        albums.forEach { album ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable(enabled = isWifiConnected && !uploadActive) {
-                                        confirmAlbum = album
-                                    }
-                                    .padding(vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                Text(
-                                    text = album.displayName,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    modifier = Modifier.weight(1f),
-                                )
-                                Text(
-                                    text = "${album.photoCount} photos",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                        if (!isWifiConnected) {
-                            Text(
-                                text = "Connect to a Portal to sync an album.",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(top = 4.dp),
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // Confirm before syncing (could be hundreds of photos)
-    confirmAlbum?.let { album ->
-        AlertDialog(
-            onDismissRequest = { confirmAlbum = null },
-            title = { Text("Sync \"${album.displayName}\"?") },
-            text = {
-                Text(
-                    "${album.photoCount} photos will be pushed to the Portal's screensaver folder. " +
-                        "Existing photos with the same name and size are skipped automatically."
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = { onSyncAlbum(album); confirmAlbum = null }) {
-                    Text("Sync")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmAlbum = null }) { Text("Cancel") }
-            },
-        )
     }
 }
 
