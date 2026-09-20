@@ -26,7 +26,10 @@ class H264Decoder {
     private var codec: MediaCodec? = null
     @Volatile
     private var stopped = false
-    private val pending = ConcurrentLinkedQueue<ByteArray>()
+    // O unitate NAL de trimis, plus flag-urile MediaCodec (ex. CODEC_CONFIG pentru
+    // SPS/PPS). Imutabil.
+    private class InputChunk(val bytes: ByteArray, val flags: Int)
+    private val pending = ConcurrentLinkedQueue<InputChunk>()
     // Indecsii buffer-elor de intrare libere, oferite de codec prin callback.
     private val freeInputs = ConcurrentLinkedQueue<Int>()
     private val drainLock = Any()
@@ -41,6 +44,9 @@ class H264Decoder {
         freeInputs.clear()
         try {
             val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, width, height)
+            // Un NAL de tip keyframe la 2160x1440 poate depasi cu mult 64 KB; cerem
+            // un buffer de intrare suficient de mare ca sa incapa un cadru intreg.
+            format.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, MAX_INPUT_SIZE)
             val mc = MediaCodec.createDecoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
             mc.setCallback(callback)
             mc.configure(format, surface, null, 0)
@@ -52,8 +58,13 @@ class H264Decoder {
         }
     }
 
-    fun submit(bytes: ByteArray) {
-        pending.add(bytes)
+    /**
+     * Trimite o unitate NAL completa. [codecConfig] trebuie sa fie true pentru
+     * SPS/PPS, ca decodorul sa le trateze drept configuratie.
+     */
+    fun submit(bytes: ByteArray, codecConfig: Boolean = false) {
+        val flags = if (codecConfig) MediaCodec.BUFFER_FLAG_CODEC_CONFIG else 0
+        pending.add(InputChunk(bytes, flags))
         drain()
     }
 
@@ -80,9 +91,9 @@ class H264Decoder {
             try {
                 val input = mc.getInputBuffer(index) ?: continue
                 input.clear()
-                input.put(chunk)
+                input.put(chunk.bytes)
                 if (!stopped && codec != null) {
-                    mc.queueInputBuffer(index, 0, chunk.size, 0, 0)
+                    mc.queueInputBuffer(index, 0, chunk.bytes.size, 0, chunk.flags)
                 }
             } catch (e: Exception) {
                 if (!stopped) {
@@ -133,5 +144,10 @@ class H264Decoder {
         override fun onOutputFormatChanged(mc: MediaCodec, format: MediaFormat) {
             // Nimic: randam pe Surface, nu ne intereseaza formatul de iesire.
         }
+    }
+
+    companion object {
+        // 2 MB: acopera un keyframe la 2160x1440 cu marja confortabila.
+        private const val MAX_INPUT_SIZE = 2 * 1024 * 1024
     }
 }

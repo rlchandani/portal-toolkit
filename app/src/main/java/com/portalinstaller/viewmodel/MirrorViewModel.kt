@@ -13,8 +13,10 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.portalinstaller.R
 import com.portalinstaller.data.AppContainer
+import com.portalinstaller.data.tools.AnnexBSplitter
 import com.portalinstaller.data.tools.H264Decoder
 import com.portalinstaller.data.tools.InputInjector
+import com.portalinstaller.data.tools.isConfigNal
 import com.portalinstaller.data.tools.MirrorUnsupportedException
 import com.portalinstaller.data.tools.PortalKey
 import com.portalinstaller.data.tools.ScreenCaptureManager
@@ -119,8 +121,14 @@ class MirrorViewModel(app: Application) : AndroidViewModel(app) {
                 _state.value = MirrorState.Streaming
                 launch { observeDecoderError() }
                 launch { observeBattery() }
+                val splitter = AnnexBSplitter()
                 ScreenMirrorManager.stream(d, size).collect { chunk ->
-                    decoder.submit(chunk)
+                    // Fluxul soseste in bucati arbitrare; il taiem in unitati NAL
+                    // complete inainte de a-l da decodorului (MediaCodec cere NAL-uri
+                    // aliniate la codul de start, altfel apar macroblocuri verzi).
+                    for (nal in splitter.feed(chunk)) {
+                        decoder.submit(nal, codecConfig = isConfigNal(nal))
+                    }
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
