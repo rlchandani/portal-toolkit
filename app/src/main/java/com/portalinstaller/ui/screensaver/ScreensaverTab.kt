@@ -142,29 +142,33 @@ internal fun ScreensaverTab(
             }
         }
 
-        // Contor de stocare.
-        Text(
-            text = stringResource(
-                R.string.screensaver_storage,
-                formatFileSize(state.folderBytes),
-                formatFileSize(state.deviceFreeBytes)
-            ),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        val usedFraction = run {
-            val total = state.folderBytes + state.deviceFreeBytes
-            if (total > 0L) (state.folderBytes.toFloat() / total).coerceIn(0f, 1f) else 0f
+        // A failed first read has no storage measurements to display.
+        if (!state.listingFailed || state.contents.isNotEmpty() ||
+            state.folderBytes > 0L || state.deviceFreeBytes > 0L
+        ) {
+            Text(
+                text = stringResource(
+                    R.string.screensaver_storage,
+                    formatFileSize(state.folderBytes),
+                    formatFileSize(state.deviceFreeBytes)
+                ),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            val usedFraction = run {
+                val total = state.folderBytes + state.deviceFreeBytes
+                if (total > 0L) (state.folderBytes.toFloat() / total).coerceIn(0f, 1f) else 0f
+            }
+            LinearProgressIndicator(
+                progress = { usedFraction },
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+            )
         }
-        LinearProgressIndicator(
-            progress = { usedFraction },
-            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
-        )
 
         // Indiciu de numar de poze: firmware-ul Portal repeta seturile mici, deci
         // sugeram un set mai mare de poze unice (nu putem controla bucla de afisare).
         val hint = screensaverHint(state.contents.size)
-        if (hint is HintLevel.AddMore) {
+        if (!state.listingFailed && hint is HintLevel.AddMore) {
             Text(
                 text = stringResource(
                     R.string.screensaver_hint_add_more,
@@ -263,8 +267,30 @@ internal fun ScreensaverTab(
 
         Spacer(modifier = Modifier.height(8.dp))
 
+        if (state.listingFailed) {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(R.string.screensaver_listing_failed),
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(
+                        onClick = { viewModel.refreshContents() },
+                        enabled = isWifiConnected && !state.isLoading,
+                    ) {
+                        Text(stringResource(R.string.retry))
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-            if (state.contents.isEmpty() && !state.isLoading) {
+            if (state.contents.isEmpty() && !state.isLoading && !state.listingFailed) {
                 Text(
                     text = stringResource(R.string.screensaver_empty),
                     style = MaterialTheme.typography.bodyMedium,

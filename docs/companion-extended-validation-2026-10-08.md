@@ -4,11 +4,13 @@ Portal Toolkit 1.5.2-control-center (version code 8) is being validated on the
 physical Pixel 9 Pro Fold over wireless ADB, with USB disconnected. The paired
 Portal+ runs Android API 29 and Immortal 1.64.
 
-**Status: test candidate, not final sign-off.** The Activity width correction is
-installed and verified on the real phone. The last complete Pixel run passed
-75 of 76 tests; schedule time confirmation is unresolved. The Pixel subsequently
-locked behind its PIN/fingerprint screen. The final physical rerun, provider
-check, and interactive render measurement require the owner to unlock it once.
+**Status: final build and automated validation passed.** The Activity width
+correction and photo-folder discovery/error/retry flow are installed and verified
+on the real phone and Portal. The final installed build passed all 76 Android
+tests, including six live phone/Portal integration tests, with zero skips.
+Interactive render measurements are recorded below. Google Photos reached
+Google's account chooser; owner account selection and the subsequent provider
+flow remain pending.
 
 This follows the [initial physical-phone validation](companion-pixel-validation-2026-10-08.md).
 All work stays on the companion and Portal API branches. The original checkouts,
@@ -28,6 +30,8 @@ preserved. No GitHub authentication, push, or pull request is involved.
 | A Google picker could outlive or switch its original connection/folder | One owned coroutine captures the origin, drains stale callbacks, and cancels on connection loss |
 | Picker events could disappear while the UI collector was absent | Buffered delivery retains events across collector gaps; stale events still fail ownership checks |
 | A quick folder switch could use the previous folder's duplicate list | Read the captured destination directly; reject listing failure and suppress stale A/B list results |
+| A failed photo listing could discard known photos/stats and appear empty | Retain the last known photos and stats, clear selection, and show an explicit Retry action; the synthetic missing-folder and retry flow passed on the phone/Portal |
+| Photo discovery through the `/sdcard` symlink could silently return no images | Append a directory trailing slash while retaining the four-level traversal bound; the discovery regression failed before the fix and passed after |
 | A destination appearing during import could be overwritten | Google imports request no-clobber publication, detect retained staging files, and count collisions as skipped |
 | Partial backup restore was reported as successful or left the app list stale | Retain failed/partial outcomes, reject invalid archives before mutation, and refresh after confirmed app or settings changes |
 | Session loss cancelled a restore but left its progress screen busy | Operation-owned cleanup releases progress on disconnect/replacement and prevents stale completion from clearing newer work; nine lifecycle regressions pass |
@@ -51,9 +55,26 @@ shows the real phone after the width fix. It excludes the system status bar.
   The operation succeeded with up to date.
 - Removed only the Transistor test app through Device tools and verified its
   package was absent. No owner app was uninstalled.
+- Opened the real Aurora Store Uninstall and Clear data dialogs, then cancelled
+  both. Its `pm path` result was unchanged; no owner app or owner-app data was
+  mutated.
+- On the actual Portal, `find /sdcard` returned zero images with exit code 0;
+  `find /sdcard/` found 13, including nine original PortalInstaller images and
+  one synthetic QA image.
+- Selected the discovered synthetic image folder, removed only its generated
+  fixture, and reselected its cached entry. The phone showed an explicit read
+  failure and Retry, with no false empty message or unknown storage statistics.
+  Recreated the fixture; Retry loaded its image and cleared the error. Restored
+  the original folder with nine photos, then removed the synthetic fixture and
+  empty directory. Same-folder retention is independently covered by JVM tests.
 - Tested API 29 `mv -n` using two synthetic files: destination bytes survived and
   the staging file remained on collision despite a zero exit code. Both fixtures
   were removed immediately.
+- Selected 06:45 through the actual app's native clock controls and ordinary OS
+  touches. Its scene draft updated to 06:45. Discarded the draft without saving
+  a scene or schedule to the Portal.
+- Opened Google Photos in Device tools. Google's account chooser appeared;
+  no account was guessed and no OAuth token was exported.
 
 Live integration tests restore settings, scenes, and photo-source changes in
 `finally` blocks and remove their generated images. Pairing credentials remain
@@ -61,33 +82,43 @@ inside the app process.
 
 ## Verification and performance
 
-The final companion JVM run passed **417 tests**, with zero failures, errors, or
-skips. The updated Portal branch passed **788 JVM tests** and built successfully.
-The unchanged Jarvis branch previously passed **363 JVM tests**. These are 1,568
-JVM tests across the three branches; the Jarvis count is previous evidence.
+The final companion build succeeded and its JVM run passed **422 tests**, with
+zero failures, errors, or skips. The updated Portal branch passed **788 JVM
+tests** and built successfully. The unchanged Jarvis branch previously passed
+**363 JVM tests**. These are 1,573 JVM tests across the three branches; the Jarvis
+count is previous evidence.
+The physical listing retry check and final Pixel rerun both passed.
 
 | Android evidence | Result and scope |
 |---|---|
 | Real Pixel Activity regressions | 3/3 passed: width, spacing, and lazy scrolling |
-| Last complete Pixel run | 75/76 passed, with live Portal tests enabled; 95.898 seconds |
+| Final complete Pixel run | 76/76 passed, zero failures/skips, with six live Portal tests enabled; 95.020 seconds; final installed listing/discovery build |
 | Account-free UI fixtures on Android 14 emulator | 68/68 passed; 93.264 seconds |
-| Management fixtures after the keep-awake adjustment | 25/25 passed on Android 14 emulator; 39.363 seconds |
+| Management fixtures with OS-input confirmation | 25/25 passed on Android 14 emulator; 38.157 seconds |
+| Pixel schedule confirmation stability | Three consecutive passes with OS-input confirmation |
 | Isolated Android 17 native picker diagnostic | Selected hour/minute survived input validation; passed without opening a window |
-| Final physical suite and native Google Photos check | Pending owner unlock |
+| Native Google Photos provider flow | Reached account chooser; owner account selection pending |
 
-The failing Pixel schedule fixture requested 06:45, but its saved scene still
-contained 22:15. The corresponding emulator test passed. An isolated Android 17
-widget check showed that setting and validating the time preserves 06:45; that
-does not establish whether the visible dialog receives its confirmation tap.
-The UI regression now asserts the displayed time before saving. The management
-fixture also keeps its own window awake, since the production activity's flag
-does not carry over to an isolated test activity. The locked-device repeats
-could not find a Compose hierarchy and do not constitute valid UI verification.
-No owner schedule was used or modified by this fixture.
+An earlier Pixel schedule fixture requested 06:45 but saved 22:15 because its
+Espresso-injected native-dialog tap did not reach the confirmation callback.
+The corresponding emulator test passed. The real app accepted 06:45 through
+ordinary clock touches. On the Pixel, the button's global-visible rectangle was
+window-relative while its screen location included the dialog offset; using
+explicit screen coordinates with Espresso still missed the callback. The final
+test obtains screen coordinates and injects a real OS `input tap` through
+UiAutomation's shell interface, off the UI thread. It does not call
+`performClick` to bypass input delivery. The displayed time is asserted before
+saving, and the saved schedule is checked independently. This passed three
+consecutive Pixel runs and the final complete suite.
+
+The management fixture also keeps its own window awake, since the production
+activity's flag does not carry over to an isolated test activity. Locked-device
+repeats could not find a Compose hierarchy and are excluded from valid UI
+verification. No owner schedule was used or modified by this fixture.
 
 The 68 emulator fixtures cover Activity, management panels, photo pagination,
 destructive confirmations, draft restoration, preview states, and mirror
-geometry. They do not replace the eight live phone/Portal integration tests.
+geometry. They do not replace the six live phone/Portal integration tests.
 
 The sustained mirror experiment captured the Portal's real slideshow on the
 Pixel. Its code was unchanged between the measured 1.5.2 build and the final
@@ -124,9 +155,28 @@ video jank. These counters are neither a constant frame-rate guarantee nor nativ
 Compose UI jank measurements.
 
 Leaving the mirror page stopped its remote `screenrecord` process. Capture and
-diagnostic frame collection were stopped afterward. The companion's measured
-cold activity start was 545 ms on the earlier candidate; final interactive render
-measurements are pending the phone unlock.
+diagnostic frame collection were stopped afterward.
+
+A separate native interaction measurement covered **20 tab interactions** on the
+1.5.2 build before the final legacy photo-folder corrections; the main tab render
+code was unchanged by those corrections. The
+measured cold activity start was **540 ms** (`TotalTime`; the earlier candidate
+measured 545 ms).
+
+| Native render measurement | Result and scope |
+|---|---|
+| Aggregate rendered frames | 1,879 |
+| Modern Android jank algorithm | 40 frames (2.13%) |
+| Legacy Android jank algorithm | 177 frames (9.42%) |
+| Aggregate frame histogram p50 / p90 / p95 / p99 | 6 / 8 / 15 / 61 ms |
+| Aggregate GPU histogram p50 / p90 / p95 / p99 | 2 / 3 / 3 / 3 ms |
+| Last view root's 34 retained completion frames | Median 4.49 ms; p95 38.09 ms; maximum 45.09 ms; one completed after its deadline |
+
+The aggregate histograms cover all 1,879 frames. The 34 retained completion
+samples cover only the last view root and are not percentiles for the whole run.
+The two Android jank algorithms use different criteria. These are observed
+rendering and launch measurements, not guaranteed input latency or provider
+response times.
 
 ## Boundaries
 

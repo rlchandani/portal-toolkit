@@ -51,11 +51,11 @@ import androidx.compose.ui.unit.dp
 import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.UiController
 import androidx.test.espresso.ViewAction
-import androidx.test.espresso.action.ViewActions.click
 import androidx.test.espresso.matcher.RootMatchers.isDialog
 import androidx.test.espresso.matcher.ViewMatchers.isAssignableFrom
 import androidx.test.espresso.matcher.ViewMatchers.withId
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import org.hamcrest.Matcher
 import org.json.JSONArray
 import org.json.JSONObject
@@ -66,6 +66,7 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.FileInputStream
 
 /**
  * Real panel interactions with wire fixtures and captured callbacks. No pairing, transport,
@@ -420,7 +421,8 @@ class ManagementWorkflowUiTest {
         compose.onNodeWithContentDescription("Wednesday").scrollClick()
         clickText("22:15")
         onView(isAssignableFrom(TimePicker::class.java)).inRoot(isDialog()).perform(setTime(6, 45))
-        onView(withId(android.R.id.button1)).inRoot(isDialog()).perform(click())
+        tapNativePositiveButton()
+        compose.waitForIdle()
         compose.onNodeWithText("06:45").assertExists()
         clickText("Save scenes")
 
@@ -764,6 +766,26 @@ class ManagementWorkflowUiTest {
             assertEquals(hour, view.hour)
             assertEquals(minute, view.minute)
         }
+    }
+
+    private fun tapNativePositiveButton() {
+        var coordinates: Pair<Int, Int>? = null
+        onView(withId(android.R.id.button1)).inRoot(isDialog()).perform(object : ViewAction {
+            override fun getConstraints(): Matcher<View> = withId(android.R.id.button1)
+            override fun getDescription() = "Read the native positive button's screen coordinates"
+            override fun perform(uiController: UiController, view: View) {
+                val location = IntArray(2)
+                view.getLocationOnScreen(location)
+                coordinates = location[0] + view.width / 2 to location[1] + view.height / 2
+            }
+        })
+        val (x, y) = requireNotNull(coordinates)
+        // Espresso's injected tap misses this Android 17 Fold dialog. Shell input
+        // follows the same OS touch path verified manually; this runs off the UI thread.
+        InstrumentationRegistry.getInstrumentation().uiAutomation
+            .executeShellCommand("input tap $x $y").use { descriptor ->
+                FileInputStream(descriptor.fileDescriptor).use { it.readBytes() }
+            }
     }
 
     private fun assertJson(expected: String, actual: Any) = assertJson(

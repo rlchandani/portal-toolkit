@@ -69,6 +69,7 @@ data class ScreensaverState(
     val folderBytes: Long = 0L,
     val deviceFreeBytes: Long = 0L,
     val isLoading: Boolean = false,
+    val listingFailed: Boolean = false,
 )
 
 internal data class ScreensaverFolderListing(
@@ -96,7 +97,7 @@ internal class ScreensaverListings(
         cancel()
         state.value = state.value.copy(
             folder = folder, contents = emptyList(), selection = emptySet(),
-            folderBytes = 0L, deviceFreeBytes = 0L, isLoading = false,
+            folderBytes = 0L, deviceFreeBytes = 0L, isLoading = false, listingFailed = false,
         )
     }
 
@@ -111,7 +112,7 @@ internal class ScreensaverListings(
         if (!holder.isCurrent(origin)) return
         val requestRevision = revision
         var requestedFolder = state.value.folder
-        state.value = state.value.copy(isLoading = true)
+        state.value = state.value.copy(isLoading = true, listingFailed = false)
         fun isCurrent() = revision == requestRevision && holder.isCurrent(origin) &&
             state.value.folder == requestedFolder
         job = holder.launchForSession(scope, origin) {
@@ -134,14 +135,14 @@ internal class ScreensaverListings(
                 if (!isCurrent()) return@launchForSession
                 state.value = state.value.copy(
                     contents = listing.contents, folderBytes = listing.folderBytes,
-                    deviceFreeBytes = listing.deviceFreeBytes, isLoading = false,
+                    deviceFreeBytes = listing.deviceFreeBytes, isLoading = false, listingFailed = false,
                 )
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
                 if (isCurrent()) {
                     state.value = state.value.copy(
-                        contents = emptyList(), folderBytes = 0L, deviceFreeBytes = 0L, isLoading = false,
+                        isLoading = false, listingFailed = true, selection = emptySet(),
                     )
                 }
             }
@@ -538,6 +539,7 @@ class ScreensaverViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun toggleSelect(path: String) {
+        if (_state.value.listingFailed) return
         val selection = _state.value.selection
         _state.value = _state.value.copy(
             selection = if (path in selection) selection - path else selection + path

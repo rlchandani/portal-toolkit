@@ -20,7 +20,9 @@ class PortalScreensaverManager {
     suspend fun findImageFolders(dadb: Dadb): List<ImageFolder> = withContext(Dispatchers.IO) {
         // Enumera fisierele imagine (case-insensitive) pana la 3 niveluri adancime.
         val namePredicate = imageExtensions.joinToString(" -o ") { "-iname ${shellQuote("*.$it")}" }
-        val findCmd = "find /sdcard -maxdepth 4 -type f \\( $namePredicate \\) 2>/dev/null"
+        // /sdcard is a symlink on Portal. The trailing slash makes toybox
+        // traverse its directory rather than successfully returning no files.
+        val findCmd = "find /sdcard/ -maxdepth 4 -type f \\( $namePredicate \\) 2>/dev/null"
         val files = dadb.shell(findCmd).allOutput
             .lineSequence()
             .map { it.trim() }

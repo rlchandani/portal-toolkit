@@ -38,6 +38,97 @@ class ScreensaverListingsTest {
         size, size * 10,
     )
 
+    @Test fun `failed same-folder refresh retains the last successful photos and storage`() = runTest {
+        val holder = ConnectionHolder().apply { set(device(), "origin") }
+        val selected = setOf("/sdcard/photos/1.jpg")
+        val state = MutableStateFlow(ScreensaverState(folder = "/sdcard/photos", selection = selected))
+        val previous = ScreensaverFolderListing(
+            (1..9).map { listing("/sdcard/photos").contents.single().copy(name = "$it.jpg", path = "/sdcard/photos/$it.jpg") },
+            26_000_000L, 14_900_000_000L,
+        )
+        var unavailable = false
+        val listings = ScreensaverListings(holder, this, state, "/sdcard/default", discover = { emptyList() },
+            list = { _, _ ->
+                if (unavailable) throw IOException("synthetic read failure with private details")
+                previous
+            })
+        listings.refresh(holder.requireSession())
+        testScheduler.runCurrent()
+        assertEquals(selected, state.value.selection)
+        unavailable = true
+        listings.refresh(holder.requireSession())
+        testScheduler.runCurrent()
+
+        assertTrue(state.value.listingFailed)
+        assertFalse(state.value.isLoading)
+        assertEquals(previous.contents, state.value.contents)
+        assertEquals(previous.folderBytes, state.value.folderBytes)
+        assertEquals(previous.deviceFreeBytes, state.value.deviceFreeBytes)
+        assertTrue(state.value.selection.isEmpty())
+    }
+
+    @Test fun `failed first read of a new folder is failure rather than an empty success`() = runTest {
+        val holder = ConnectionHolder().apply { set(device(), "origin") }
+        val state = MutableStateFlow(ScreensaverState(folder = "/sdcard/A", contents = listing("/sdcard/A").contents))
+        val listings = ScreensaverListings(holder, this, state, "/sdcard/default", discover = { emptyList() },
+            list = { _, _ -> throw IOException("cannot read new folder") })
+        listings.chooseFolder("/sdcard/B")
+        listings.refresh(holder.requireSession())
+        testScheduler.runCurrent()
+
+        assertEquals("/sdcard/B", state.value.folder)
+        assertTrue(state.value.contents.isEmpty())
+        assertTrue(state.value.listingFailed)
+        assertFalse(state.value.isLoading)
+    }
+
+    @Test fun `retry clears the failure while loading and success replaces last-known contents`() = runTest {
+        val holder = ConnectionHolder().apply { set(device(), "origin") }
+        val state = MutableStateFlow(ScreensaverState(folder = "/sdcard/A"))
+        val retried = CompletableDeferred<ScreensaverFolderListing>()
+        var attempts = 0
+        val listings = ScreensaverListings(holder, this, state, "/sdcard/default", discover = { emptyList() },
+            list = { _, _ ->
+                if (++attempts == 1) throw IOException("temporarily unavailable")
+                retried.await()
+            })
+        listings.refresh(holder.requireSession())
+        testScheduler.runCurrent()
+        val failed = state.value.listingFailed
+        listings.refresh(holder.requireSession())
+        val failureDuringRetry = state.value.listingFailed
+        val loadingDuringRetry = state.value.isLoading
+        testScheduler.runCurrent()
+        retried.complete(listing("/sdcard/A", 500))
+        testScheduler.runCurrent()
+
+        assertTrue(failed)
+        assertFalse(failureDuringRetry)
+        assertTrue(loadingDuringRetry)
+        assertFalse(state.value.listingFailed)
+        assertFalse(state.value.isLoading)
+        assertEquals(listing("/sdcard/A", 500).contents, state.value.contents)
+        assertEquals(500L, state.value.folderBytes)
+    }
+
+    @Test fun `choosing another folder clears the previous read failure and stale data`() = runTest {
+        val holder = ConnectionHolder().apply { set(device(), "origin") }
+        val state = MutableStateFlow(ScreensaverState(
+            folder = "/sdcard/A", contents = listing("/sdcard/A").contents,
+            folderBytes = 100L, deviceFreeBytes = 1_000L, listingFailed = true,
+        ))
+        val listings = ScreensaverListings(holder, this, state, "/sdcard/default", discover = { emptyList() },
+            list = { _, folder -> listing(folder) })
+
+        listings.chooseFolder("/sdcard/B")
+
+        assertFalse(state.value.listingFailed)
+        assertFalse(state.value.isLoading)
+        assertTrue(state.value.contents.isEmpty())
+        assertEquals(0L, state.value.folderBytes)
+        assertEquals(0L, state.value.deviceFreeBytes)
+    }
+
     @Test fun `slow A listing cannot populate B after folder selection`() = runTest {
         val holder = ConnectionHolder().apply { set(device(), "origin") }
         val origin = holder.requireSession()
@@ -159,6 +250,7 @@ class ScreensaverListingsTest {
 
         assertEquals(listing("/sdcard/B").contents, state.value.contents)
         assertFalse(state.value.isLoading)
+        assertFalse(state.value.listingFailed)
     }
 
     @Test fun `latest folder discovery lists its selected folder on the same origin`() = runTest {
