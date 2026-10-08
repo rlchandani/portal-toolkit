@@ -13,6 +13,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.runCurrent
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -29,6 +30,67 @@ class CompanionPhotosTest {
         }
         assertEquals("My photo.JPG", CompanionPhotos.safeName("My photo.JPG"))
         assertTrue(runCatching { CompanionPhotos.folder("/sdcard/Pictures/../DCIM") }.isFailure)
+    }
+
+    @Test fun sharedStorageAliasesUsePortalWirePaths() = runTest {
+        val calls = mutableListOf<CompanionRequest>()
+        val client = CompanionClient(CompanionTransport {
+            calls += it
+            if (it.binary) CompanionResponse(200, "", byteArrayOf(1))
+            else CompanionResponse(200, """{"ok":true,"files":[]}""")
+        })
+        val session = Store().saved.single()
+        client.photos(session, "/storage/emulated/0/Pictures")
+        client.photoBytes(session, "/storage/emulated/0/Pictures/Test.png", true)
+        assertEquals("/sdcard/Pictures", calls[0].url.toHttpUrl().queryParameter("path"))
+        assertEquals("/sdcard/Pictures/Test.png", calls[1].url.toHttpUrl().queryParameter("path"))
+    }
+
+    @Test fun photoRequestsKeepParentDirectoryWhitespaceDistinctFromTrimmedFolderInput() = runTest {
+        val calls = mutableListOf<CompanionRequest>()
+        val client = CompanionClient(CompanionTransport {
+            calls += it
+            if (it.binary) CompanionResponse(200, "", byteArrayOf(1))
+            else CompanionResponse(200, """{"ok":true,"files":[]}""")
+        })
+        val session = Store().saved.single()
+        for (root in listOf("/sdcard", "/storage/emulated/0")) {
+            calls.clear()
+            client.photos(session, "  $root/Album  ")
+            client.photoBytes(session, "$root/Album /x.jpg")
+            client.photoBytes(session, "$root/Album/x.jpg")
+            client.deletePhoto(session, "$root/Album /x.jpg")
+            client.deletePhoto(session, "$root/Album/x.jpg")
+            assertEquals(listOf(
+                "/sdcard/Album",
+                "/sdcard/Album /x.jpg",
+                "/sdcard/Album/x.jpg",
+                "/sdcard/Album /x.jpg",
+                "/sdcard/Album/x.jpg",
+            ), calls.map { it.url.toHttpUrl().queryParameter("path") })
+        }
+    }
+
+    @Test fun photoPathsPreserveCharactersBeyondTheStorageAlias() {
+        assertEquals("/sdcard/Album //Family / x & 1.jpg", CompanionPhotos.photoPath("/sdcard/Album //Family / x & 1.jpg"))
+        assertEquals("/sdcard/Album //Family / x & 1.jpg", CompanionPhotos.photoPath("/storage/emulated/0/Album //Family / x & 1.jpg"))
+        for (path in listOf(
+            " /sdcard/Album/x.jpg",
+            "/storage/emulated/01/Album/x.jpg",
+            "/sdcard/Album/../x.jpg",
+            "/storage/emulated/0/Album/./x.jpg",
+            "/sdcard/Album\\Other/x.jpg",
+            "/sdcard/Album\u0000/x.jpg",
+        )) {
+            assertTrue(path, runCatching { CompanionPhotos.photoPath(path) }.isFailure)
+        }
+    }
+
+    @Test fun sharedStorageAliasCannotEscapeOrMatchAnotherUser() {
+        assertEquals("/sdcard", CompanionPhotos.folder("/storage/emulated/0/"))
+        for (path in listOf("/storage/emulated/01/Pictures", "/storage/emulated/0/../1", "/storage/emulated/0/Pictures/./Hidden")) {
+            assertTrue(path, runCatching { CompanionPhotos.folder(path) }.isFailure)
+        }
     }
 
     @Test fun uploadStreamsEachItemKeepsFailuresAndRefreshesListWithoutActivating() = runTest {

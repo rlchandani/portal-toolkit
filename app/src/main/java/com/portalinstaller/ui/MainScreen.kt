@@ -48,6 +48,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -112,6 +113,7 @@ fun MainScreen(
     fileManagerViewModel: FileManagerViewModel = viewModel()
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val container = remember { AppContainer.from(context) }
     val scope = rememberCoroutineScope()
 
@@ -192,18 +194,20 @@ fun MainScreen(
             details = context.getString(R.string.usb_checking_devices)
         ),
         key1 = usbRefreshTrigger,
-        key2 = connectionState
+        key2 = connectionState,
+        key3 = lifecycleOwner
     ) {
-        // Sondam USB-ul doar cat timp NU suntem conectati: cand exista deja o
-        // conexiune, cardul de conectare nu se vede, deci nu are rost sa trezim
-        // procesul la fiecare 750 ms si sa recompunem.
-        if (connectionState is ConnectionState.Connected) {
-            value = UsbPortalHelper.getStatus(context)
-            return@produceState
-        }
-        while (isActive) {
-            value = UsbPortalHelper.getStatus(context)
-            delay(750L)
+        // Poll only while the UI is started and disconnected. Refresh once on
+        // foreground entry when connected, without keeping a polling loop alive.
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            if (connectionState is ConnectionState.Connected) {
+                value = UsbPortalHelper.getStatus(context)
+                return@repeatOnLifecycle
+            }
+            while (isActive) {
+                value = UsbPortalHelper.getStatus(context)
+                delay(750L)
+            }
         }
     }
 
@@ -276,7 +280,6 @@ fun MainScreen(
     }
     // When the user returns from Google's picker (or any resume), ask the ViewModel to
     // continue the import. It no-ops unless a picker session is actually pending.
-    val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {

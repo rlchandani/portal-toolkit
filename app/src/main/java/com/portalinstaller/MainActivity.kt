@@ -1,6 +1,7 @@
 package com.portalinstaller
 
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.runtime.getValue
@@ -15,6 +16,8 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         AppLanguageManager.applySavedLanguage(this)
         super.onCreate(savedInstanceState)
+        // Remote control and mirroring remain usable until the user leaves this window.
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         val settingsStore = AppContainer.from(this).settingsStore
         setContent {
             val themeMode by settingsStore.themeMode.collectAsStateWithLifecycle(

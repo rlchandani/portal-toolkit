@@ -24,14 +24,23 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.mapSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import com.portalinstaller.data.companion.CompanionPhotos
 import org.json.JSONObject
 
-private data class SourceField(val key: String, val title: String, val secret: Boolean = false)
+private data class SourceField(
+    val key: String,
+    val title: String,
+    val secret: Boolean = false,
+    val url: Boolean = false,
+)
 private val sourceLabels = linkedMapOf(
     "folder" to "Photos on this Portal",
     "immich" to "Immich",
@@ -43,18 +52,35 @@ private val sourceLabels = linkedMapOf(
 )
 private fun fieldsFor(source: String): List<SourceField> = when (source) {
     "folder" -> listOf(SourceField("folderPath", "Folder on Portal"))
-    "immich" -> listOf(SourceField("immichUrl", "Server address"),
+    "immich" -> listOf(SourceField("immichUrl", "Server address", url = true),
         SourceField("immichKey", "API key", true), SourceField("immichAlbumId", "Album ID (optional)"),
         SourceField("immichAlbumName", "Album name (optional)"))
-    "dav" -> listOf(SourceField("davUrl", "Folder address"), SourceField("davUser", "Username"),
+    "dav" -> listOf(SourceField("davUrl", "Folder address", url = true), SourceField("davUser", "Username"),
         SourceField("davPass", "Password", true))
     "smb" -> listOf(SourceField("smbHost", "Server"), SourceField("smbShare", "Share"),
         SourceField("smbPath", "Folder (optional)"), SourceField("smbUser", "Username"),
         SourceField("smbPass", "Password", true))
-    "album" -> listOf(SourceField("albumUrl", "Album address"))
-    "web" -> listOf(SourceField("webUrl", "Image address"))
+    "album" -> listOf(SourceField("albumUrl", "Album address", url = true))
+    "web" -> listOf(SourceField("webUrl", "Image address", url = true))
     else -> emptyList()
 }
+
+private val secretSourceKeys = sourceLabels.keys.flatMap(::fieldsFor)
+    .filter { it.secret }.map { it.key }.toSet()
+private val urlSourceKeys = sourceLabels.keys.flatMap(::fieldsFor)
+    .filter { it.url }.map { it.key }.toSet()
+private fun canSaveSourceDraft(key: String, value: String): Boolean =
+    key !in secretSourceKeys && (key !in urlSourceKeys || nonSecretUrlDraft(value) != null)
+private val sourceDraftSaver = mapSaver<SnapshotStateMap<String, String>>(
+    save = { drafts -> drafts.filter { (key, value) -> canSaveSourceDraft(key, value) } },
+    restore = { saved ->
+        mutableStateMapOf<String, String>().apply {
+            saved.forEach { (key, value) ->
+                if (value is String && canSaveSourceDraft(key, value)) put(key, value)
+            }
+        }
+    },
+)
 
 @Composable
 internal fun PhotoSourcesPanel(
@@ -63,10 +89,10 @@ internal fun PhotoSourcesPanel(
     onSave: (JSONObject) -> Unit,
     onPreview: () -> Unit,
 ) {
-    var selected by remember(sources.toString()) {
+    var selected by rememberSaveable(sources.toString()) {
         mutableStateOf(sources.optString("source", "folder"))
     }
-    val drafts = remember(sources.toString()) { mutableStateMapOf<String, String>().apply {
+    val drafts = rememberSaveable(sources.toString(), saver = sourceDraftSaver) { mutableStateMapOf<String, String>().apply {
         fieldsFor("folder").plus(fieldsFor("immich")).plus(fieldsFor("dav"))
             .plus(fieldsFor("smb")).plus(fieldsFor("album")).plus(fieldsFor("web")).forEach { field ->
                 put(field.key, sources.optString(field.key,
@@ -122,7 +148,7 @@ internal fun PhotoSourcesPanel(
                 }
                 onSave(body)
             }, enabled = !working && when (selected) {
-                "folder" -> drafts["folderPath"].orEmpty().startsWith("/sdcard/")
+                "folder" -> runCatching { CompanionPhotos.folder(drafts["folderPath"].orEmpty()) }.isSuccess
                 "immich" -> drafts["immichUrl"].orEmpty().isNotBlank() && usableSecret("immichKey")
                 "smb" -> drafts["smbHost"].orEmpty().isNotBlank() && drafts["smbShare"].orEmpty().isNotBlank()
                     && (!configured("smbPass") || usableSecret("smbPass"))

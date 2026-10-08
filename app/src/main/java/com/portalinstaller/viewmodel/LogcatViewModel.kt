@@ -8,6 +8,8 @@ import com.portalinstaller.data.tools.LogLine
 import com.portalinstaller.data.tools.LogRingBuffer
 import com.portalinstaller.data.tools.LogcatParser
 import dadb.AdbStream
+import java.util.concurrent.atomic.AtomicReference
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.ensureActive
@@ -51,10 +53,11 @@ class LogcatViewModel(app: Application) : AndroidViewModel(app) {
     val notConnected: StateFlow<Boolean> = _notConnected.asStateFlow()
 
     private var streamJob: Job? = null
-    // Scris pe firul IO (in start), citit/inchis pe firul principal (in stop).
-    // @Volatile garanteaza vizibilitatea inter-fir a referintei.
-    @Volatile
-    private var stream: AdbStream? = null
+    // Each run owns its stream, including cleanup after a stop/restart.
+    private var stream: AtomicReference<AdbStream?>? = null
+    // Closing can block on a write. One-shot cleanup must also survive
+    // viewModelScope cancellation so it can unblock the reader in onCleared.
+    private val streamCloseScope = CoroutineScope(Dispatchers.IO)
 
     fun start() {
         if (_isStreaming.value) return
@@ -65,41 +68,57 @@ class LogcatViewModel(app: Application) : AndroidViewModel(app) {
         }
         _notConnected.value = false
         val destination = if (_errorsOnly.value) "shell:logcat *:E" else "shell:logcat -v brief"
+        val ownedStream = AtomicReference<AdbStream?>()
+        stream = ownedStream
+        _isStreaming.value = true
 
         streamJob = viewModelScope.launch {
-            _isStreaming.value = true
-            withContext(Dispatchers.IO) {
-                runCatching {
-                    val opened = d.open(destination)
-                    stream = opened
-                    try {
-                        val source = opened.source
-                        while (coroutineContext.isActive) {
-                            val raw = source.readUtf8Line() ?: break
-                            val line = LogcatParser.parseLine(raw)
-                            val updated = _buffer.value.append(line)
-                            _buffer.value = updated
-                            if (raw.contains(CRASH_MARKER)) {
-                                _crashLineIndex.value = updated.lines.size - 1
-                            }
+            try {
+                withContext(Dispatchers.IO) {
+                    runCatching {
+                        val opened = d.open(destination)
+                        ownedStream.set(opened)
+                        try {
+                            // open/read are blocking: cancellation may have
+                            // happened while either operation was pending.
                             coroutineContext.ensureActive()
+                            val source = opened.source
+                            while (coroutineContext.isActive) {
+                                val raw = source.readUtf8Line() ?: break
+                                coroutineContext.ensureActive()
+                                val line = LogcatParser.parseLine(raw)
+                                val updated = _buffer.value.append(line)
+                                _buffer.value = updated
+                                if (raw.contains(CRASH_MARKER)) {
+                                    _crashLineIndex.value = updated.lines.size - 1
+                                }
+                            }
+                        } finally {
+                            runCatching { ownedStream.getAndSet(null)?.close() }
                         }
-                    } finally {
-                        // Inchidem stream-ul aici indiferent daca bucla a iesit
-                        // normal, prin exceptie sau anulare — nu lasam socketul deschis.
-                        closeStream()
                     }
                 }
+            } finally {
+                if (stream === ownedStream) {
+                    stream = null
+                    streamJob = null
+                    _isStreaming.value = false
+                }
             }
-            _isStreaming.value = false
         }
     }
 
     fun stop() {
-        streamJob?.cancel()
+        val stoppedJob = streamJob
         streamJob = null
-        closeStream()
+        val stoppedStream = stream
+        stream = null
         _isStreaming.value = false
+        stoppedJob?.cancel()
+        val opened = stoppedStream?.getAndSet(null)
+        if (opened != null) {
+            streamCloseScope.launch { runCatching { opened.close() } }
+        }
     }
 
     fun clear() {
@@ -153,11 +172,6 @@ class LogcatViewModel(app: Application) : AndroidViewModel(app) {
     override fun onCleared() {
         super.onCleared()
         stop()
-    }
-
-    private fun closeStream() {
-        runCatching { stream?.close() }
-        stream = null
     }
 
     companion object {

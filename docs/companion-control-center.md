@@ -33,6 +33,9 @@ addresses may be entered explicitly. This app does not create an Internet relay.
   thumbnails, choose another public Portal folder, delete with confirmation,
   activate the displayed collection with **Use for slideshow**, and preview on Portal.
   Supported image files are limited to 20 MiB. Photos remain on the Portal.
+  Android storage aliases such as `/storage/emulated/0` are accepted and normalized
+  to `/sdcard`. A failed preview shows an error and Retry rather than an endless
+  spinner.
   Google Photos Picker and additional file tools remain under Device tools.
 - **Apps:** launch installed apps and install/update compatible catalog apps.
   Install results are retained on the Portal. An existing installer operation
@@ -40,6 +43,10 @@ addresses may be entered explicitly. This app does not create an Internet relay.
 - **Settings:** categories and searchable server-provided controls. Advanced
   settings are hidden by default. Visibility, bounds, options, and side effects
   come from Immortal's registry.
+
+Ordinary unsaved setting and source drafts survive rotation. Passwords, API keys,
+and URLs containing credentials or query/fragment components remain in memory
+and are excluded from saved instance state.
 
 ## Layouts, routines, snapshots
 
@@ -77,5 +84,15 @@ than buffering entire collections in RAM. In-place app updates preserve saved
 settings and credentials; an APK signature mismatch must never trigger uninstall.
 Connection loads device status and media first. Settings, photos, apps, layouts,
 scenes, and Jarvis details load when their page is opened.
+The toolbar refreshes the current page; the catalog loads only when selected.
+Discovery runs while the pairing dialog is visible. Device tools pause native
+control-center polling. Logcat stops when its page or the app leaves the foreground
+and requires an explicit Start to resume. Screen mirroring preserves the Portal's
+aspect ratio and maps touches against the measured video surface.
 While visible, the app retries an offline paired device every 30 seconds. An
 expired or revoked pairing requires pairing again rather than automatic retries.
+
+Portal Toolkit keeps the phone's screen awake while its activity is visible,
+including during remote control and mirroring. Leaving the app or manually
+locking the phone restores normal Android sleep behavior. This uses Android's
+window flag rather than a background wake lock or a system timeout change.

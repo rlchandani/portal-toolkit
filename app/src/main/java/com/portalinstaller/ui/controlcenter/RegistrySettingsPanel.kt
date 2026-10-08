@@ -27,6 +27,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
@@ -37,6 +39,11 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import org.json.JSONObject
+
+private val urlDraftSaver = Saver<String, String>(
+    save = { nonSecretUrlDraft(it) },
+    restore = { nonSecretUrlDraft(it) },
+)
 
 @Composable
 internal fun RegistrySettingsPanel(
@@ -133,7 +140,7 @@ private fun RegistryControl(
                     val max = control.optInt("max", Int.MAX_VALUE)
                     val step = control.optInt("step", 1).coerceAtLeast(1)
                     if (control.optBoolean("asText")) {
-                        var draft by remember(control.optString("key"), current) {
+                        var draft by rememberSaveable(control.optString("key"), current) {
                             mutableStateOf(current.toString())
                         }
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -163,9 +170,16 @@ private fun RegistryControl(
                 }
                 "string" -> {
                     val secret = control.optBoolean("secret")
-                    var draft by remember(control.optString("key"), value?.toString()) {
-                        mutableStateOf(if (secret) "" else value?.toString().orEmpty())
+                    val draftState = if (secret) remember(control.optString("key"), value?.toString()) {
+                        mutableStateOf("")
+                    } else if (control.optString("entry") == "url") rememberSaveable(
+                        control.optString("key"), value?.toString(), stateSaver = urlDraftSaver,
+                    ) {
+                        mutableStateOf(value?.toString().orEmpty())
+                    } else rememberSaveable(control.optString("key"), value?.toString()) {
+                        mutableStateOf(value?.toString().orEmpty())
                     }
+                    var draft by draftState
                     OutlinedTextField(
                         value = draft, onValueChange = { draft = it }, modifier = Modifier.fillMaxWidth(),
                         enabled = enabled, singleLine = true,

@@ -26,7 +26,9 @@ class PortalFileManager {
         requireResolvedAllowed(dadb, path, advancedMode)
         // -A include fisierele ascunse (fara . si ..). Verificam codul de iesire:
         // altfel un director inaccesibil (permisiune refuzata) ar parea gol.
-        val resp = dadb.shell("ls -laA ${shellQuote(path)}")
+        // Follow a symlinked parent (e.g. /sdcard) without dereferencing child symlinks.
+        val directoryPath = path.trimEnd('/') + "/"
+        val resp = dadb.shell("ls -laA ${shellQuote(directoryPath)}")
         require(resp.exitCode == 0) { resp.allOutput.ifBlank { "ls a esuat pentru $path" } }
         LsParser.parse(path, resp.allOutput)
     }

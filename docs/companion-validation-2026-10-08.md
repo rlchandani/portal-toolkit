@@ -1,5 +1,9 @@
 # Companion validation — 2026-10-08
 
+This records the initial emulator validation. The later
+[Pixel 9 Pro Fold validation](companion-pixel-validation-2026-10-08.md) covers
+version 1.5.1, physical-phone testing, wireless debugging, and hardware fixes.
+
 ## Builds and isolation
 
 The companion baseline `4e1dadb` was clean before implementation. Its original

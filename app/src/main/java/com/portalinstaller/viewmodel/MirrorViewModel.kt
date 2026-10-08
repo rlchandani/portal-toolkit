@@ -19,6 +19,7 @@ import com.portalinstaller.data.tools.AnnexBSplitter
 import com.portalinstaller.data.tools.H264Decoder
 import com.portalinstaller.data.tools.InputInjector
 import com.portalinstaller.data.tools.isConfigNal
+import com.portalinstaller.data.tools.MirrorGeometry
 import com.portalinstaller.data.tools.MirrorUnsupportedException
 import com.portalinstaller.data.tools.PortalKey
 import com.portalinstaller.data.tools.ScreenCaptureManager
@@ -73,6 +74,9 @@ class MirrorViewModel(app: Application) : AndroidViewModel(app) {
     private val _batteryWarning = MutableStateFlow(false)
     val batteryWarning: StateFlow<Boolean> = _batteryWarning.asStateFlow()
 
+    private val _deviceGeometry = MutableStateFlow<MirrorGeometry?>(null)
+    val deviceGeometry: StateFlow<MirrorGeometry?> = _deviceGeometry.asStateFlow()
+
     private var decoder = H264Decoder()
     private val _firstFrameRendered = MutableStateFlow(false)
     val firstFrameRendered: StateFlow<Boolean> = _firstFrameRendered.asStateFlow()
@@ -81,8 +85,6 @@ class MirrorViewModel(app: Application) : AndroidViewModel(app) {
 
     private var mirrorJob: Job? = null
     private var currentSurface: Surface? = null
-    private var deviceWidth = 0
-    private var deviceHeight = 0
 
     init {
         viewModelScope.launch {
@@ -131,8 +133,7 @@ class MirrorViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val size = ScreenMirrorManager.deviceSize(session.dadb)
                 holder.ensureCurrent(session)
-                deviceWidth = size.width
-                deviceHeight = size.height
+                _deviceGeometry.value = MirrorGeometry(size.width, size.height)
                 runDecoder.start(surface, size.width, size.height)
                 runDecoder.error.value?.let { throw IllegalStateException(it) }
                 _state.value = MirrorState.Streaming
@@ -180,10 +181,11 @@ class MirrorViewModel(app: Application) : AndroidViewModel(app) {
                 }
             } finally {
                 runDecoder.stop()
-                if (mirrorSession == session) {
+                if (mirrorSession == session && decoder === runDecoder) {
                     mirrorJob = null
                     _firstFrameRendered.value = false
                     _batteryWarning.value = false
+                    _deviceGeometry.value = null
                 }
             }
         }
@@ -196,20 +198,21 @@ class MirrorViewModel(app: Application) : AndroidViewModel(app) {
 
     fun tap(viewX: Float, viewY: Float, viewW: Int, viewH: Int) {
         if (!firstFrameRendered.value) return
-        val (x, y) = InputInjector.mapPoint(viewX, viewY, viewW, viewH, deviceWidth, deviceHeight)
+        val (x, y) = deviceGeometry.value?.mapSurfacePoint(viewX, viewY, viewW, viewH) ?: return
         fireAndForget(InputInjector.tapCommand(x, y))
     }
 
     fun swipe(x1: Float, y1: Float, x2: Float, y2: Float, viewW: Int, viewH: Int, durationMs: Int) {
         if (!firstFrameRendered.value) return
-        val (dx1, dy1) = InputInjector.mapPoint(x1, y1, viewW, viewH, deviceWidth, deviceHeight)
-        val (dx2, dy2) = InputInjector.mapPoint(x2, y2, viewW, viewH, deviceWidth, deviceHeight)
+        val geometry = deviceGeometry.value ?: return
+        val (dx1, dy1) = geometry.mapSurfacePoint(x1, y1, viewW, viewH) ?: return
+        val (dx2, dy2) = geometry.mapSurfacePoint(x2, y2, viewW, viewH) ?: return
         fireAndForget(InputInjector.swipeCommand(dx1, dy1, dx2, dy2, durationMs))
     }
 
     fun longPress(viewX: Float, viewY: Float, viewW: Int, viewH: Int) {
         if (!firstFrameRendered.value) return
-        val (x, y) = InputInjector.mapPoint(viewX, viewY, viewW, viewH, deviceWidth, deviceHeight)
+        val (x, y) = deviceGeometry.value?.mapSurfacePoint(viewX, viewY, viewW, viewH) ?: return
         fireAndForget(InputInjector.longPressCommand(x, y))
     }
 
@@ -331,6 +334,7 @@ class MirrorViewModel(app: Application) : AndroidViewModel(app) {
         mirrorJob = null
         mirrorSession = null
         _firstFrameRendered.value = false
+        _deviceGeometry.value = null
         decoder.stop()
         _batteryWarning.value = false
         if (_state.value is MirrorState.Streaming || _state.value is MirrorState.Starting) {

@@ -31,11 +31,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.key
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,10 +45,33 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
+import com.portalinstaller.data.companion.CompanionPhotos
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+
+private sealed interface PhotoPreviewState {
+    data object Loading : PhotoPreviewState
+    data class Loaded(val bitmap: ImageBitmap) : PhotoPreviewState
+    data object Failed : PhotoPreviewState
+}
+
+private suspend fun loadPhotoThumbnail(
+    path: String,
+    loadThumbnail: suspend (String) -> ByteArray?,
+): ImageBitmap? = withContext(Dispatchers.IO) {
+    try {
+        loadThumbnail(path)?.let { bytes ->
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+        }
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (_: Exception) {
+        null
+    }
+}
 
 @Composable
 internal fun PhotoLibraryPanel(
@@ -66,8 +90,8 @@ internal fun PhotoLibraryPanel(
     var page by remember(deviceId, folder) { mutableIntStateOf(0) }
     var previewTarget by remember(deviceId) { mutableStateOf<JSONObject?>(null) }
     var deleteTarget by remember(deviceId) { mutableStateOf<JSONObject?>(null) }
-    var chooseFolder by remember(deviceId) { mutableStateOf(false) }
-    var folderDraft by remember(deviceId, folder) { mutableStateOf(folder) }
+    var chooseFolder by rememberSaveable(deviceId) { mutableStateOf(false) }
+    var folderDraft by rememberSaveable(deviceId, folder) { mutableStateOf(folder) }
     val photos = files.objects()
     val pages = ((photos.size + 23) / 24).coerceAtLeast(1)
     val currentPage = page.coerceIn(0, pages - 1)
@@ -95,11 +119,7 @@ internal fun PhotoLibraryPanel(
                 val path = photo.optString("path")
                 key(deviceId, path, photo.opt("modified")) {
                 val bitmap by produceState<ImageBitmap?>(null, deviceId, path, photo.opt("modified")) {
-                    value = withContext(Dispatchers.IO) {
-                        runCatching { loadThumbnail(path)?.let { bytes ->
-                            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
-                        } }.getOrNull()
-                    }
+                    value = loadPhotoThumbnail(path, loadThumbnail)
                 }
                 Box(Modifier.weight(1f).aspectRatio(1f).clip(RoundedCornerShape(14.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant)
@@ -120,28 +140,40 @@ internal fun PhotoLibraryPanel(
         TextButton(onClick = { page = currentPage + 1 }, enabled = currentPage + 1 < pages) { Text("Next") }
     }
     previewTarget?.let { target ->
-        val bitmap by produceState<ImageBitmap?>(null, deviceId, target.optString("path")) {
-            value = withContext(Dispatchers.IO) {
-                runCatching { loadThumbnail(target.getString("path"))?.let { bytes ->
-                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
-                } }.getOrNull()
+        val path = target.optString("path")
+        key(deviceId, path, target.opt("modified")) {
+            var requestGeneration by remember { mutableIntStateOf(0) }
+            // Keep the observed state stable across retries; restart only its producer.
+            val preview by produceState<PhotoPreviewState>(PhotoPreviewState.Loading, requestGeneration) {
+                value = PhotoPreviewState.Loading
+                val bitmap = loadPhotoThumbnail(path, loadThumbnail)
+                value = bitmap?.let { PhotoPreviewState.Loaded(it) } ?: PhotoPreviewState.Failed
             }
+            AlertDialog(
+                onDismissRequest = { previewTarget = null },
+                title = { Text(target.optString("name", "Photo")) },
+                text = {
+                    Box(Modifier.fillMaxWidth().height(260.dp), contentAlignment = Alignment.Center) {
+                        when (val state = preview) {
+                            PhotoPreviewState.Loading -> CircularProgressIndicator()
+                            is PhotoPreviewState.Loaded -> Image(state.bitmap,
+                                contentDescription = target.optString("name"),
+                                contentScale = ContentScale.Fit, modifier = Modifier.matchParentSize())
+                            PhotoPreviewState.Failed -> Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                Text("Couldn't load this photo preview. Try again.")
+                                OutlinedButton(onClick = { requestGeneration++ }) { Text("Retry") }
+                            }
+                        }
+                    }
+                },
+                confirmButton = { TextButton(onClick = { previewTarget = null }) { Text("Done") } },
+                dismissButton = { TextButton(onClick = {
+                    previewTarget = null; deleteTarget = target
+                }, enabled = !working) { Text("Delete photo") } })
         }
-        AlertDialog(
-            onDismissRequest = { previewTarget = null },
-            title = { Text(target.optString("name", "Photo")) },
-            text = {
-                Box(Modifier.fillMaxWidth().height(260.dp), contentAlignment = Alignment.Center) {
-                    bitmap?.let {
-                        Image(it, contentDescription = target.optString("name"),
-                            contentScale = ContentScale.Fit, modifier = Modifier.matchParentSize())
-                    } ?: CircularProgressIndicator()
-                }
-            },
-            confirmButton = { TextButton(onClick = { previewTarget = null }) { Text("Done") } },
-            dismissButton = { TextButton(onClick = {
-                previewTarget = null; deleteTarget = target
-            }, enabled = !working) { Text("Delete photo") } })
     }
     deleteTarget?.let { target ->
         AlertDialog(
@@ -166,7 +198,7 @@ internal fun PhotoLibraryPanel(
         },
         confirmButton = {
             TextButton(onClick = { chooseFolder = false; onChangeFolder(folderDraft.trim()) },
-                enabled = !working && folderDraft.trim().startsWith("/sdcard/")) { Text("Browse folder") }
+                enabled = !working && runCatching { CompanionPhotos.folder(folderDraft) }.isSuccess) { Text("Browse folder") }
         },
         dismissButton = { TextButton(onClick = { chooseFolder = false }) { Text("Cancel") } })
 }

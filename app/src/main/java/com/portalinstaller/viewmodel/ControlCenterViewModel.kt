@@ -11,6 +11,10 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.portalinstaller.data.companion.CompanionRepository
+import com.portalinstaller.ui.controlcenter.CenterRefresh
+import com.portalinstaller.ui.controlcenter.centerRefreshRequests
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
@@ -43,6 +47,28 @@ class ControlCenterViewModel(private val repository: CompanionRepository) : View
     fun refreshCatalog() = repository.refreshCatalog()
     fun refreshScenes() = repository.refreshScenes()
     fun refreshJarvis() = repository.refreshJarvis()
+    internal fun refreshPage(page: List<CenterRefresh>, includeStatus: Boolean = false): Job {
+        val selected = state.value
+        val requests = centerRefreshRequests(page, selected.connected, includeStatus)
+        // Capture each repository ticket now, before waiting can switch the selected session.
+        val jobs = requests.map { request ->
+            when (request) {
+                CenterRefresh.STATUS -> repository.refreshStatus()
+                CenterRefresh.LAYOUT -> repository.refreshLayout()
+                CenterRefresh.SCENES -> repository.refreshScenes()
+                CenterRefresh.JARVIS -> repository.refreshJarvis()
+                CenterRefresh.OPERATIONS -> repository.refreshOperations()
+                CenterRefresh.SOURCES -> repository.refreshSources()
+                CenterRefresh.PHOTOS -> repository.listPhotos(selected.photoFolder)
+                CenterRefresh.SETTINGS -> repository.refreshSettings()
+                CenterRefresh.APPS -> repository.refreshApps()
+                CenterRefresh.CATALOG -> repository.refreshCatalog()
+            }
+        }
+        return viewModelScope.launch {
+            try { jobs.joinAll() } finally { jobs.forEach { it.cancel() } }
+        }
+    }
     fun remoteAction(action: String) = repository.remoteAction(action)
     fun moveCursor(dx: Float, dy: Float) = repository.moveCursor(dx, dy)
     fun tap() = repository.tap()

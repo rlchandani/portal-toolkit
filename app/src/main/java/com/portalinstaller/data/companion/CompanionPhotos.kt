@@ -46,16 +46,17 @@ object CompanionPhotos {
         require(name.substringAfterLast('.', "").lowercase() in mimeTypes) { "Use a JPEG, PNG, WebP, or GIF image." }
         return name
     }
-    fun folder(path: String): String {
-        val result = path.trimEnd('/')
-        require((result == "/sdcard" || result.startsWith("/sdcard/") || result == "/storage/emulated/0" || result.startsWith("/storage/emulated/0/")) &&
-            result.split('/').none { it == "." || it == ".." } && result.none { it == '\\' || it.isISOControl() }) { "Choose a folder under shared storage." }
-        return result
-    }
+    fun folder(path: String): String = sharedStoragePath(path.trim().trimEnd('/'))
     fun photoPath(path: String): String {
         safeName(path.substringAfterLast('/'))
-        folder(path.substringBeforeLast('/', ""))
-        return path
+        return sharedStoragePath(path)
+    }
+    private fun sharedStoragePath(path: String): String {
+        require((path == "/sdcard" || path.startsWith("/sdcard/") || path == "/storage/emulated/0" || path.startsWith("/storage/emulated/0/")) &&
+            path.split('/').none { it == "." || it == ".." } && path.none { it == '\\' || it.isISOControl() }) { "Choose a folder under shared storage." }
+        // File paths must retain directory whitespace; only folder input is trimmed.
+        return if (path == "/storage/emulated/0" || path.startsWith("/storage/emulated/0/"))
+            "/sdcard" + path.removePrefix("/storage/emulated/0") else path
     }
     fun parse(response: JSONObject): List<CompanionPhoto> {
         val files = response.optJSONArray("files") ?: return emptyList()

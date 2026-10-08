@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -73,10 +74,13 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -91,6 +95,8 @@ import com.portalinstaller.data.store.ThemeMode
 import com.portalinstaller.ui.MainScreen
 import com.portalinstaller.viewmodel.ControlCenterViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -98,11 +104,6 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 
-private enum class CenterTab(val label: String, val glyph: String) {
-    HOME("Home", "home"), REMOTE("Remote", "remote"), PHOTOS("Photos", "photos"),
-    APPS("Apps", "apps"), SETTINGS("Settings", "settings")
-}
-private enum class CenterDetail { NONE, LAYOUT, SCENES, JARVIS, SNAPSHOTS, OPERATIONS }
 private data class RestoreCandidate(val deviceId: String, val generation: Long, val snapshot: JSONObject)
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -147,6 +148,14 @@ fun ControlCenterScreen() {
         visibleSettingsDomains.any { it.id == selected }
     } ?: visibleSettingsDomains.firstOrNull { it.id == "immortal" }?.id
         ?: visibleSettingsDomains.firstOrNull()?.id ?: settingsDomain
+    val pageRefreshes = visiblePageRefreshes(tab, detail, showCatalog)
+    var toolbarRefresh by remember { mutableStateOf<Job?>(null) }
+    val selectedDeviceId = state.activeDeviceId
+    val selectedGeneration = state.sessionGeneration
+    val connected = state.connected
+    val operationsVisible = detail == CenterDetail.OPERATIONS
+    val controlCenterVisible = !advancedTools
+    val pairingVisible = pairDialog && controlCenterVisible
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) {
         if (it.isNotEmpty()) {
@@ -198,43 +207,71 @@ fun ControlCenterScreen() {
     LaunchedEffect(state.error) {
         state.error?.let { snackbars.showSnackbar(it.message); vm.clearError() }
     }
-    LaunchedEffect(state.activeDeviceId, tab, detail, state.connected) {
-        if (!state.connected) return@LaunchedEffect
-        when {
-            detail == CenterDetail.LAYOUT -> vm.refreshLayout()
-            detail == CenterDetail.SCENES -> vm.refreshScenes()
-            detail == CenterDetail.JARVIS -> vm.refreshJarvis()
-            detail == CenterDetail.OPERATIONS -> vm.refreshOperations()
-            tab == CenterTab.PHOTOS -> { vm.refreshSources(); vm.listPhotos(); vm.refreshSettings() }
-            tab == CenterTab.SETTINGS -> vm.refreshSettings()
-            tab == CenterTab.APPS -> { vm.refreshApps(); vm.refreshCatalog() }
+    LaunchedEffect(vm, lifecycleOwner, selectedDeviceId, selectedGeneration, pageRefreshes, connected, controlCenterVisible) {
+        if (!connected || !controlCenterVisible) return@LaunchedEffect
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            val fresh = vm.state.value
+            if (fresh.activeDeviceId == selectedDeviceId && fresh.sessionGeneration == selectedGeneration && fresh.connected) {
+                val request = vm.refreshPage(pageRefreshes)
+                try { request.join() } finally { request.cancel() }
+            }
         }
     }
     // Work stops when the activity is backgrounded; metadata is not polled at frame rate.
-    LaunchedEffect(lifecycleOwner, state.activeDeviceId, tab, detail) {
+    LaunchedEffect(vm, lifecycleOwner, selectedDeviceId, selectedGeneration, operationsVisible, controlCenterVisible) {
+        if (!controlCenterVisible) return@LaunchedEffect
         lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             while (isActive) {
                 delay(when {
                     vm.state.value.connection == CompanionConnection.OFFLINE -> 30_000
-                    detail == CenterDetail.OPERATIONS -> 3_000
+                    operationsVisible -> 3_000
                     else -> 15_000
                 })
                 val fresh = vm.state.value
-                if (fresh.activeDeviceId != null && !fresh.busy &&
+                if (selectedDeviceId != null && fresh.activeDeviceId == selectedDeviceId &&
+                    fresh.sessionGeneration == selectedGeneration && !fresh.busy &&
                     fresh.connection in setOf(CompanionConnection.CONNECTED, CompanionConnection.OFFLINE)) {
-                    val request = if (fresh.connected && detail == CenterDetail.OPERATIONS)
+                    val request = if (fresh.connected && operationsVisible)
                         vm.refreshOperations() else vm.refreshStatus()
                     try { request.join() } finally { request.cancel() }
                 }
             }
         }
     }
-    DisposableEffect(Unit) { onDispose { vm.stopDiscovery() } }
+    DisposableEffect(vm, lifecycleOwner, pairingVisible) {
+        var scanning = false
+        fun syncDiscovery() {
+            val shouldScan = pairingVisible &&
+                lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+            if (shouldScan != scanning) {
+                scanning = shouldScan
+                if (shouldScan) vm.startDiscovery() else vm.stopDiscovery()
+            }
+        }
+        val observer = LifecycleEventObserver { _, _ -> syncDiscovery() }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        syncDiscovery()
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            if (scanning) vm.stopDiscovery()
+        }
+    }
+    DisposableEffect(lifecycleOwner, selectedDeviceId, selectedGeneration,
+        pageRefreshes, controlCenterVisible) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) toolbarRefresh?.cancel()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            toolbarRefresh?.cancel()
+        }
+    }
     BackHandler(enabled = detail != CenterDetail.NONE || advancedTools) {
         if (advancedTools) advancedTools = false else detail = CenterDetail.NONE
     }
     if (advancedTools) {
-        Column(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().statusBarsPadding()) {
             TextButton(onClick = { advancedTools = false }, modifier = Modifier.fillMaxWidth()) {
                 Text("‹ Immortal control center")
             }
@@ -258,7 +295,7 @@ fun ControlCenterScreen() {
                                 onClick = { deviceMenu = false; detail = CenterDetail.NONE; vm.selectDevice(device.id) })
                         }
                         DropdownMenuItem(text = { Text("Add a Portal") },
-                            onClick = { deviceMenu = false; pairDialog = true; vm.startDiscovery() })
+                            onClick = { deviceMenu = false; pairDialog = true })
                         state.activeDevice?.let {
                             DropdownMenuItem(text = { Text("Disconnect") },
                                 onClick = { deviceMenu = false; vm.disconnect() })
@@ -268,7 +305,20 @@ fun ControlCenterScreen() {
                     }
                 }
             }, actions = {
-                TextButton(onClick = { vm.refresh() }, enabled = state.activeDeviceId != null && !state.busy) {
+                TextButton(onClick = {
+                    if (toolbarRefresh?.isActive != true) {
+                        val request = vm.refreshPage(pageRefreshes, includeStatus = true)
+                        toolbarRefresh = scope.launch {
+                            try { request.join() } finally {
+                                request.cancel()
+                                if (toolbarRefresh === currentCoroutineContext()[Job]) toolbarRefresh = null
+                            }
+                        }
+                    }
+                },
+                    enabled = state.activeDeviceId != null && !state.busy &&
+                        toolbarRefresh?.isActive != true,
+                    modifier = Modifier.semantics { contentDescription = "Refresh current page" }) {
                     ControlGlyph("refresh", modifier = Modifier.size(22.dp))
                 }
             })
@@ -361,7 +411,7 @@ fun ControlCenterScreen() {
                                     Text(if (state.devices.isEmpty()) "Connect your first Portal" else "Choose a Portal to reconnect",
                                         style = MaterialTheme.typography.titleMedium)
                                     Text("Enable Phone remote in Immortal, then use the address and six-digit PIN shown on your Portal.")
-                                    Button(onClick = { pairDialog = true; vm.startDiscovery() }) { Text("Add a Portal") }
+                                    Button(onClick = { pairDialog = true }) { Text("Add a Portal") }
                                     state.devices.forEach { saved ->
                                         ActionRow(saved.name, saved.endpoint, "home") { vm.selectDevice(saved.id) }
                                     }
@@ -441,7 +491,7 @@ fun ControlCenterScreen() {
                                     singleLine = true, modifier = Modifier.fillMaxWidth())
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     FilterChip(!showCatalog, onClick = { showCatalog = false }, label = { Text("Installed") })
-                                    FilterChip(showCatalog, onClick = { showCatalog = true; vm.refreshCatalog() }, label = { Text("Catalog") })
+                                    FilterChip(showCatalog, onClick = { showCatalog = true }, label = { Text("Catalog") })
                                 }
                             }
                             val entries = if (showCatalog) catalogItems(state.catalog) else state.apps.objects()
@@ -512,7 +562,7 @@ fun ControlCenterScreen() {
                                     advancedTools = true
                                 }
                                 ActionRow("Add a Portal", "Local Wi-Fi or your existing private VPN endpoint.", "remote") {
-                                    pairDialog = true; vm.startDiscovery()
+                                    pairDialog = true
                                 }
                             }
                         }
@@ -524,10 +574,10 @@ fun ControlCenterScreen() {
     }
     if (pairDialog) PairPortalDialog(state, pairAddress,
         onAddress = { pairAddress = it },
-        onDismiss = { pairDialog = false; vm.stopDiscovery() },
+        onDismiss = { pairDialog = false },
         onPair = { endpoint, pin ->
             vm.pairFromCode(endpoint, pin.takeIf { it.isNotBlank() })
-            pairDialog = false; vm.stopDiscovery()
+            pairDialog = false
         })
     pendingRestore?.let { candidate ->
         AlertDialog(onDismissRequest = { pendingRestore = null },

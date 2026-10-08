@@ -22,6 +22,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -34,6 +35,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.portalinstaller.R
 import com.portalinstaller.data.tools.LogLine
@@ -59,6 +63,23 @@ internal fun LogcatTab(
     context: Context,
     viewModel: LogcatViewModel
 ) {
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, viewModel) {
+        // The activity-scoped ViewModel outlives this tab. Stop its stream when
+        // the UI stops or leaves composition; returning still requires Start.
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) viewModel.stop()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        if (!lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+            viewModel.stop()
+        }
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            viewModel.stop()
+        }
+    }
+
     val buffer by viewModel.buffer.collectAsStateWithLifecycle()
     val isStreaming by viewModel.isStreaming.collectAsStateWithLifecycle()
     val levelFilter by viewModel.levelFilter.collectAsStateWithLifecycle()
@@ -84,7 +105,11 @@ internal fun LogcatTab(
         LogcatControls(
             isStreaming = isStreaming,
             errorsOnly = errorsOnly,
-            onStart = { viewModel.start() },
+            onStart = {
+                if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+                    viewModel.start()
+                }
+            },
             onStop = { viewModel.stop() },
             onClear = { viewModel.clear() },
             onExport = { exportLogcat(context, visible) },
