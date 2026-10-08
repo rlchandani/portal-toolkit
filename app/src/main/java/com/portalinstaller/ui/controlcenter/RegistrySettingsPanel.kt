@@ -86,7 +86,8 @@ private fun RegistryControl(
     advanced: Boolean,
     onApply: (Any) -> Unit,
 ) {
-    val title = control.optString("title", control.optString("key"))
+    val title = if (control.optString("key") == "advancedSettings") "Advanced settings on Portal"
+        else control.optString("title", control.optString("key"))
     val help = control.optString("shortHelp", control.optString("help"))
     val type = control.optString("type")
     val value = control.opt("value")

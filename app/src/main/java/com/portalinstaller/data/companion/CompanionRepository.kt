@@ -45,6 +45,7 @@ class CompanionRepository(
     private val io: CoroutineDispatcher = Dispatchers.IO,
     private val discovery: CompanionDiscovery? = null,
     private val clock: () -> Long = System::currentTimeMillis,
+    private val preloadManagement: Boolean = true,
 ) {
     private val mutableState = MutableStateFlow(ControlCenterState())
     val state: StateFlow<ControlCenterState> = mutableState.asStateFlow()
@@ -220,6 +221,7 @@ class CompanionRepository(
         }
     }
     fun refreshSettings(): Job = request(showBusy = false) { refreshRoute(it, "settings") }
+    fun refreshApps(): Job = request(showBusy = false) { refreshRoute(it, "apps") }
     fun refreshSources(): Job = request(showBusy = false) { refreshRoute(it, "sources") }
     fun refreshOperations(): Job = request(showBusy = false) { refreshRoute(it, "operations") }
     fun refreshLayout(): Job = request(showBusy = false) { refreshRoute(it, "layout") }
@@ -503,7 +505,7 @@ class CompanionRepository(
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (error: Exception) {
             // A missing image should not replace control errors or invalidate the device session.
-            if (error is CompanionException && error.error.status in setOf(401, 403)) {
+            if (error is CompanionException && isAuthenticationFailure(error)) {
                 update(selected) { it.copy(connection = CompanionConnection.UNAUTHORIZED, error = error.error) }
             }
             null
@@ -512,7 +514,13 @@ class CompanionRepository(
 
     private suspend fun refreshPhotos(selected: Ticket, folder: String) {
         if (!owns(selected)) return
-        val response = withContext(io) { client.photos(selected.session, folder) }
+        val response = try {
+            withContext(io) { client.photos(selected.session, folder) }
+        } catch (error: CompanionException) {
+            if (error.error.status != 404 || error.error.code != "folder_not_found") throw error
+            // The first upload creates its destination. A new collection is empty until then.
+            JSONObject().put("ok", true).put("path", folder).put("files", JSONArray())
+        }
         update(selected) { it.copy(photoFolder = folder, photos = CompanionPhotos.parse(response),
             photoFreeBytes = response.optLong("freeBytes", -1).takeIf { bytes -> bytes >= 0 }) }
     }
@@ -588,11 +596,11 @@ class CompanionRepository(
         val refreshedDevice = if (info != null) deviceFromInfo(selected.session.device, info) else selected.session.device
         val payloads = linkedMapOf<String, JSONObject>()
         if (info != null) payloads["companion"] = info
-        for (route in listOf("settings", "apps", "sources", "nowplaying")) {
+        for (route in if (preloadManagement) listOf("settings", "apps", "sources", "nowplaying") else listOf("nowplaying")) {
             if (!owns(selected)) return
             payloads[route] = withContext(io) { client.get(selected.session, route) }
         }
-        for (route in listOf("layout", "catalog", "operations", "scenes", "jarvis")) {
+        for (route in if (preloadManagement) listOf("layout", "catalog", "operations", "scenes", "jarvis") else emptyList()) {
             if (!owns(selected)) return
             if (info?.optJSONObject("capabilities")?.optBoolean(route) == true) {
                 withContext(io) { optionalGet(selected.session, route) }?.let { payloads[route] = it }
@@ -669,11 +677,14 @@ class CompanionRepository(
         else -> CompanionError("unreachable", "Could not reach the Portal or its private session storage. Check the connection and retry.")
     }
     private fun failureConnection(error: Throwable, current: CompanionConnection): CompanionConnection = when {
-        error is CompanionException && error.error.status in setOf(401, 403) -> CompanionConnection.UNAUTHORIZED
+        isAuthenticationFailure(error) -> CompanionConnection.UNAUTHORIZED
         error is java.io.IOException && error !is CompanionException -> CompanionConnection.OFFLINE
         current == CompanionConnection.CONNECTING -> CompanionConnection.OFFLINE
         else -> current
     }
+    private fun isAuthenticationFailure(error: Throwable): Boolean =
+        error is CompanionException && (error.error.status == 401 ||
+            error.error.status == 403 && error.error.code == "unauthorized")
     private fun delta(dx: Float, dy: Float) = JSONObject().put("dx", dx.toDouble()).put("dy", dy.toDouble())
 
     fun startDiscovery() {
@@ -696,6 +707,7 @@ class CompanionRepository(
     fun close() { stopDiscovery(); disconnect(); scope.cancel() }
 
     companion object {
-        fun create(context: Context): CompanionRepository = CompanionRepository(CompanionClient(), FileCompanionSessionStore.create(context), discovery = NsdCompanionDiscovery(context.applicationContext))
+        fun create(context: Context): CompanionRepository = CompanionRepository(CompanionClient(), FileCompanionSessionStore.create(context),
+            discovery = NsdCompanionDiscovery(context.applicationContext), preloadManagement = false)
     }
 }

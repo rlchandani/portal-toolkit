@@ -9,13 +9,24 @@ package com.portalinstaller.viewmodel
 import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.portalinstaller.data.companion.CompanionRepository
+import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 
 class ControlCenterViewModel(private val repository: CompanionRepository) : ViewModel() {
     constructor(context: Context) : this(CompanionRepository.create(context))
     val state = repository.state
+    init {
+        viewModelScope.launch {
+            repository.ready.join()
+            val initial = state.value
+            if (initial.sessionGeneration == 0L && initial.devices.size == 1) {
+                repository.selectDevice(initial.devices.single().id).join()
+            }
+        }
+    }
 
     fun pair(endpoint: String, pin: String, name: String? = null) = repository.pair(endpoint, pin, name)
     fun pairFromCode(code: String, pin: String? = null) = repository.pairFromCode(code, pin)
@@ -25,6 +36,7 @@ class ControlCenterViewModel(private val repository: CompanionRepository) : View
     fun refresh() = repository.refresh()
     fun refreshStatus() = repository.refreshStatus()
     fun refreshSettings() = repository.refreshSettings()
+    fun refreshApps() = repository.refreshApps()
     fun refreshSources() = repository.refreshSources()
     fun refreshOperations() = repository.refreshOperations()
     fun refreshLayout() = repository.refreshLayout()

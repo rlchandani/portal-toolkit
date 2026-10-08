@@ -125,4 +125,30 @@ class CompanionPhotosTest {
         load.join()
         assertNull(bytes)
     }
+
+    @Test fun newCollectionDoesNotFailBeforeItsFirstUpload() = runTest {
+        val http = CompanionTransport { request ->
+            if (request.url.contains("/photos?")) CompanionResponse(404, """{"ok":false,"error":"folder_not_found"}""")
+            else CompanionResponse(200, """{"ok":true,"deviceId":"a","capabilities":{},"settings":{"domains":[]},"apps":[],"sources":{},"np":{}}""")
+        }
+        val repo = CompanionRepository(CompanionClient(http), Store(), backgroundScope, UnconfinedTestDispatcher(testScheduler))
+        repo.ready.join(); repo.selectDevice("a").join()
+        repo.listPhotos("/sdcard/Pictures/New-Collection").join()
+        assertEquals(CompanionConnection.CONNECTED, repo.state.value.connection)
+        assertNull(repo.state.value.error)
+        assertTrue(repo.state.value.photos.isEmpty())
+        assertEquals("/sdcard/Pictures/New-Collection", repo.state.value.photoFolder)
+    }
+
+    @Test fun photoPermissionFailureDoesNotInvalidatePairing() = runTest {
+        val http = CompanionTransport { request ->
+            if (request.url.contains("/photos?")) CompanionResponse(403, """{"ok":false,"error":"not_readable"}""")
+            else CompanionResponse(200, """{"ok":true,"deviceId":"a","capabilities":{},"settings":{"domains":[]},"apps":[],"sources":{},"np":{}}""")
+        }
+        val repo = CompanionRepository(CompanionClient(http), Store(), backgroundScope, UnconfinedTestDispatcher(testScheduler))
+        repo.ready.join(); repo.selectDevice("a").join()
+        repo.listPhotos("/sdcard/Pictures/Family").join()
+        assertEquals(CompanionConnection.CONNECTED, repo.state.value.connection)
+        assertEquals("not_readable", repo.state.value.error?.code)
+    }
 }

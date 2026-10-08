@@ -40,10 +40,10 @@ class CompanionUpload(
 object CompanionPhotos {
     const val DEFAULT_FOLDER = "/sdcard/Pictures/Immortal"
     const val MAX_IMAGE_BYTES = 20L * 1024 * 1024
-    private val mimeTypes = mapOf("jpg" to "image/jpeg", "jpeg" to "image/jpeg", "png" to "image/png", "webp" to "image/webp", "gif" to "image/gif", "bmp" to "image/bmp")
+    private val mimeTypes = mapOf("jpg" to "image/jpeg", "jpeg" to "image/jpeg", "png" to "image/png", "webp" to "image/webp", "gif" to "image/gif")
     fun safeName(name: String): String {
         require(name.isNotBlank() && name.length <= 128 && !name.startsWith('.') && !name.contains("..") && name.none { it == '/' || it == '\\' || it.isISOControl() }) { "Use a filename of at most 128 characters, without path separators or hidden-file prefixes." }
-        require(name.substringAfterLast('.', "").lowercase() in mimeTypes) { "Use a JPEG, PNG, WebP, GIF, or BMP image." }
+        require(name.substringAfterLast('.', "").lowercase() in mimeTypes) { "Use a JPEG, PNG, WebP, or GIF image." }
         return name
     }
     fun folder(path: String): String {

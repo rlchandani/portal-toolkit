@@ -14,6 +14,7 @@ android {
         targetSdk = 35
         versionCode = 6
         versionName = "1.5.0-control-center"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
@@ -83,6 +84,8 @@ dependencies {
     // Real org.json impl so store serialize/parse runs on the JVM instead of
     // hitting the android.jar stub that throws "not mocked".
     testImplementation("org.json:json:20240303")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")

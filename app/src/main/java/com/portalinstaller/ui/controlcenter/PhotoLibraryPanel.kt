@@ -26,6 +26,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -57,12 +58,16 @@ internal fun PhotoLibraryPanel(
     uploadDetail: String?,
     onImport: () -> Unit,
     onRefresh: () -> Unit,
+    onChangeFolder: (String) -> Unit,
+    onActivateFolder: () -> Unit,
     onDelete: (String) -> Unit,
     loadThumbnail: suspend (String) -> ByteArray?,
 ) {
     var page by remember(deviceId, folder) { mutableIntStateOf(0) }
     var previewTarget by remember(deviceId) { mutableStateOf<JSONObject?>(null) }
     var deleteTarget by remember(deviceId) { mutableStateOf<JSONObject?>(null) }
+    var chooseFolder by remember(deviceId) { mutableStateOf(false) }
+    var folderDraft by remember(deviceId, folder) { mutableStateOf(folder) }
     val photos = files.objects()
     val pages = ((photos.size + 23) / 24).coerceAtLeast(1)
     val currentPage = page.coerceIn(0, pages - 1)
@@ -74,8 +79,14 @@ internal fun PhotoLibraryPanel(
     if (!uploadDetail.isNullOrBlank()) {
         Text(uploadDetail, style = MaterialTheme.typography.bodyMedium)
     }
-    Text("${photos.size} photos · $folder", style = MaterialTheme.typography.bodySmall,
+    Text("${photos.size} ${if (photos.size == 1) "photo" else "photos"}", style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant)
+    TextButton(onClick = { folderDraft = folder; chooseFolder = true }, enabled = !working) {
+        Text("Folder: $folder")
+    }
+    OutlinedButton(onClick = onActivateFolder, enabled = !working && photos.isNotEmpty()) {
+        Text("Use for slideshow")
+    }
     if (photos.isEmpty()) EmptyMessage("Your collection starts here",
         "Add photos, activate the folder, and preview them on your Portal.")
     photos.drop(currentPage * 24).take(24).chunked(3).forEach { row ->
@@ -142,4 +153,20 @@ internal fun PhotoLibraryPanel(
             }) { Text("Delete") } },
             dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("Keep photo") } })
     }
+    if (chooseFolder) AlertDialog(
+        onDismissRequest = { chooseFolder = false },
+        title = { Text("Photos on Portal") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Choose a public folder on the Portal. Browsing does not change your slideshow.")
+                OutlinedTextField(folderDraft, onValueChange = { folderDraft = it },
+                    label = { Text("Folder on Portal") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth())
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { chooseFolder = false; onChangeFolder(folderDraft.trim()) },
+                enabled = !working && folderDraft.trim().startsWith("/sdcard/")) { Text("Browse folder") }
+        },
+        dismissButton = { TextButton(onClick = { chooseFolder = false }) { Text("Cancel") } })
 }

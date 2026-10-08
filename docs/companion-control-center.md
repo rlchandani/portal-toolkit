@@ -11,9 +11,14 @@ device or enter its address, and enter the PIN. A pairing link containing the PI
 can also be pasted. The PIN expires and is single use; the resulting session
 persists across restarts.
 
+To import new photos, choose **Allow photo imports** in the Portal's pairing card
+and grant Android file access. Reading existing photos does not imply write
+access; the phone shows a setup hint until this permission is available.
+
 Saved pairings are held in private storage excluded from Android backups. Select
 another Portal in the top device menu. Every operation captures its device
 session before it starts. Changing devices invalidates pending results.
+With exactly one saved Portal, the phone reconnects automatically on startup.
 
 Local addresses default to port 8723. Existing private HTTPS endpoints and VPN
 addresses may be entered explicitly. This app does not create an Internet relay.
@@ -23,8 +28,10 @@ addresses may be entered explicitly. This app does not create an Internet relay.
 - **Home:** slideshow, home layout, scenes, Jarvis, snapshots, activity, media.
 - **Remote:** pointer movement, tap, scrolling, keyboard, Back/Home, media/volume.
   Gestures and text require Immortal's accessibility service on the Portal.
+  Select a text field on the Portal before sending text from the phone.
 - **Photos:** import from Android's document/media picker, browse bounded
-  thumbnails, delete with confirmation, activate a folder, and preview on Portal.
+  thumbnails, choose another public Portal folder, delete with confirmation,
+  activate the displayed collection with **Use for slideshow**, and preview on Portal.
   Supported image files are limited to 20 MiB. Photos remain on the Portal.
   Google Photos Picker and additional file tools remain under Device tools.
 - **Apps:** launch installed apps and install/update compatible catalog apps.
@@ -68,3 +75,7 @@ Native control metadata refreshes stop in the background. Pointer movement is
 coalesced; image requests and decoder queues are bounded. Imports stream rather
 than buffering entire collections in RAM. In-place app updates preserve saved
 settings and credentials; an APK signature mismatch must never trigger uninstall.
+Connection loads device status and media first. Settings, photos, apps, layouts,
+scenes, and Jarvis details load when their page is opened.
+While visible, the app retries an offline paired device every 30 seconds. An
+expired or revoked pairing requires pairing again rather than automatic retries.

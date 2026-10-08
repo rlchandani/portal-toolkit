@@ -108,7 +108,7 @@ internal fun PhotoSourcesPanel(
                 visualTransformation = if (field.secret) PasswordVisualTransformation() else VisualTransformation.None)
         }
         if (selected == "folder") {
-            Text("Upload photos to this folder, then activate it. Your Portal keeps the photos locally.",
+            Text("Set the slideshow's folder here, or use the collection above. Photos stay on your Portal.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }

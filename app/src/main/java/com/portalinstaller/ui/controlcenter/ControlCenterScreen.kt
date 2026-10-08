@@ -86,6 +86,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.portalinstaller.data.AppContainer
 import com.portalinstaller.data.companion.CompanionConnection
 import com.portalinstaller.data.companion.ControlCenterState
+import com.portalinstaller.data.companion.SettingsDomain
 import com.portalinstaller.data.store.ThemeMode
 import com.portalinstaller.ui.MainScreen
 import com.portalinstaller.viewmodel.ControlCenterViewModel
@@ -139,6 +140,13 @@ fun ControlCenterScreen() {
     var appQuery by rememberSaveable { mutableStateOf("") }
     var showCatalog by rememberSaveable { mutableStateOf(false) }
     var forgetDevice by remember { mutableStateOf<String?>(null) }
+    val visibleSettingsDomains = state.settings.filter { domain ->
+        domain.controls.any { showAdvanced || !it.advanced }
+    }
+    val shownSettingsDomain = settingsDomain.takeIf { selected ->
+        visibleSettingsDomains.any { it.id == selected }
+    } ?: visibleSettingsDomains.firstOrNull { it.id == "immortal" }?.id
+        ?: visibleSettingsDomains.firstOrNull()?.id ?: settingsDomain
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) {
         if (it.isNotEmpty()) {
@@ -197,19 +205,25 @@ fun ControlCenterScreen() {
             detail == CenterDetail.SCENES -> vm.refreshScenes()
             detail == CenterDetail.JARVIS -> vm.refreshJarvis()
             detail == CenterDetail.OPERATIONS -> vm.refreshOperations()
-            tab == CenterTab.PHOTOS -> { vm.refreshSources(); vm.listPhotos() }
+            tab == CenterTab.PHOTOS -> { vm.refreshSources(); vm.listPhotos(); vm.refreshSettings() }
             tab == CenterTab.SETTINGS -> vm.refreshSettings()
-            tab == CenterTab.APPS -> vm.refreshCatalog()
+            tab == CenterTab.APPS -> { vm.refreshApps(); vm.refreshCatalog() }
         }
     }
     // Work stops when the activity is backgrounded; metadata is not polled at frame rate.
     LaunchedEffect(lifecycleOwner, state.activeDeviceId, tab, detail) {
         lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             while (isActive) {
-                delay(if (detail == CenterDetail.OPERATIONS) 3_000 else 15_000)
+                delay(when {
+                    vm.state.value.connection == CompanionConnection.OFFLINE -> 30_000
+                    detail == CenterDetail.OPERATIONS -> 3_000
+                    else -> 15_000
+                })
                 val fresh = vm.state.value
-                if (fresh.connected && !fresh.busy) {
-                    val request = if (detail == CenterDetail.OPERATIONS) vm.refreshOperations() else vm.refreshStatus()
+                if (fresh.activeDeviceId != null && !fresh.busy &&
+                    fresh.connection in setOf(CompanionConnection.CONNECTED, CompanionConnection.OFFLINE)) {
+                    val request = if (fresh.connected && detail == CenterDetail.OPERATIONS)
+                        vm.refreshOperations() else vm.refreshStatus()
                     try { request.join() } finally { request.cancel() }
                 }
             }
@@ -336,7 +350,13 @@ fun ControlCenterScreen() {
                     } else when (CenterTab.valueOf(shown)) {
                         CenterTab.HOME -> item {
                             PageTitle("Your Portal", "Everything you need, within reach.")
-                            if (!state.connected) {
+                            if (state.connection == CompanionConnection.CONNECTING) {
+                                GroupCard {
+                                    Text("Connecting to ${state.activeDevice?.name ?: "your Portal"}",
+                                        style = MaterialTheme.typography.titleMedium)
+                                    LinearProgressIndicator(Modifier.fillMaxWidth())
+                                }
+                            } else if (!state.connected) {
                                 GroupCard {
                                     Text(if (state.devices.isEmpty()) "Connect your first Portal" else "Choose a Portal to reconnect",
                                         style = MaterialTheme.typography.titleMedium)
@@ -392,8 +412,17 @@ fun ControlCenterScreen() {
                                         picker.launch("image/*")
                                     },
                                     onRefresh = { vm.listPhotos() },
+                                    onChangeFolder = { vm.listPhotos(it) },
+                                    onActivateFolder = { vm.writeSources(JSONObject().put("folderPath", state.photoFolder)) },
                                     onDelete = { vm.deletePhoto(it) },
                                     loadThumbnail = { vm.photoBytes(it) })
+                                else GroupCard {
+                                    Text("Allow photo imports on the Portal", fontWeight = FontWeight.Medium)
+                                    Text("Open Control from your phone on the Portal, then choose Allow photo imports. Return here and refresh after granting file access.")
+                                    OutlinedButton(onClick = { vm.refreshStatus() }, enabled = !state.busy) {
+                                        Text("Check file access")
+                                    }
+                                }
                                 if (state.photoTransfer?.running == true) TextButton(onClick = { vm.cancelPhotoUpload() }) { Text("Cancel transfer") }
                                 state.photoTransfer?.failures?.forEach { failure ->
                                     Text("${failure.name}: ${failure.error.message}", color = MaterialTheme.colorScheme.error)
@@ -430,12 +459,17 @@ fun ControlCenterScreen() {
                                         horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                         if (packageName.isNotBlank()) AppIcon(state.activeDeviceId.orEmpty(), packageName, vm)
                                         Text(app.optString("name").ifBlank { app.optString("label", packageName) },
-                                            style = MaterialTheme.typography.titleMedium)
+                                            style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                                        if (!showCatalog) Button(
+                                            onClick = { vm.launchApp(packageName) },
+                                            enabled = state.connected && !state.busy && packageName.isNotBlank()) {
+                                            Text("Open")
+                                        }
                                     }
                                     val description = app.optString("description").ifBlank { app.optString("versionName") }
                                     if (description.isNotBlank()) Text(description, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        if (!showCatalog || app.optBoolean("installed")) Button(
+                                    if (showCatalog) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        if (showCatalog && app.optBoolean("installed")) Button(
                                             onClick = { vm.launchApp(packageName) },
                                             enabled = state.connected && !state.busy && packageName.isNotBlank()) { Text("Open") }
                                         if (showCatalog) {
@@ -461,14 +495,14 @@ fun ControlCenterScreen() {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Column(Modifier.weight(1f)) {
                                         Text("Advanced settings", fontWeight = FontWeight.Medium)
-                                        Text("Show expert controls from the Portal registry.", style = MaterialTheme.typography.bodySmall)
+                                        Text("Show expert controls on this phone.", style = MaterialTheme.typography.bodySmall)
                                     }
                                     Switch(showAdvanced, onCheckedChange = { showAdvanced = it })
                                 }
                             }
-                            if (query.isBlank()) SettingsDomainPicker(state, settingsDomain) { settingsDomain = it }
+                            if (query.isBlank()) SettingsDomainPicker(visibleSettingsDomains, shownSettingsDomain) { settingsDomain = it }
                             state.schema?.let { RegistrySettingsPanel(it, !state.connected || state.busy, query, showAdvanced,
-                                onlyDomain = if (query.isBlank()) settingsDomain else null,
+                                onlyDomain = if (query.isBlank()) shownSettingsDomain else null,
                                 onApply = { domain, body -> vm.writeSettings(domain, body) }) }
                                 ?: EmptyMessage("Portal settings unavailable", "Connect to load its complete settings registry.")
                             SectionTitle("This phone")
@@ -599,6 +633,7 @@ private fun RemotePanel(state: ControlCenterState, vm: ControlCenterViewModel) {
             TextButton(onClick = { vm.scroll("down") }, enabled = enabled) { Text("Scroll down") }
         }
         OutlinedTextField(keyboard, onValueChange = { keyboard = it }, label = { Text("Type on the Portal") },
+            supportingText = { Text("Select a text field on the Portal first.") },
             modifier = Modifier.fillMaxWidth(), enabled = enabled)
         Button(onClick = { vm.sendText(keyboard); keyboard = "" }, enabled = enabled && keyboard.isNotBlank()) { Text("Send text") }
     }
@@ -642,15 +677,15 @@ private fun AppIcon(deviceId: String, packageName: String, vm: ControlCenterView
 }
 
 @Composable
-private fun SettingsDomainPicker(state: ControlCenterState, selected: String, onSelect: (String) -> Unit) {
+private fun SettingsDomainPicker(domains: List<SettingsDomain>, selected: String, onSelect: (String) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     Box {
         OutlinedButton(onClick = { expanded = true }) {
-            Text(state.settings.firstOrNull { it.id == selected }?.title ?: "Choose a category")
+            Text(domains.firstOrNull { it.id == selected }?.title ?: "Choose a category")
             Spacer(Modifier.width(10.dp)); Text("⌄")
         }
         DropdownMenu(expanded, onDismissRequest = { expanded = false }) {
-            state.settings.forEach { domain ->
+            domains.forEach { domain ->
                 DropdownMenuItem(text = { Text(domain.title) },
                     onClick = { onSelect(domain.id); expanded = false })
             }
@@ -677,7 +712,14 @@ private fun OperationsPanel(operations: JSONArray, working: Boolean, onRetry: (S
             if (status in setOf("running", "queued") && operation.optBoolean("cancelSupported")) {
                 TextButton(onClick = { onCancel(id) }, enabled = !working) { Text("Cancel") }
             }
-            if (status in setOf("failed", "cancelled", "interrupted")) TextButton(onClick = { onRetry(id) }, enabled = !working) { Text("Retry") }
+            if (operation.optBoolean("backendMayContinue")) {
+                Text("The Portal is still confirming the result. Retry will be available when it is safe.",
+                    style = MaterialTheme.typography.bodySmall)
+            }
+            if (status in setOf("failed", "cancelled", "interrupted") &&
+                operation.optBoolean("retrySupported") && !operation.optBoolean("backendMayContinue")) {
+                TextButton(onClick = { onRetry(id) }, enabled = !working) { Text("Retry") }
+            }
         }
     }
 }

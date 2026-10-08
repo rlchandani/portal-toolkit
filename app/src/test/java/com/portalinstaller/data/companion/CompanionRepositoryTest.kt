@@ -42,6 +42,23 @@ class CompanionRepositoryTest {
     }
     private fun session(id: String, host: String = id) = CompanionSession(CompanionDevice(id, id, "http://$host:8787"), "token-$id")
 
+    @Test fun nativeConnectionLoadsHomeBeforeManagementPages() = runTest {
+        val http = Http()
+        val repo = CompanionRepository(CompanionClient(http), Store(listOf(session("a"))),
+            backgroundScope, UnconfinedTestDispatcher(testScheduler), preloadManagement = false)
+        repo.ready.join()
+        repo.selectDevice("a").join()
+        assertEquals(CompanionConnection.CONNECTED, repo.state.value.connection)
+        assertEquals(listOf("companion", "nowplaying"), http.calls.map { it.url.substringAfterLast('/') })
+        assertNotNull(repo.state.value.nowPlaying)
+        assertNull(repo.state.value.schema)
+        repo.refreshSettings().join()
+        repo.refreshApps().join()
+        assertNotNull(repo.state.value.schema)
+        assertEquals(listOf("companion", "nowplaying", "settings", "apps"),
+            http.calls.map { it.url.substringAfterLast('/') })
+    }
+
     @Test fun pairingUsesPinThenBearerAndPersistsStableIdentity() = runTest {
         val store = Store()
         val http = Http()
@@ -145,6 +162,10 @@ class CompanionRepositoryTest {
         repo.refresh().join()
         assertEquals(CompanionConnection.OFFLINE, repo.state.value.connection)
         assertNotNull(repo.state.value.nowPlaying)
+        http.handle = { CompanionResponse(200, """{"ok":true,"deviceId":"a","capabilities":{},"np":{}}""") }
+        repo.refreshStatus().join()
+        assertEquals(CompanionConnection.CONNECTED, repo.state.value.connection)
+        assertEquals("a", repo.state.value.activeDeviceId)
     }
 
     @Test fun sourcePayloadNeverPublishesConfiguredCredentials() = runTest {
