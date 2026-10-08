@@ -254,7 +254,10 @@ internal fun AppProfileEditorDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(modifier = Modifier.height(8.dp))
-                Row(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     TextButton(
                         onClick = { selection = apps.map { it.packageName }.toSet() },
                         modifier = Modifier.weight(1f)
@@ -269,7 +272,9 @@ internal fun AppProfileEditorDialog(
                     }
                 }
                 LazyColumn(
-                    modifier = Modifier.heightIn(max = 360.dp),
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .heightIn(max = 360.dp),
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     items(apps, key = { it.packageName }) { app ->

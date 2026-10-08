@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -145,7 +146,7 @@ internal fun InstalledAppsTab(
                 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp)
+                    .heightIn(min = 56.dp)
             )
             Spacer(modifier = Modifier.height(8.dp))
             Row(
@@ -157,7 +158,7 @@ internal fun InstalledAppsTab(
                     shape = RoundedCornerShape(16.dp),
                     modifier = Modifier
                         .weight(1f)
-                        .height(48.dp),
+                        .heightIn(min = 48.dp),
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp)
                 ) {
                     Text(sortLabel)
@@ -166,8 +167,8 @@ internal fun InstalledAppsTab(
                     onClick = onPickFile,
                     shape = RoundedCornerShape(16.dp),
                     modifier = Modifier
-                        .width(104.dp)
-                        .height(48.dp),
+                        .weight(1f)
+                        .heightIn(min = 48.dp),
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp)
                 ) {
                     Text(stringResource(R.string.choose_apk_compact))
@@ -185,13 +186,12 @@ internal fun InstalledAppsTab(
                 value = ContentUriHelper.getDisplayName(context, selectedUri) ?: fallbackName
             }
 
-            SectionCard {
-                Row(
+            SectionCard(modifier = Modifier.padding(horizontal = 16.dp)) {
+                Column(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
+                    Column {
                         Text(
                             text = stringResource(R.string.selected_file_label),
                             style = MaterialTheme.typography.labelMedium,
@@ -209,6 +209,7 @@ internal fun InstalledAppsTab(
                         onClick = { onInstallCustomApk(selectedUri) },
                         enabled = connectionState is ConnectionState.Connected &&
                             !installBusy,
+                        modifier = Modifier.align(Alignment.End),
                         shape = RoundedCornerShape(16.dp)
                     ) {
                         if (installBusy) {

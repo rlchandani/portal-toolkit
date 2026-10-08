@@ -8,6 +8,7 @@ package com.portalinstaller.ui.controlcenter
 
 import android.app.TimePickerDialog
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -40,6 +41,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.portalinstaller.ui.common.InlineSettingRow
+import com.portalinstaller.ui.common.SettingValueButton
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale
@@ -172,7 +175,7 @@ internal fun ScenesPanel(
         }
     }
 
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         GroupCard {
             Text("Scenes", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
             Text("Run a sequence on this Portal, or let the Portal run it on selected days.",
@@ -188,7 +191,11 @@ internal fun ScenesPanel(
 
         SectionTitle("Start with a template")
         GroupCard {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 listOf("Evening", "Music", "Dashboard").forEach { name ->
                     OutlinedButton(onClick = {
                         val scene = ScenePanelDraft.template(name)
@@ -238,7 +245,11 @@ internal fun ScenesPanel(
                             editScene { it.getJSONArray("steps").put(stepIndex, replacement) }
                         }
                     }
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
                         TextButton(onClick = { editScene { scene -> scene.put("steps", moveSceneStep(steps, stepIndex, stepIndex - 1)) } },
                             enabled = !working && stepIndex > 0) { Text("Move up") }
                         TextButton(onClick = { editScene { scene -> scene.put("steps", moveSceneStep(steps, stepIndex, stepIndex + 1)) } },
@@ -290,16 +301,18 @@ private fun SceneChoice(
     onSelect: (String) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
-    Column {
-        Text(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        OutlinedButton(onClick = { expanded = true }, enabled = enabled,
-            modifier = Modifier.fillMaxWidth()) {
-            Text(options.firstOrNull { it.first == value }?.second ?: value.ifBlank { "Choose" })
-        }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            options.forEach { (id, label) ->
-                DropdownMenuItem(text = { Text(label) }, enabled = enabled,
-                    onClick = { expanded = false; onSelect(id) })
+    InlineSettingRow(title = title) {
+        Box {
+            SettingValueButton(
+                value = options.firstOrNull { it.first == value }?.second ?: value.ifBlank { "Choose" },
+                onClick = { expanded = true },
+                enabled = enabled,
+            )
+            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                options.forEach { (id, label) ->
+                    DropdownMenuItem(text = { Text(label) }, enabled = enabled,
+                        onClick = { expanded = false; onSelect(id) })
+                }
             }
         }
     }
@@ -378,7 +391,11 @@ private fun SceneSettingValue(
         return
     }
     when (value) {
-        is Boolean -> Row(verticalAlignment = Alignment.CenterVertically) {
+        is Boolean -> Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Text(if (key == "enabled") "Enabled" else key, modifier = Modifier.weight(1f))
             Switch(checked = value, onCheckedChange = onEdit, enabled = enabled)
         }
@@ -421,7 +438,11 @@ private fun SceneScheduleEditor(schedule: JSONObject?, enabled: Boolean, onEdit:
         change(copy)
         onEdit(copy)
     }
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Column(Modifier.weight(1f)) {
             Text("Run on a schedule", fontWeight = FontWeight.Medium)
             Text("Uses the Portal's local time.", style = MaterialTheme.typography.bodySmall,
@@ -434,15 +455,20 @@ private fun SceneScheduleEditor(schedule: JSONObject?, enabled: Boolean, onEdit:
             enabled = enabled)
     }
     if (active) {
-        OutlinedButton(onClick = {
-            TimePickerDialog(context, { _, selectedHour, selectedMinute ->
-                edit { it.put("hour", selectedHour).put("minute", selectedMinute) }
-            }, hour.coerceIn(0, 23), minute.coerceIn(0, 59), true).show()
-        }, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
-            Text(String.format(Locale.ROOT, "%02d:%02d", hour, minute))
+        InlineSettingRow("Time") {
+            SettingValueButton(String.format(Locale.ROOT, "%02d:%02d", hour, minute),
+                onClick = {
+                    TimePickerDialog(context, { _, selectedHour, selectedMinute ->
+                        edit { it.put("hour", selectedHour).put("minute", selectedMinute) }
+                    }, hour.coerceIn(0, 23), minute.coerceIn(0, 59), true).show()
+                }, enabled = enabled)
         }
         val labels = listOf("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             labels.forEachIndexed { index, label ->
                 val day = index + 1
                 FilterChip(selected = day in days, onClick = {

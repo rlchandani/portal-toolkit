@@ -9,6 +9,8 @@ Advanced device tools retain Wi-Fi ADB and USB OTG for provisioning and maintena
 The current development build is **1.5.2-control-center**. See
 [Companion setup and capabilities](docs/companion-control-center.md) and the
 [physical-device validation record](docs/companion-extended-validation-2026-10-08.md).
+The [mobile UI layout audit](docs/companion-ui-layout-validation-2026-10-08.md)
+records the settings-row redesign, spacing corrections, and compact-screen checks.
 
 ## Features
 

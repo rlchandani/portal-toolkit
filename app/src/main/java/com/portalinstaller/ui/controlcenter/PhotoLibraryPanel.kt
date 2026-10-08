@@ -13,14 +13,19 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -44,6 +49,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.portalinstaller.data.companion.CompanionPhotos
 import kotlinx.coroutines.CancellationException
@@ -73,6 +79,7 @@ private suspend fun loadPhotoThumbnail(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun PhotoLibraryPanel(
     deviceId: String,
@@ -95,49 +102,59 @@ internal fun PhotoLibraryPanel(
     val photos = files.objects()
     val pages = ((photos.size + 23) / 24).coerceAtLeast(1)
     val currentPage = page.coerceIn(0, pages - 1)
-    SectionTitle("Photos on Portal")
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Button(onClick = onImport, enabled = !working) { Text("Add photos") }
-        OutlinedButton(onClick = onRefresh, enabled = !working) { Text("Refresh") }
-    }
-    if (!uploadDetail.isNullOrBlank()) {
-        Text(uploadDetail, style = MaterialTheme.typography.bodyMedium)
-    }
-    Text("${photos.size} ${if (photos.size == 1) "photo" else "photos"}", style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant)
-    TextButton(onClick = { folderDraft = folder; chooseFolder = true }, enabled = !working) {
-        Text("Folder: $folder")
-    }
-    OutlinedButton(onClick = onActivateFolder, enabled = !working && photos.isNotEmpty()) {
-        Text("Use for slideshow")
-    }
-    if (photos.isEmpty()) EmptyMessage("Your collection starts here",
-        "Add photos, activate the folder, and preview them on your Portal.")
-    photos.drop(currentPage * 24).take(24).chunked(3).forEach { row ->
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            row.forEach { photo ->
-                val path = photo.optString("path")
-                key(deviceId, path, photo.opt("modified")) {
-                val bitmap by produceState<ImageBitmap?>(null, deviceId, path, photo.opt("modified")) {
-                    value = loadPhotoThumbnail(path, loadThumbnail)
-                }
-                Box(Modifier.weight(1f).aspectRatio(1f).clip(RoundedCornerShape(14.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .clickable(enabled = !working) { previewTarget = photo },
-                    contentAlignment = Alignment.Center) {
-                    if (bitmap != null) Image(bitmap!!, contentDescription = photo.optString("name"),
-                        modifier = Modifier.matchParentSize(), contentScale = ContentScale.Crop)
-                    else ControlGlyph("photos", modifier = Modifier.size(30.dp))
-                }
-                }
-            }
-            repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        SectionTitle("Photos on Portal")
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Button(onClick = onImport, enabled = !working) { Text("Add photos") }
+            OutlinedButton(onClick = onRefresh, enabled = !working) { Text("Refresh") }
         }
-    }
-    if (pages > 1) Row(verticalAlignment = Alignment.CenterVertically) {
-        TextButton(onClick = { page = currentPage - 1 }, enabled = currentPage > 0) { Text("Previous") }
-        Text("${currentPage + 1} of $pages", modifier = Modifier.weight(1f))
-        TextButton(onClick = { page = currentPage + 1 }, enabled = currentPage + 1 < pages) { Text("Next") }
+        if (!uploadDetail.isNullOrBlank()) {
+            Text(uploadDetail, style = MaterialTheme.typography.bodyMedium)
+        }
+        Text("${photos.size} ${if (photos.size == 1) "photo" else "photos"}", style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        TextButton(onClick = { folderDraft = folder; chooseFolder = true }, enabled = !working) {
+            Text("Folder: $folder")
+        }
+        OutlinedButton(onClick = onActivateFolder, enabled = !working && photos.isNotEmpty()) {
+            Text("Use for slideshow")
+        }
+        if (photos.isEmpty()) EmptyMessage("Your collection starts here",
+            "Add photos, activate the folder, and preview them on your Portal.")
+        photos.drop(currentPage * 24).take(24).chunked(3).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                row.forEach { photo ->
+                    val path = photo.optString("path")
+                    key(deviceId, path, photo.opt("modified")) {
+                    val bitmap by produceState<ImageBitmap?>(null, deviceId, path, photo.opt("modified")) {
+                        value = loadPhotoThumbnail(path, loadThumbnail)
+                    }
+                    Box(Modifier.weight(1f).aspectRatio(1f).clip(RoundedCornerShape(14.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .clickable(enabled = !working) { previewTarget = photo },
+                        contentAlignment = Alignment.Center) {
+                        if (bitmap != null) Image(bitmap!!, contentDescription = photo.optString("name"),
+                            modifier = Modifier.matchParentSize(), contentScale = ContentScale.Crop)
+                        else ControlGlyph("photos", modifier = Modifier.size(30.dp))
+                    }
+                    }
+                }
+                repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
+        if (pages > 1) FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            TextButton(onClick = { page = currentPage - 1 }, enabled = currentPage > 0) { Text("Previous") }
+            Text("${currentPage + 1} of $pages", modifier = Modifier.align(Alignment.CenterVertically))
+            TextButton(onClick = { page = currentPage + 1 }, enabled = currentPage + 1 < pages) { Text("Next") }
+        }
     }
     previewTarget?.let { target ->
         val path = target.optString("path")
@@ -151,15 +168,18 @@ internal fun PhotoLibraryPanel(
             }
             AlertDialog(
                 onDismissRequest = { previewTarget = null },
-                title = { Text(target.optString("name", "Photo")) },
+                title = { Text(target.optString("name", "Photo"),
+                    maxLines = 2, overflow = TextOverflow.Ellipsis) },
                 text = {
-                    Box(Modifier.fillMaxWidth().height(260.dp), contentAlignment = Alignment.Center) {
+                    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
                         when (val state = preview) {
-                            PhotoPreviewState.Loading -> CircularProgressIndicator()
+                            PhotoPreviewState.Loading -> Box(Modifier.fillMaxWidth().height(260.dp),
+                                contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                             is PhotoPreviewState.Loaded -> Image(state.bitmap,
                                 contentDescription = target.optString("name"),
-                                contentScale = ContentScale.Fit, modifier = Modifier.matchParentSize())
+                                contentScale = ContentScale.Fit, modifier = Modifier.fillMaxWidth().height(260.dp))
                             PhotoPreviewState.Failed -> Column(
+                                modifier = Modifier.fillMaxWidth(),
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.spacedBy(12.dp),
                             ) {
@@ -178,8 +198,10 @@ internal fun PhotoLibraryPanel(
     deleteTarget?.let { target ->
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
-            title = { Text(target.optString("name", "Photo")) },
-            text = { Text("Delete this photo from the Portal?") },
+            title = { Text(target.optString("name", "Photo"),
+                maxLines = 2, overflow = TextOverflow.Ellipsis) },
+            text = { Text("Delete this photo from the Portal?",
+                modifier = Modifier.verticalScroll(rememberScrollState())) },
             confirmButton = { TextButton(onClick = {
                 deleteTarget = null; onDelete(target.getString("path"))
             }) { Text("Delete") } },
@@ -187,9 +209,13 @@ internal fun PhotoLibraryPanel(
     }
     if (chooseFolder) AlertDialog(
         onDismissRequest = { chooseFolder = false },
+        modifier = Modifier.imePadding(),
         title = { Text("Photos on Portal") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(
+                modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
                 Text("Choose a public folder on the Portal. Browsing does not change your slideshow.")
                 OutlinedTextField(folderDraft, onValueChange = { folderDraft = it },
                     label = { Text("Folder on Portal") }, singleLine = true,

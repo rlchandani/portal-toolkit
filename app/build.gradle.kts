@@ -14,7 +14,7 @@ android {
         targetSdk = 35
         versionCode = 8
         versionName = "1.5.2-control-center"
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunner = "com.portalinstaller.AwakeTestRunner"
     }
 
     buildTypes {

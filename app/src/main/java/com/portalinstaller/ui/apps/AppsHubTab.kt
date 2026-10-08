@@ -120,6 +120,7 @@ internal fun AppsHubTab(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                    Spacer(modifier = Modifier.width(8.dp))
                     TextButton(onClick = onOpenDevices) {
                         Text(stringResource(R.string.change))
                     }

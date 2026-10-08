@@ -10,6 +10,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -46,6 +48,8 @@ import androidx.compose.ui.unit.dp
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
+import com.portalinstaller.ui.common.InlineSettingRow
+import com.portalinstaller.ui.common.SettingStepper
 
 /** All edits copy the complete wire document; fields this editor doesn't own survive a save. */
 internal object LayoutPanelDraft {
@@ -153,7 +157,7 @@ internal fun LayoutEditorPanel(
         edit(LayoutPanelDraft.move(JSONObject(draftText), field, from, to))
     }
 
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         GroupCard {
             Text("Home layout", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
             Text("Hold a row to drag it, or use Move up and Move down. Size is measured in Portal grid cells.",
@@ -192,13 +196,11 @@ internal fun LayoutEditorPanel(
                     if (kind == "appwidget") Text("Bound app widget ${widget.optInt("id")} · ${widget.optString("class")}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                        LayoutSpanControl("Width", widget.optInt("spanX", 2), enabled, Modifier.weight(1f)) {
-                            edit(LayoutPanelDraft.resizeWidget(draft, index, it, widget.optInt("spanY", 2)))
-                        }
-                        LayoutSpanControl("Height", widget.optInt("spanY", 2), enabled, Modifier.weight(1f)) {
-                            edit(LayoutPanelDraft.resizeWidget(draft, index, widget.optInt("spanX", 2), it))
-                        }
+                    LayoutSpanControl("Width", widget.optInt("spanX", 2), enabled, Modifier) {
+                        edit(LayoutPanelDraft.resizeWidget(draft, index, it, widget.optInt("spanY", 2)))
+                    }
+                    LayoutSpanControl("Height", widget.optInt("spanY", 2), enabled, Modifier) {
+                        edit(LayoutPanelDraft.resizeWidget(draft, index, widget.optInt("spanX", 2), it))
                     }
                     TextButton(onClick = { edit(LayoutPanelDraft.removeWidget(draft, index)) }, enabled = enabled) {
                         Text("Remove widget", color = MaterialTheme.colorScheme.error)
@@ -244,14 +246,10 @@ private fun LayoutSpanControl(
     modifier: Modifier,
     onChange: (Int) -> Unit,
 ) {
-    Column(modifier) {
-        Text("$title: $value", style = MaterialTheme.typography.bodySmall)
-        Row {
-            TextButton(onClick = { onChange(value - 1) }, enabled = enabled && value > 1,
-                modifier = Modifier.semantics { contentDescription = "Decrease ${title.lowercase()}" }) { Text("−") }
-            TextButton(onClick = { onChange(value + 1) }, enabled = enabled && value < 4,
-                modifier = Modifier.semantics { contentDescription = "Increase ${title.lowercase()}" }) { Text("+") }
-        }
+    InlineSettingRow(title, modifier = modifier) {
+        SettingStepper(value.toString(), { onChange(value - 1) }, { onChange(value + 1) },
+            decreaseEnabled = enabled && value > 1, increaseEnabled = enabled && value < 4,
+            title = title)
     }
 }
 
@@ -299,6 +297,7 @@ private fun layoutTileTitle(value: Any?, layout: JSONObject): String {
 }
 
 /** A bounded page avoids composing hundreds of slots inside the host's scrolling column. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun LayoutReorderRows(
     count: Int,
@@ -368,7 +367,11 @@ private fun LayoutReorderRows(
                     }.padding(8.dp),
             ) {
                 content(index)
-                Row {
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                     TextButton(onClick = { latestMove(index, index - 1) },
                         enabled = enabled && index > 0) { Text("Move up") }
                     TextButton(onClick = { latestMove(index, index + 1) },
@@ -378,10 +381,14 @@ private fun LayoutReorderRows(
             if (index < end - 1) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         }
     }
-    if (lastPage > 0) Row(verticalAlignment = Alignment.CenterVertically) {
+    if (lastPage > 0) FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         TextButton(onClick = { page = currentPage - 1 }, enabled = currentPage > 0) { Text("Previous") }
         Text("${start + 1}–$end of $count", style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.weight(1f))
+            modifier = Modifier.align(Alignment.CenterVertically))
         TextButton(onClick = { page = currentPage + 1 }, enabled = currentPage < lastPage) { Text("Next") }
     }
 }

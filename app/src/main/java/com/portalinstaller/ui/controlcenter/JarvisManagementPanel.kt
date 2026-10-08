@@ -7,6 +7,7 @@
 package com.portalinstaller.ui.controlcenter
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -29,6 +30,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.portalinstaller.ui.common.InlineSettingRow
+import com.portalinstaller.ui.common.SettingValueButton
 import org.json.JSONObject
 
 @Composable
@@ -58,7 +61,7 @@ internal fun JarvisManagementPanel(
     val wakeChanged = wakeSupported && status.opt("wakeEnabled") is Boolean && wake != currentWake
     val enabled = !working && installed && supported
 
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         GroupCard {
             Text("Jarvis", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
             when {
@@ -84,28 +87,35 @@ internal fun JarvisManagementPanel(
         if (installed && supported) {
             SectionTitle("Model")
             GroupCard {
-                Text("Conversation model", fontWeight = FontWeight.Medium)
-                Column {
-                    OutlinedButton(onClick = { expanded = true }, enabled = enabled && models.isNotEmpty(),
-                        modifier = Modifier.fillMaxWidth()) {
-                        Text(model.ifBlank { "Model unavailable" })
-                    }
-                    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                        models.forEach { available ->
-                            DropdownMenuItem(text = { Text(available) }, enabled = enabled, onClick = {
-                                model = available; expanded = false
-                            })
+                InlineSettingRow(
+                    title = "Conversation model",
+                    help = if (models.isEmpty()) "Jarvis has not reported an available model list."
+                        else "Choices come from the Jarvis version installed on this Portal.",
+                ) {
+                    Box {
+                        SettingValueButton(
+                            value = model.ifBlank { "Model unavailable" },
+                            onClick = { expanded = true },
+                            enabled = enabled && models.isNotEmpty(),
+                        )
+                        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                            models.forEach { available ->
+                                DropdownMenuItem(text = { Text(available) }, enabled = enabled, onClick = {
+                                    model = available; expanded = false
+                                })
+                            }
                         }
                     }
                 }
-                Text(if (models.isEmpty()) "Jarvis has not reported an available model list."
-                    else "Choices come from the Jarvis version installed on this Portal.",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             if (wakeSupported) {
                 SectionTitle("Wake policy")
                 GroupCard {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         Column(Modifier.weight(1f)) {
                             Text("Allow background wake", fontWeight = FontWeight.Medium)
                             Text("Opt in to local wake-word listening while Jarvis is in the background.",

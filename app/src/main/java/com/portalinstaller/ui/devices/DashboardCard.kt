@@ -33,6 +33,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -65,11 +66,12 @@ internal fun DashboardCard(
     SectionCard {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = stringResource(R.string.dashboard_title),
+                modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Medium
             )
@@ -81,7 +83,7 @@ internal fun DashboardCard(
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             val storageFree = deviceStatus?.storageFreeBytes
             val storageTotal = deviceStatus?.storageTotalBytes
@@ -103,7 +105,8 @@ internal fun DashboardCard(
                 } else {
                     ""
                 },
-                color = MaterialTheme.colorScheme.primary
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.weight(1f)
             )
 
             val ramFree = deviceStatus?.ramFreeBytes
@@ -127,7 +130,8 @@ internal fun DashboardCard(
                 } else {
                     ""
                 },
-                color = MaterialTheme.colorScheme.tertiary
+                color = MaterialTheme.colorScheme.tertiary,
+                modifier = Modifier.weight(1f)
             )
         }
 
@@ -223,10 +227,11 @@ private fun DonutGauge(
     label: String,
     center: String,
     subtitle: String,
-    color: Color
+    color: Color,
+    modifier: Modifier = Modifier
 ) {
     val trackColor = MaterialTheme.colorScheme.surfaceVariant
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Box(contentAlignment = Alignment.Center) {
             Canvas(modifier = Modifier.size(96.dp)) {
                 val stroke = Stroke(width = 14f)
@@ -259,11 +264,12 @@ private fun DonutGauge(
             )
         }
         Spacer(modifier = Modifier.height(6.dp))
-        Text(text = label, style = MaterialTheme.typography.labelMedium)
+        Text(text = label, style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center)
         if (subtitle.isNotBlank()) {
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.labelSmall,
+                textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
@@ -276,14 +282,21 @@ private fun InfoRow(label: String, value: String) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 3.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text(
             text = label,
+            modifier = Modifier.weight(1f),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Text(text = value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+        Text(
+            text = value,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium,
+            textAlign = TextAlign.End
+        )
     }
 }
 

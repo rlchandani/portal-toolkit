@@ -69,6 +69,7 @@ internal fun ConnectionLogCard(events: List<ConnectionEvent>) {
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.weight(1f)
                 )
+                Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = timeFormat.format(Date(event.timestamp)),
                     style = MaterialTheme.typography.labelSmall,

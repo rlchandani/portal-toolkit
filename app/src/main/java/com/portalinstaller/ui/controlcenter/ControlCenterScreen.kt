@@ -4,6 +4,8 @@
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+
 package com.portalinstaller.ui.controlcenter
 
 import android.content.Context
@@ -22,6 +24,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -34,6 +37,8 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
@@ -354,154 +359,164 @@ fun ControlCenterScreen() {
                             onRetry = { vm.retryOperation(it) }, onCancel = { vm.cancelOperation(it) })
                     } else if (shown in CenterDetail.entries.filter { it != CenterDetail.NONE }.map { it.name }) {
                         item {
-                            TextButton(onClick = { detail = CenterDetail.NONE }) { Text("‹ Back") }
-                            when (CenterDetail.valueOf(shown)) {
-                                CenterDetail.LAYOUT -> state.layout?.let { layout ->
-                                    PageTitle("Home layout", "Arrange widgets and favorites on your Portal.")
-                                    LayoutEditorPanel(layout, state.busy,
-                                        onSave = {
-                                            val candidate = JSONObject(it.toString()).apply {
-                                                remove("revision"); remove("widgetKinds")
+                            PageSections {
+                                TextButton(onClick = { detail = CenterDetail.NONE }) { Text("‹ Back") }
+                                when (CenterDetail.valueOf(shown)) {
+                                    CenterDetail.LAYOUT -> state.layout?.let { layout ->
+                                        PageTitle("Home layout", "Arrange widgets and favorites on your Portal.")
+                                        LayoutEditorPanel(layout, state.busy,
+                                            onSave = {
+                                                val candidate = JSONObject(it.toString()).apply {
+                                                    remove("revision"); remove("widgetKinds")
+                                                }
+                                                vm.updateLayout(candidate, layout.optString("revision").takeIf(String::isNotBlank))
+                                            },
+                                            onPreview = { vm.remoteAction("home") })
+                                    } ?: EmptyMessage("Layout unavailable", "Refresh your Portal connection.")
+                                    CenterDetail.SCENES -> {
+                                        PageTitle("Scenes", "Save routines and run them on your Portal.")
+                                        ScenesPanel(state.scenes, state.busy, onSave = { vm.saveScenes(it) },
+                                            onRun = { vm.runScene(it) })
+                                    }
+                                    CenterDetail.JARVIS -> state.jarvis?.let {
+                                        PageTitle("Jarvis", "Voice assistant and local wake options.")
+                                        JarvisManagementPanel(it, state.busy,
+                                            onConfigure = { body -> vm.updateJarvis(body) },
+                                            onLaunch = { vm.launchApp("com.portal.assistant") })
+                                    } ?: EmptyMessage("Jarvis unavailable", "Refresh the Portal to check assistant support.")
+                                    CenterDetail.SNAPSHOTS -> {
+                                        PageTitle("Snapshots", "Keep a copy of your settings and home layout.")
+                                        GroupCard {
+                                            Text("Snapshots include supported settings and widgets. Pairing tokens, source passwords, and API keys stay private.")
+                                            ActionRow("Export snapshot", "Save a JSON file on this phone.", "backup", state.connected && !state.busy) {
+                                                exportDevice = state.activeDeviceId
+                                                exportGeneration = state.sessionGeneration
+                                                export.launch("immortal-${System.currentTimeMillis()}.json")
                                             }
-                                            vm.updateLayout(candidate, layout.optString("revision").takeIf(String::isNotBlank))
-                                        },
-                                        onPreview = { vm.remoteAction("home") })
-                                } ?: EmptyMessage("Layout unavailable", "Refresh your Portal connection.")
-                                CenterDetail.SCENES -> {
-                                    PageTitle("Scenes", "Save routines and run them on your Portal.")
-                                    ScenesPanel(state.scenes, state.busy, onSave = { vm.saveScenes(it) },
-                                        onRun = { vm.runScene(it) })
-                                }
-                                CenterDetail.JARVIS -> state.jarvis?.let {
-                                    PageTitle("Jarvis", "Voice assistant and local wake options.")
-                                    JarvisManagementPanel(it, state.busy,
-                                        onConfigure = { body -> vm.updateJarvis(body) },
-                                        onLaunch = { vm.launchApp("com.portal.assistant") })
-                                } ?: EmptyMessage("Jarvis unavailable", "Refresh the Portal to check assistant support.")
-                                CenterDetail.SNAPSHOTS -> {
-                                    PageTitle("Snapshots", "Keep a copy of your settings and home layout.")
-                                    GroupCard {
-                                        Text("Snapshots include supported settings and widgets. Pairing tokens, source passwords, and API keys stay private.")
-                                        ActionRow("Export snapshot", "Save a JSON file on this phone.", "backup", state.connected && !state.busy) {
-                                            exportDevice = state.activeDeviceId
-                                            exportGeneration = state.sessionGeneration
-                                            export.launch("immortal-${System.currentTimeMillis()}.json")
-                                        }
-                                        ActionRow("Restore snapshot", "Review before applying to this Portal.", "backup", state.connected && !state.busy) {
-                                            importDevice = state.activeDeviceId
-                                            importGeneration = state.sessionGeneration
-                                            import.launch(arrayOf("application/json", "text/plain", "*/*"))
+                                            ActionRow("Restore snapshot", "Review before applying to this Portal.", "backup", state.connected && !state.busy) {
+                                                importDevice = state.activeDeviceId
+                                                importGeneration = state.sessionGeneration
+                                                import.launch(arrayOf("application/json", "text/plain", "*/*"))
+                                            }
                                         }
                                     }
+                                    CenterDetail.OPERATIONS -> Unit
+                                    CenterDetail.NONE -> Unit
                                 }
-                                CenterDetail.OPERATIONS -> Unit
-                                CenterDetail.NONE -> Unit
                             }
                         }
                     } else when (CenterTab.valueOf(shown)) {
                         CenterTab.HOME -> item {
-                            PageTitle("Your Portal", "Everything you need, within reach.")
-                            if (state.connection == CompanionConnection.CONNECTING) {
-                                GroupCard {
-                                    Text("Connecting to ${state.activeDevice?.name ?: "your Portal"}",
-                                        style = MaterialTheme.typography.titleMedium)
-                                    LinearProgressIndicator(Modifier.fillMaxWidth())
-                                }
-                            } else if (state.connection == CompanionConnection.OFFLINE && state.activeDevice != null) {
-                                GroupCard {
-                                    Text("${state.deviceName} is offline",
-                                        style = MaterialTheme.typography.titleMedium)
-                                    Text("Your pairing is saved. Check the Portal's power and Wi-Fi. This app retries while it is open.")
-                                    Button(onClick = { vm.refreshStatus() }, enabled = !state.busy) {
-                                        Text("Retry connection")
+                            PageSections {
+                                PageTitle("Your Portal", "Everything you need, within reach.")
+                                if (state.connection == CompanionConnection.CONNECTING) {
+                                    GroupCard {
+                                        Text("Connecting to ${state.activeDevice?.name ?: "your Portal"}",
+                                            style = MaterialTheme.typography.titleMedium)
+                                        LinearProgressIndicator(Modifier.fillMaxWidth())
                                     }
-                                }
-                            } else if (!state.connected) {
-                                GroupCard {
-                                    Text(if (state.devices.isEmpty()) "Connect your first Portal" else "Choose a Portal to reconnect",
-                                        style = MaterialTheme.typography.titleMedium)
-                                    Text("Enable Phone remote in Immortal, then use the address and six-digit PIN shown on your Portal.")
-                                    Button(onClick = { pairDialog = true }) { Text("Add a Portal") }
-                                    state.devices.forEach { saved ->
-                                        ActionRow(saved.name, saved.endpoint, "home") { vm.selectDevice(saved.id) }
+                                } else if (state.connection == CompanionConnection.OFFLINE && state.activeDevice != null) {
+                                    GroupCard {
+                                        Text("${state.deviceName} is offline",
+                                            style = MaterialTheme.typography.titleMedium)
+                                        Text("Your pairing is saved. Check the Portal's power and Wi-Fi. This app retries while it is open.")
+                                        Button(onClick = { vm.refreshStatus() }, enabled = !state.busy) {
+                                            Text("Retry connection")
+                                        }
                                     }
-                                }
-                            } else {
-                                GroupCard {
-                                    Text(state.deviceName, style = MaterialTheme.typography.headlineSmall)
-                                    Text(listOfNotNull(state.activeDevice?.model,
-                                        state.activeDevice?.apiLevel?.let { "Android API $it" },
-                                        state.info?.optJSONObject("app")?.optString("versionName"))
-                                        .filter { it.isNotBlank() }.joinToString(" · "),
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        Button(onClick = { vm.remoteAction("home") }, enabled = !state.busy) { Text("Home") }
-                                        OutlinedButton(onClick = { vm.previewScreensaver() }, enabled = !state.busy) { Text("Slideshow") }
+                                } else if (!state.connected) {
+                                    GroupCard {
+                                        Text(if (state.devices.isEmpty()) "Connect your first Portal" else "Choose a Portal to reconnect",
+                                            style = MaterialTheme.typography.titleMedium)
+                                        Text("Enable Phone remote in Immortal, then use the address and six-digit PIN shown on your Portal.")
+                                        Button(onClick = { pairDialog = true }) { Text("Add a Portal") }
+                                        state.devices.forEach { saved ->
+                                            ActionRow(saved.name, saved.endpoint, "home") { vm.selectDevice(saved.id) }
+                                        }
                                     }
+                                } else {
+                                    GroupCard {
+                                        Text(state.deviceName, style = MaterialTheme.typography.headlineSmall)
+                                        Text(listOfNotNull(state.activeDevice?.model,
+                                            state.activeDevice?.apiLevel?.let { "Android API $it" },
+                                            state.info?.optJSONObject("app")?.optString("versionName"))
+                                            .filter { it.isNotBlank() }.joinToString(" · "),
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            Button(onClick = { vm.remoteAction("home") }, enabled = !state.busy) { Text("Home") }
+                                            OutlinedButton(onClick = { vm.previewScreensaver() }, enabled = !state.busy) { Text("Slideshow") }
+                                        }
+                                    }
+                                    SectionTitle("Manage")
+                                    GroupCard {
+                                        ActionRow("Home layout", "Arrange and resize your widgets.", "layout", state.supports("layout")) { detail = CenterDetail.LAYOUT }
+                                        ActionRow("Scenes", "Everyday routines and schedules.", "scenes", state.supports("scenes")) { detail = CenterDetail.SCENES }
+                                        ActionRow("Jarvis", "Model and wake settings.", "jarvis", state.supports("jarvis")) { detail = CenterDetail.JARVIS }
+                                        ActionRow("Snapshots", "Save and restore your setup.", "backup", state.supports("snapshot")) { detail = CenterDetail.SNAPSHOTS }
+                                        ActionRow("Activity", "Progress and results.", "refresh", state.supports("operations")) { detail = CenterDetail.OPERATIONS }
+                                    }
+                                    MediaPanel(state, vm)
                                 }
-                                SectionTitle("Manage")
-                                GroupCard {
-                                    ActionRow("Home layout", "Arrange and resize your widgets.", "layout", state.supports("layout")) { detail = CenterDetail.LAYOUT }
-                                    ActionRow("Scenes", "Everyday routines and schedules.", "scenes", state.supports("scenes")) { detail = CenterDetail.SCENES }
-                                    ActionRow("Jarvis", "Model and wake settings.", "jarvis", state.supports("jarvis")) { detail = CenterDetail.JARVIS }
-                                    ActionRow("Snapshots", "Save and restore your setup.", "backup", state.supports("snapshot")) { detail = CenterDetail.SNAPSHOTS }
-                                    ActionRow("Activity", "Progress and results.", "refresh", state.supports("operations")) { detail = CenterDetail.OPERATIONS }
-                                }
-                                MediaPanel(state, vm)
                             }
                         }
                         CenterTab.REMOTE -> item {
-                            PageTitle("Remote", "Control the Portal without crossing the room.")
-                            RemotePanel(state, vm)
+                            PageSections {
+                                PageTitle("Remote", "Control the Portal without crossing the room.")
+                                RemotePanel(state, vm)
+                            }
                         }
                         CenterTab.PHOTOS -> item {
-                            PageTitle("Photos", "A collection that stays on your Portal.")
-                            if (state.connected) {
-                                if (state.supports("photos")) PhotoLibraryPanel(
-                                    deviceId = state.activeDeviceId.orEmpty(),
-                                    files = JSONArray().apply { state.photos.forEach { put(it.raw) } },
-                                    folder = state.photoFolder,
-                                    working = state.busy,
-                                    uploadDetail = state.photoTransfer?.let {
-                                        "${it.completed} of ${it.total} uploaded · ${it.bytesSent / 1024} KB${if (it.running) " · Sending" else ""}" +
-                                            if (it.failures.isNotEmpty()) " · ${it.failures.size} failed" else ""
-                                    },
-                                    onImport = {
-                                        photoImportDevice = state.activeDeviceId
-                                        photoImportGeneration = state.sessionGeneration
-                                        picker.launch("image/*")
-                                    },
-                                    onRefresh = { vm.listPhotos() },
-                                    onChangeFolder = { vm.listPhotos(it) },
-                                    onActivateFolder = { vm.writeSources(JSONObject().put("folderPath", state.photoFolder)) },
-                                    onDelete = { vm.deletePhoto(it) },
-                                    loadThumbnail = { vm.photoBytes(it) })
-                                else GroupCard {
-                                    Text("Allow photo imports on the Portal", fontWeight = FontWeight.Medium)
-                                    Text("Open Control from your phone on the Portal, then choose Allow photo imports. Return here and refresh after granting file access.")
-                                    OutlinedButton(onClick = { vm.refreshStatus() }, enabled = !state.busy) {
-                                        Text("Check file access")
+                            PageSections {
+                                PageTitle("Photos", "A collection that stays on your Portal.")
+                                if (state.connected) {
+                                    if (state.supports("photos")) PhotoLibraryPanel(
+                                        deviceId = state.activeDeviceId.orEmpty(),
+                                        files = JSONArray().apply { state.photos.forEach { put(it.raw) } },
+                                        folder = state.photoFolder,
+                                        working = state.busy,
+                                        uploadDetail = state.photoTransfer?.let {
+                                            "${it.completed} of ${it.total} uploaded · ${it.bytesSent / 1024} KB${if (it.running) " · Sending" else ""}" +
+                                                if (it.failures.isNotEmpty()) " · ${it.failures.size} failed" else ""
+                                        },
+                                        onImport = {
+                                            photoImportDevice = state.activeDeviceId
+                                            photoImportGeneration = state.sessionGeneration
+                                            picker.launch("image/*")
+                                        },
+                                        onRefresh = { vm.listPhotos() },
+                                        onChangeFolder = { vm.listPhotos(it) },
+                                        onActivateFolder = { vm.writeSources(JSONObject().put("folderPath", state.photoFolder)) },
+                                        onDelete = { vm.deletePhoto(it) },
+                                        loadThumbnail = { vm.photoBytes(it) })
+                                    else GroupCard {
+                                        Text("Allow photo imports on the Portal", fontWeight = FontWeight.Medium)
+                                        Text("Open Control from your phone on the Portal, then choose Allow photo imports. Return here and refresh after granting file access.")
+                                        OutlinedButton(onClick = { vm.refreshStatus() }, enabled = !state.busy) {
+                                            Text("Check file access")
+                                        }
                                     }
-                                }
-                                if (state.photoTransfer?.running == true) TextButton(onClick = { vm.cancelPhotoUpload() }) { Text("Cancel transfer") }
-                                state.photoTransfer?.failures?.forEach { failure ->
-                                    Text("${failure.name}: ${failure.error.message}", color = MaterialTheme.colorScheme.error)
-                                }
-                                state.photoFreeBytes?.let { Text("${it / (1024 * 1024)} MB available", style = MaterialTheme.typography.bodySmall) }
-                                state.sources?.let { PhotoSourcesPanel(it, state.busy,
-                                    onSave = { source -> vm.writeSources(source) }, onPreview = { vm.previewScreensaver() }) }
-                                state.schema?.let { RegistrySettingsPanel(it, state.busy, "", showAdvanced,
-                                    onlyDomain = "screensaver", onApply = { domain, body -> vm.writeSettings(domain, body) }) }
-                            } else EmptyMessage("Connect to view photos", "Choose a paired Portal from the device menu.")
+                                    if (state.photoTransfer?.running == true) TextButton(onClick = { vm.cancelPhotoUpload() }) { Text("Cancel transfer") }
+                                    state.photoTransfer?.failures?.forEach { failure ->
+                                        Text("${failure.name}: ${failure.error.message}", color = MaterialTheme.colorScheme.error)
+                                    }
+                                    state.photoFreeBytes?.let { Text("${it / (1024 * 1024)} MB available", style = MaterialTheme.typography.bodySmall) }
+                                    state.sources?.let { PhotoSourcesPanel(it, state.busy,
+                                        onSave = { source -> vm.writeSources(source) }, onPreview = { vm.previewScreensaver() }) }
+                                    state.schema?.let { RegistrySettingsPanel(it, state.busy, "", showAdvanced,
+                                        onlyDomain = "screensaver", onApply = { domain, body -> vm.writeSettings(domain, body) }) }
+                                } else EmptyMessage("Connect to view photos", "Choose a paired Portal from the device menu.")
+                            }
                         }
                         CenterTab.APPS -> {
                             item {
-                                PageTitle("Apps", "Launch apps and manage the Immortal catalog.")
-                                OutlinedTextField(appQuery, onValueChange = { appQuery = it }, label = { Text("Find an app") },
-                                    singleLine = true, modifier = Modifier.fillMaxWidth())
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    FilterChip(!showCatalog, onClick = { showCatalog = false }, label = { Text("Installed") })
-                                    FilterChip(showCatalog, onClick = { showCatalog = true }, label = { Text("Catalog") })
+                                PageSections {
+                                    PageTitle("Apps", "Launch apps and manage the Immortal catalog.")
+                                    OutlinedTextField(appQuery, onValueChange = { appQuery = it }, label = { Text("Find an app") },
+                                        singleLine = true, modifier = Modifier.fillMaxWidth())
+                                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        FilterChip(!showCatalog, onClick = { showCatalog = false }, label = { Text("Installed") })
+                                        FilterChip(showCatalog, onClick = { showCatalog = true }, label = { Text("Catalog") })
+                                    }
                                 }
                             }
                             val entries = if (showCatalog) catalogItems(state.catalog) else state.apps.objects()
@@ -528,7 +543,7 @@ fun ControlCenterScreen() {
                                     }
                                     val description = app.optString("description").ifBlank { app.optString("versionName") }
                                     if (description.isNotBlank()) Text(description, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    if (showCatalog) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    if (showCatalog) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                         if (showCatalog && app.optBoolean("installed")) Button(
                                             onClick = { vm.launchApp(packageName) },
                                             enabled = state.connected && !state.busy && packageName.isNotBlank()) { Text("Open") }
@@ -546,33 +561,18 @@ fun ControlCenterScreen() {
                             }
                         }
                         CenterTab.SETTINGS -> item {
-                            PageTitle("Settings", "Simple everyday controls, with more when you need them.")
-                            OutlinedTextField(query, onValueChange = { query = it }, label = { Text("Search settings") },
-                                singleLine = true, modifier = Modifier.fillMaxWidth())
-                            GroupCard {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Column(Modifier.weight(1f)) {
-                                        Text("Advanced settings", fontWeight = FontWeight.Medium)
-                                        Text("Show expert controls on this phone.", style = MaterialTheme.typography.bodySmall)
-                                    }
-                                    Switch(showAdvanced, onCheckedChange = { showAdvanced = it })
-                                }
-                            }
-                            if (query.isBlank()) SettingsDomainPicker(visibleSettingsDomains, shownSettingsDomain) { settingsDomain = it }
-                            state.schema?.let { RegistrySettingsPanel(it, !state.connected || state.busy, query, showAdvanced,
-                                onlyDomain = if (query.isBlank()) shownSettingsDomain else null,
-                                onApply = { domain, body -> vm.writeSettings(domain, body) }) }
-                                ?: EmptyMessage("Portal settings unavailable", "Connect to load its complete settings registry.")
-                            SectionTitle("This phone")
-                            PhonePreferences()
-                            GroupCard {
-                                ActionRow("Device tools", "ADB setup, screen mirror, APKs, files, backups, and diagnostics.", "settings") {
-                                    advancedTools = true
-                                }
-                                ActionRow("Add a Portal", "Local Wi-Fi or your existing private VPN endpoint.", "remote") {
-                                    pairDialog = true
-                                }
-                            }
+                            SettingsPageContent(query, { query = it }, showAdvanced, { showAdvanced = it },
+                                domainPicker = {
+                                    SettingsDomainPicker(visibleSettingsDomains, shownSettingsDomain) { settingsDomain = it }
+                                },
+                                portalSettings = {
+                                    state.schema?.let { RegistrySettingsPanel(it, !state.connected || state.busy, query, showAdvanced,
+                                        onlyDomain = if (query.isBlank()) shownSettingsDomain else null,
+                                        onApply = { domain, body -> vm.writeSettings(domain, body) }) }
+                                        ?: EmptyMessage("Portal settings unavailable", "Connect to load its complete settings registry.")
+                                },
+                                phonePreferences = { PhonePreferences() },
+                                onTools = { advancedTools = true }, onPair = { pairDialog = true })
                         }
                     }
                 }
@@ -638,7 +638,7 @@ private fun PairPortalDialog(
     var pin by remember { mutableStateOf("") }
     AlertDialog(onDismissRequest = onDismiss, title = { Text("Pair a Portal") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("In Immortal, enable Phone remote and show a pairing PIN. Paste its pairing link or enter the address below.")
                 OutlinedTextField(address, onValueChange = onAddress, singleLine = true,
                     label = { Text("Address or pairing link") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri))
@@ -663,58 +663,62 @@ private fun PairPortalDialog(
 private fun RemotePanel(state: ControlCenterState, vm: ControlCenterViewModel) {
     var keyboard by rememberSaveable { mutableStateOf("") }
     val enabled = state.connected
-    GroupCard {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = { vm.remoteAction("back") }, enabled = enabled) { Text("Back") }
-            Button(onClick = { vm.remoteAction("home") }, enabled = enabled) { Text("Home") }
-            OutlinedButton(onClick = { vm.previewScreensaver() }, enabled = enabled) { Text("Slideshow") }
-        }
-        Box(Modifier.fillMaxWidth().height(220.dp)
-            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(20.dp))
-            .pointerInput(enabled, state.activeDeviceId) {
-                if (enabled) detectDragGestures { change, drag ->
-                    change.consume()
-                    vm.moveCursor(drag.x, drag.y)
+    PageSections {
+        GroupCard {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                OutlinedButton(onClick = { vm.remoteAction("back") }, enabled = enabled) { Text("Back") }
+                Button(onClick = { vm.remoteAction("home") }, enabled = enabled) { Text("Home") }
+                OutlinedButton(onClick = { vm.previewScreensaver() }, enabled = enabled) { Text("Slideshow") }
+            }
+            Box(Modifier.fillMaxWidth().height(220.dp)
+                .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(20.dp))
+                .pointerInput(enabled, state.activeDeviceId) {
+                    if (enabled) detectDragGestures { change, drag ->
+                        change.consume()
+                        vm.moveCursor(drag.x, drag.y)
+                    }
+                }
+                .pointerInput(enabled, state.activeDeviceId) { if (enabled) detectTapGestures(onTap = { vm.tap() }) },
+                contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    ControlGlyph("remote", modifier = Modifier.size(36.dp))
+                    Spacer(Modifier.height(10.dp))
+                    Text("Touchpad")
+                    Text("Move to point · Tap to select", style = MaterialTheme.typography.bodySmall)
                 }
             }
-            .pointerInput(enabled, state.activeDeviceId) { if (enabled) detectTapGestures(onTap = { vm.tap() }) },
-            contentAlignment = Alignment.Center) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                ControlGlyph("remote", modifier = Modifier.size(36.dp))
-                Spacer(Modifier.height(10.dp))
-                Text("Touchpad")
-                Text("Move to point · Tap to select", style = MaterialTheme.typography.bodySmall)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(onClick = { vm.scroll("up") }, enabled = enabled) { Text("Scroll up") }
+                TextButton(onClick = { vm.scroll("down") }, enabled = enabled) { Text("Scroll down") }
             }
+            OutlinedTextField(keyboard, onValueChange = { keyboard = it }, label = { Text("Type on the Portal") },
+                supportingText = { Text("Select a text field on the Portal first.") },
+                modifier = Modifier.fillMaxWidth(), enabled = enabled)
+            Button(onClick = { vm.sendText(keyboard); keyboard = "" }, enabled = enabled && keyboard.isNotBlank()) { Text("Send text") }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            TextButton(onClick = { vm.scroll("up") }, enabled = enabled) { Text("Scroll up") }
-            TextButton(onClick = { vm.scroll("down") }, enabled = enabled) { Text("Scroll down") }
-        }
-        OutlinedTextField(keyboard, onValueChange = { keyboard = it }, label = { Text("Type on the Portal") },
-            supportingText = { Text("Select a text field on the Portal first.") },
-            modifier = Modifier.fillMaxWidth(), enabled = enabled)
-        Button(onClick = { vm.sendText(keyboard); keyboard = "" }, enabled = enabled && keyboard.isNotBlank()) { Text("Send text") }
+        MediaPanel(state, vm)
     }
-    MediaPanel(state, vm)
 }
 
 @Composable
 private fun MediaPanel(state: ControlCenterState, vm: ControlCenterViewModel) {
     val media = state.nowPlaying
-    SectionTitle("Now playing")
-    GroupCard {
-        Text(media?.optString("title")?.ifBlank { "Nothing playing" } ?: "Nothing playing",
-            style = MaterialTheme.typography.titleMedium)
-        media?.optString("artist")?.takeIf { it.isNotBlank() }?.let { Text(it) }
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            TextButton(onClick = { vm.media("previous") }, enabled = state.connected) { Text("Previous") }
-            Button(onClick = { vm.media("playpause") },
-                enabled = state.connected && media?.optBoolean("active") == true) { Text(if (media?.optBoolean("playing") == true) "Pause" else "Play") }
-            TextButton(onClick = { vm.media("next") }, enabled = state.connected) { Text("Next") }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = { vm.volume("down") }, enabled = state.connected) { Text("Volume −") }
-            OutlinedButton(onClick = { vm.volume("up") }, enabled = state.connected) { Text("Volume +") }
+    PageSections {
+        SectionTitle("Now playing")
+        GroupCard {
+            Text(media?.optString("title")?.ifBlank { "Nothing playing" } ?: "Nothing playing",
+                style = MaterialTheme.typography.titleMedium)
+            media?.optString("artist")?.takeIf { it.isNotBlank() }?.let { Text(it) }
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(onClick = { vm.media("previous") }, enabled = state.connected) { Text("Previous") }
+                Button(onClick = { vm.media("playpause") },
+                    enabled = state.connected && media?.optBoolean("active") == true) { Text(if (media?.optBoolean("playing") == true) "Pause" else "Play") }
+                TextButton(onClick = { vm.media("next") }, enabled = state.connected) { Text("Next") }
+            }
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                OutlinedButton(onClick = { vm.volume("down") }, enabled = state.connected) { Text("Volume −") }
+                OutlinedButton(onClick = { vm.volume("up") }, enabled = state.connected) { Text("Volume +") }
+            }
         }
     }
 }
@@ -757,15 +761,7 @@ private fun PhonePreferences() {
     val store = remember(context) { AppContainer.from(context).settingsStore }
     val theme by store.themeMode.collectAsStateWithLifecycle(initialValue = ThemeMode.SYSTEM)
     val scope = rememberCoroutineScope()
-    GroupCard {
-        Text("Appearance", fontWeight = FontWeight.Medium)
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            ThemeMode.entries.forEach { mode ->
-                FilterChip(theme == mode, onClick = { scope.launch { store.setThemeMode(mode) } },
-                    label = { Text(mode.name.lowercase().replaceFirstChar(Char::titlecase)) })
-            }
-        }
-    }
+    PhoneAppearanceSection(theme) { mode -> scope.launch { store.setThemeMode(mode) } }
 }
 
 private fun catalogItems(catalog: JSONObject?): List<JSONObject> =

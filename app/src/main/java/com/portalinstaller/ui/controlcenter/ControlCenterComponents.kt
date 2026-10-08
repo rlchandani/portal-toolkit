@@ -41,6 +41,14 @@ internal fun JSONArray?.objects(): List<JSONObject> =
 internal fun JSONArray?.strings(): List<String> =
     if (this == null) emptyList() else (0 until length()).map { optString(it) }
 
+/** A page item needs its own spacing; LazyColumn spaces items, not their children. */
+@Composable
+internal fun PageSections(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        content()
+    }
+}
+
 @Composable
 internal fun PageTitle(title: String, detail: String? = null) {
     Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -53,9 +61,9 @@ internal fun PageTitle(title: String, detail: String? = null) {
 }
 
 @Composable
-internal fun SectionTitle(title: String) {
+internal fun SectionTitle(title: String, modifier: Modifier = Modifier) {
     Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.padding(top = 8.dp, bottom = 3.dp))
+        modifier = modifier.padding(top = 8.dp, bottom = 3.dp))
 }
 
 @Composable

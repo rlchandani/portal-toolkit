@@ -9,6 +9,8 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -22,8 +24,10 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
@@ -71,6 +75,7 @@ import kotlinx.coroutines.withContext
  * un contor de stocare, o grila de miniaturi cu selectie multipla si o bara de
  * actiuni (adauga/sterge/muta/salveaza). Inlocuieste vechiul tab „Poze”.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun ScreensaverTab(
     state: ScreensaverState,
@@ -111,6 +116,7 @@ internal fun ScreensaverTab(
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
@@ -129,6 +135,7 @@ internal fun ScreensaverTab(
         // Antet: folderul curent + buton de schimbare.
         Row(
             modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
@@ -222,34 +229,40 @@ internal fun ScreensaverTab(
                     }
                 }
             } else {
-                AssistChip(
-                    onClick = onPickPhotos,
-                    enabled = isWifiConnected,
-                    label = { Text(stringResource(R.string.screensaver_add_photos), maxLines = 1, softWrap = false) }
-                )
-                AssistChip(
-                    onClick = onAddGooglePhotos,
-                    enabled = isWifiConnected,
-                    label = { Text(stringResource(R.string.screensaver_add_google_photos), maxLines = 1, softWrap = false) }
-                )
-                Spacer(modifier = Modifier.weight(1f))
-                // Marimea grilei tine de afisare, nu de folder, deci sta langa
-                // „Adauga poze”, nu langa „Schimba folder”.
-                AssistChip(
-                    onClick = { gridSize = gridSize.next() },
-                    label = {
-                        Text(
-                            stringResource(R.string.screensaver_grid_size_label, stringResource(gridSize.labelRes)),
-                            maxLines = 1,
-                            softWrap = false
-                        )
-                    }
-                )
+                FlowRow(
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    AssistChip(
+                        onClick = onPickPhotos,
+                        enabled = isWifiConnected,
+                        label = { Text(stringResource(R.string.screensaver_add_photos)) }
+                    )
+                    AssistChip(
+                        onClick = onAddGooglePhotos,
+                        enabled = isWifiConnected,
+                        label = { Text(stringResource(R.string.screensaver_add_google_photos)) }
+                    )
+                    // Marimea grilei tine de afisare, nu de folder, deci sta langa
+                    // „Adauga poze”, nu langa „Schimba folder”.
+                    AssistChip(
+                        onClick = { gridSize = gridSize.next() },
+                        label = {
+                            Text(
+                                stringResource(R.string.screensaver_grid_size_label, stringResource(gridSize.labelRes))
+                            )
+                        }
+                    )
+                }
             }
         }
 
         (uploadState as? UploadSummaryState.Uploading)?.let { u ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 Text(
                     text = stringResource(R.string.uploading_progress, u.current, u.total),
                     style = MaterialTheme.typography.labelSmall,
@@ -271,6 +284,7 @@ internal fun ScreensaverTab(
             Card(modifier = Modifier.fillMaxWidth()) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
@@ -330,7 +344,7 @@ internal fun ScreensaverTab(
             onDismissRequest = { showFolderPicker = false },
             title = { Text(stringResource(R.string.screensaver_choose_folder)) },
             text = {
-                Column {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                     state.suggestions.forEach { folder ->
                         Row(
                             modifier = Modifier
@@ -340,6 +354,7 @@ internal fun ScreensaverTab(
                                     showFolderPicker = false
                                 }
                                 .padding(vertical = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(text = folder.path, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
@@ -405,6 +420,7 @@ internal fun ScreensaverTab(
                     value = dest,
                     onValueChange = { dest = it },
                     singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
                     label = { Text(stringResource(R.string.screensaver_move_hint)) }
                 )
             },
@@ -502,6 +518,7 @@ private enum class GridSize(val columns: Int, val labelRes: Int) {
  * trasa integral de [ScreensaverViewModel]) la o rezolutie mai mare decat
  * miniatura, ca utilizatorul sa vada detaliile.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun PhotoPreviewDialog(
     photos: List<RemoteFile>,
@@ -551,12 +568,13 @@ private fun PhotoPreviewDialog(
             )
 
             val currentSelected = currentFile.path in selection
-            Row(
+            FlowRow(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .padding(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 AssistChip(
                     onClick = { onToggleSelect(currentFile.path) },
@@ -565,15 +583,13 @@ private fun PhotoPreviewDialog(
                             stringResource(
                                 if (currentSelected) R.string.screensaver_preview_deselect
                                 else R.string.screensaver_preview_select
-                            ),
-                            maxLines = 1,
-                            softWrap = false
+                            )
                         )
                     }
                 )
                 AssistChip(
                     onClick = onDismiss,
-                    label = { Text(stringResource(R.string.screensaver_preview_close), maxLines = 1, softWrap = false) }
+                    label = { Text(stringResource(R.string.screensaver_preview_close)) }
                 )
             }
         }

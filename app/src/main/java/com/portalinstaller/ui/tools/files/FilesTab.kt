@@ -10,6 +10,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -41,6 +43,7 @@ import com.portalinstaller.R
 import com.portalinstaller.data.AppContainer
 import com.portalinstaller.data.files.RemoteFile
 import com.portalinstaller.ui.common.formatFileSize
+import com.portalinstaller.ui.tools.shell.ToolTabLayout
 import com.portalinstaller.viewmodel.FileTransferState
 import com.portalinstaller.viewmodel.FileManagerViewModel
 
@@ -49,6 +52,7 @@ import com.portalinstaller.viewmodel.FileManagerViewModel
  * bara de actiuni (trage/trimite/sterge/muta/redenumeste/folder nou) si un
  * comutator „mod avansat” pentru caile din afara /sdcard.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun FilesTab(
     context: Context,
@@ -91,7 +95,8 @@ internal fun FilesTab(
     }
     val selectedBytes = remember(selectedFiles) { selectedFiles.sumOf { it.sizeBytes } }
 
-    Column(modifier = Modifier.fillMaxSize().padding(12.dp)) {
+    // Transfer feedback can add several status/error rows above the file list.
+    ToolTabLayout(minimumExpandedHeight = if (results.isNotEmpty()) 560.dp else 400.dp) { filesModifier ->
         Text(
             text = browser.path,
             style = MaterialTheme.typography.labelMedium,
@@ -115,17 +120,19 @@ internal fun FilesTab(
         }
 
         // Bara de actiuni.
-        Row(
+        FlowRow(
             modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             AssistChip(onClick = { viewModel.navigateUp() }, label = { Text(stringResource(R.string.files_up)) })
             AssistChip(onClick = { showNewFolder = true }, label = { Text(stringResource(R.string.files_new_folder)) })
         }
         if (browser.selection.isNotEmpty()) {
-            Row(
+            FlowRow(
                 modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 AssistChip(onClick = { download() }, label = { Text(stringResource(R.string.files_pull)) })
                 AssistChip(onClick = { showMove = true }, label = { Text(stringResource(R.string.files_move)) })
@@ -162,7 +169,10 @@ internal fun FilesTab(
         }
 
         (transfer as? FileTransferState.Working)?.let { w ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 Text(
                     text = stringResource(R.string.files_transfer_progress, w.current, w.total),
                     style = MaterialTheme.typography.labelSmall,
@@ -178,7 +188,7 @@ internal fun FilesTab(
             )
         }
 
-        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+        Box(modifier = filesModifier) {
             if (browser.entries.isEmpty() && !browser.isLoading) {
                 Text(
                     text = browser.error ?: stringResource(R.string.files_empty),
@@ -317,6 +327,7 @@ private fun TextInputDialog(
                 value = value,
                 onValueChange = { value = it },
                 singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
                 label = { Text(stringResource(hintRes)) }
             )
         },

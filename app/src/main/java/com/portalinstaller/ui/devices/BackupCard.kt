@@ -11,7 +11,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -69,6 +71,7 @@ internal fun BackupCard(
 
         Row(
             modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
@@ -205,7 +208,10 @@ internal fun BackupAppSelectionDialog(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.height(8.dp))
-                Row(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     TextButton(
                         onClick = { selection = packages.toSet() },
                         modifier = Modifier.weight(1f)
@@ -232,7 +238,9 @@ internal fun BackupAppSelectionDialog(
                     }
                     else -> {
                         LazyColumn(
-                            modifier = Modifier.heightIn(max = 360.dp),
+                            modifier = Modifier
+                                .weight(1f, fill = false)
+                                .heightIn(max = 360.dp),
                             verticalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
                             items(packages, key = { it }) { packageName ->
@@ -254,6 +262,7 @@ internal fun BackupAppSelectionDialog(
                                     )
                                     Text(
                                         text = packageName,
+                                        modifier = Modifier.weight(1f),
                                         style = MaterialTheme.typography.bodySmall,
                                         maxLines = 2,
                                         overflow = TextOverflow.Ellipsis
@@ -318,7 +327,10 @@ internal fun BackupRestoreConfirmationDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.backup_preview_title)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 Text(
                     text = stringResource(R.string.backup_preview_source, deviceName),
                     fontWeight = FontWeight.SemiBold

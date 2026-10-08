@@ -5,6 +5,8 @@ import android.os.Build
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,7 +21,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -31,6 +32,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.portalinstaller.R
 import com.portalinstaller.ui.common.SectionCard
+import com.portalinstaller.ui.common.ThemeModeSelector
 import com.portalinstaller.util.AppLanguage
 import com.portalinstaller.data.store.HistoryEntry
 import com.portalinstaller.data.store.ThemeMode
@@ -98,7 +100,7 @@ internal fun HistoryTab(history: List<HistoryEntry>) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 internal fun SettingsTab(
     context: Context,
@@ -150,16 +152,16 @@ internal fun SettingsTab(
                     label = {
                         Text(
                             text = stringResource(systemLanguage.labelRes),
-                            modifier = Modifier.fillMaxWidth(),
-                            maxLines = 1
+                            modifier = Modifier.fillMaxWidth()
                         )
                     },
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(modifier = Modifier.height(4.dp))
-                Row(
+                FlowRow(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     AppLanguage.entries
                         .filterNot { it == systemLanguage }
@@ -169,12 +171,9 @@ internal fun SettingsTab(
                                 onClick = { onSelectLanguage(language) },
                                 label = {
                                     Text(
-                                        text = stringResource(language.labelRes),
-                                        modifier = Modifier.fillMaxWidth(),
-                                        maxLines = 1
+                                        text = stringResource(language.labelRes)
                                     )
-                                },
-                                modifier = Modifier.weight(1f)
+                                }
                             )
                         }
                 }
@@ -237,13 +236,18 @@ private fun AppearanceCard(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Spacer(modifier = Modifier.height(8.dp))
-        ThemeMode.entries.forEach { mode ->
-            ThemeModeRow(
-                mode = mode,
-                selected = themeMode == mode,
-                onSelect = { onSelectThemeMode(mode) }
-            )
-        }
+        ThemeModeSelector(
+            theme = themeMode,
+            onSelect = onSelectThemeMode,
+            optionTagPrefix = "advanced-theme",
+            label = { mode ->
+                stringResource(when (mode) {
+                    ThemeMode.SYSTEM -> R.string.settings_theme_system
+                    ThemeMode.LIGHT -> R.string.settings_theme_light
+                    ThemeMode.DARK -> R.string.settings_theme_dark
+                })
+            },
+        )
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             Spacer(modifier = Modifier.height(8.dp))
@@ -252,6 +256,7 @@ private fun AppearanceCard(
                     .fillMaxWidth()
                     .clickable { onToggleDynamicColor(!useDynamicColor) }
                     .padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
@@ -271,32 +276,5 @@ private fun AppearanceCard(
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun ThemeModeRow(
-    mode: ThemeMode,
-    selected: Boolean,
-    onSelect: () -> Unit
-) {
-    val labelRes = when (mode) {
-        ThemeMode.SYSTEM -> R.string.settings_theme_system
-        ThemeMode.LIGHT -> R.string.settings_theme_light
-        ThemeMode.DARK -> R.string.settings_theme_dark
-    }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onSelect)
-            .padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        RadioButton(selected = selected, onClick = onSelect)
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = stringResource(labelRes),
-            style = MaterialTheme.typography.bodyMedium
-        )
     }
 }

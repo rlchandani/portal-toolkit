@@ -4,6 +4,8 @@ import android.graphics.BitmapFactory
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -14,7 +16,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -57,6 +61,7 @@ private data class PendingAppAction(
     val sessionGeneration: Long,
 )
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun PortalAppsTab(
     packages: List<String>,
@@ -87,11 +92,12 @@ internal fun PortalAppsTab(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = stringResource(R.string.portal_apps_title),
+                modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Medium
             )
@@ -111,12 +117,12 @@ internal fun PortalAppsTab(
         }
 
         if (!isLoading && packages.isNotEmpty()) {
-            Row(
+            FlowRow(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 FilterChip(
                     selected = sort == PortalAppsSort.NAME,
@@ -186,7 +192,10 @@ internal fun PortalAppsTab(
             onDismissRequest = ::dismiss,
             title = { Text(actionText) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     Text(target.label, fontWeight = FontWeight.Medium)
                     Text(target.packageName, style = MaterialTheme.typography.bodySmall)
                     Text(stringResource(R.string.apps_action_portal, target.portalIdentity))
@@ -217,6 +226,7 @@ internal fun PortalAppsTab(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun PortalAppCard(
     app: PortalAppInfo,
@@ -266,7 +276,11 @@ private fun PortalAppCard(
                 }
             }
             Spacer(modifier = Modifier.size(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
                 TextButton(onClick = { onLaunch(packageName) }) {
                     Text(stringResource(R.string.apps_launch))
                 }

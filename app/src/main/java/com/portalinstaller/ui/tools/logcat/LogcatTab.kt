@@ -5,7 +5,8 @@ import android.content.Intent
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -42,6 +43,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.portalinstaller.R
 import com.portalinstaller.data.tools.LogLine
 import com.portalinstaller.ui.common.SectionCard
+import com.portalinstaller.ui.tools.shell.ToolTabLayout
 import com.portalinstaller.viewmodel.LogcatViewModel
 
 private val LEVEL_COLORS = mapOf(
@@ -101,7 +103,7 @@ internal fun LogcatTab(
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize().padding(12.dp)) {
+    ToolTabLayout { transcriptModifier ->
         LogcatControls(
             isStreaming = isStreaming,
             errorsOnly = errorsOnly,
@@ -138,7 +140,7 @@ internal fun LogcatTab(
             )
         }
 
-        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+        Box(modifier = transcriptModifier) {
             if (visible.isEmpty()) {
                 Text(
                     text = stringResource(R.string.logcat_empty),
@@ -158,6 +160,7 @@ internal fun LogcatTab(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun LogcatControls(
     isStreaming: Boolean,
@@ -168,19 +171,31 @@ private fun LogcatControls(
     onExport: () -> Unit,
     onToggleErrorsOnly: (Boolean) -> Unit
 ) {
-    Row(
+    FlowRow(
         modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         if (isStreaming) {
-            TextButton(onClick = onStop) { Text(stringResource(R.string.logcat_stop)) }
+            TextButton(onClick = onStop, modifier = Modifier.align(Alignment.CenterVertically)) {
+                Text(stringResource(R.string.logcat_stop))
+            }
         } else {
-            TextButton(onClick = onStart) { Text(stringResource(R.string.logcat_start)) }
+            TextButton(onClick = onStart, modifier = Modifier.align(Alignment.CenterVertically)) {
+                Text(stringResource(R.string.logcat_start))
+            }
         }
-        TextButton(onClick = onClear) { Text(stringResource(R.string.logcat_clear)) }
-        TextButton(onClick = onExport) { Text(stringResource(R.string.logcat_export)) }
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        TextButton(onClick = onClear, modifier = Modifier.align(Alignment.CenterVertically)) {
+            Text(stringResource(R.string.logcat_clear))
+        }
+        TextButton(onClick = onExport, modifier = Modifier.align(Alignment.CenterVertically)) {
+            Text(stringResource(R.string.logcat_export))
+        }
+        Row(
+            modifier = Modifier.align(Alignment.CenterVertically),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             Text(
                 text = stringResource(R.string.logcat_errors_only),
                 style = MaterialTheme.typography.labelMedium
@@ -228,6 +243,7 @@ private fun CrashBanner(
     SectionCard(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(

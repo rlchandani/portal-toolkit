@@ -2,12 +2,16 @@ package com.portalinstaller.ui.devices
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -32,6 +36,7 @@ import com.portalinstaller.R
 import com.portalinstaller.ui.common.SectionCard
 import com.portalinstaller.data.store.SavedPortal
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun SavedPortalsCard(
     portals: List<SavedPortal>,
@@ -76,6 +81,7 @@ internal fun SavedPortalsCard(
                     Column(modifier = Modifier.padding(12.dp)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
@@ -127,10 +133,10 @@ internal fun SavedPortalsCard(
                                 )
                             }
                         }
-                        Row(
+                        FlowRow(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End,
-                            verticalAlignment = Alignment.CenterVertically
+                            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             TextButton(onClick = { portalToRename = portal }) {
                                 Text(stringResource(R.string.rename))
@@ -173,7 +179,10 @@ internal fun RenamePortalDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.portal_rename_title)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
