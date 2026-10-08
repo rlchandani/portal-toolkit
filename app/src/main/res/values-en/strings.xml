@@ -152,6 +152,8 @@
     <string name="portal_app_details">Version %1$s • %2$s</string>
     <string name="loading_ellipsis">...</string>
     <string name="uninstall">Uninstall</string>
+    <string name="apps_uninstall_confirm">Uninstall this app? Its saved data will also be removed.</string>
+    <string name="apps_action_portal">Portal: %1$s</string>
     <string name="apps_sort_name">Name</string>
     <string name="apps_sort_size">Size</string>
     <string name="apps_launch">Open</string>

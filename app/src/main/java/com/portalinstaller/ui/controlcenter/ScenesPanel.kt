@@ -81,7 +81,7 @@ internal object ScenePanelDraft {
         val ids = mutableSetOf<String>()
         for (i in 0 until scenes.length()) {
             val scene = scenes.optJSONObject(i) ?: return "A scene could not be read."
-            val id = scene.optString("id")
+            val id = scene.opt("id") as? String ?: return "Scene IDs must be unique strings."
             if (!Regex("[A-Za-z0-9_-]{1,64}").matches(id) || !ids.add(id)) return "Scene IDs must be unique."
             val name = scene.opt("name") as? String ?: return "Give each scene a name."
             if (name.isBlank() || name.length > 64 || name.any { it.code < 32 })
@@ -212,7 +212,8 @@ internal fun ScenesPanel(
                 }, label = { Text("Scene name") }, singleLine = true, enabled = !working,
                     modifier = Modifier.fillMaxWidth())
                 val saved = scenes.objects().firstOrNull { it.optString("id") == selected.optString("id") }
-                val canRun = saved != null && saved.toString() == selected.toString()
+                val canRun = saved != null && saved.opt("id") is String &&
+                    saved.toString() == selected.toString()
                 OutlinedButton(onClick = { onRun(selected.getString("id")) },
                     enabled = !working && canRun, modifier = Modifier.fillMaxWidth()) { Text("Run on Portal") }
                 if (!canRun) Text("Save this scene before running it.",

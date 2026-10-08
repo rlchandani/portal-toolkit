@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -58,10 +59,10 @@ internal fun SectionTitle(title: String) {
 }
 
 @Composable
-internal fun GroupCard(content: @Composable () -> Unit) {
-    Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(
+internal fun GroupCard(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    Card(modifier = modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(
         containerColor = MaterialTheme.colorScheme.surface)) {
-        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             content()
         }
     }

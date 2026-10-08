@@ -152,6 +152,8 @@
     <string name="portal_app_details">Versiunea %1$s • %2$s</string>
     <string name="loading_ellipsis">...</string>
     <string name="uninstall">Dezinstaleaza</string>
+    <string name="apps_uninstall_confirm">Dezinstalezi aceasta aplicatie? Datele salvate ale aplicatiei vor fi sterse.</string>
+    <string name="apps_action_portal">Portal: %1$s</string>
     <string name="apps_sort_name">Nume</string>
     <string name="apps_sort_size">Marime</string>
     <string name="apps_launch">Deschide</string>

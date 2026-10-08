@@ -125,6 +125,7 @@ fun MainScreen(
     val osUpdateState by connectionViewModel.osUpdateState.collectAsStateWithLifecycle()
     val connectionEvents by connectionViewModel.connectionEvents.collectAsStateWithLifecycle()
     val powerControlState by connectionViewModel.powerControlState.collectAsStateWithLifecycle()
+    val adbSession by container.connectionHolder.session.collectAsStateWithLifecycle()
 
     val installState by appsViewModel.installState.collectAsStateWithLifecycle()
     val uninstallState by appsViewModel.uninstallState.collectAsStateWithLifecycle()
@@ -459,6 +460,7 @@ fun MainScreen(
                     isWifiConnected = isWifiConnected,
                     activePortalName = activePortalName,
                     activePortalAddress = "$ipAddress:${port.ifBlank { "5555" }}",
+                    sessionGeneration = adbSession?.generation,
                     apps = installedApps,
                     connectionState = connectionState,
                     installState = installState,
@@ -481,10 +483,20 @@ fun MainScreen(
                     onInstallCustomApk = { uri -> appsViewModel.installApkFromUri(context, uri) },
                     onRefreshPortalApps = { appsViewModel.loadPortalPackages(context) },
                     onSortPortalApps = { sort -> appsViewModel.setPortalAppsSort(sort) },
-                    onUninstall = { packageName -> appsViewModel.uninstallApp(context, packageName) },
+                    onUninstall = { packageName, generation ->
+                        synchronized(container.connectionHolder) {
+                            if (container.connectionHolder.capture()?.generation == generation)
+                                appsViewModel.uninstallApp(context, packageName)
+                        }
+                    },
                     onLaunchApp = { packageName -> appsViewModel.launchApp(context, packageName) },
                     onForceStopApp = { packageName -> appsViewModel.forceStopApp(context, packageName) },
-                    onClearAppData = { packageName -> appsViewModel.clearAppData(context, packageName) },
+                    onClearAppData = { packageName, generation ->
+                        synchronized(container.connectionHolder) {
+                            if (container.connectionHolder.capture()?.generation == generation)
+                                appsViewModel.clearAppData(context, packageName)
+                        }
+                    },
                     onCreateProfile = { showProfileEditor = true },
                     onApplyProfile = { profile ->
                         appsViewModel.applyProfile(context, profile, installedApps)

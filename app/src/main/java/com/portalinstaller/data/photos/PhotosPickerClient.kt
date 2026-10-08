@@ -1,12 +1,19 @@
 package com.portalinstaller.data.photos
 
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONException
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.util.concurrent.TimeUnit
 
 /** Rezultatul brut al unui apel HTTP: cod de stare + corp text. */
@@ -34,18 +41,22 @@ class PickerException(val code: Int, message: String) : Exception(message)
  * scope-ul `photospicker.mediaitems.readonly` si il trimite ca `Authorization: Bearer`.
  * Metodele arunca [PickerException] daca serverul raspunde cu non-2xx.
  */
-class PhotosPickerClient(private val http: PickerHttp) {
+class PhotosPickerClient(
+    private val http: PickerHttp,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+) {
 
-    suspend fun createSession(token: String): PickerSession = withContext(Dispatchers.IO) {
+    suspend fun createSession(token: String): PickerSession = withContext(ioDispatcher) {
         val res = http.post("${PickerApi.BASE_URL}/sessions", token, "{}")
         ensureSuccess(res, "create session")
-        PickerSession.parse(res.body)
+        parseResponse("session") { PickerSession.parse(res.body) }
     }
 
-    suspend fun getSession(token: String, sessionId: String): PickerSession = withContext(Dispatchers.IO) {
-        val res = http.get("${PickerApi.BASE_URL}/sessions/$sessionId", token)
+    suspend fun getSession(token: String, sessionId: String): PickerSession = withContext(ioDispatcher) {
+        val url = "${PickerApi.BASE_URL}/sessions".toHttpUrl().newBuilder().addPathSegment(sessionId).build()
+        val res = http.get(url.toString(), token)
         ensureSuccess(res, "get session")
-        PickerSession.parse(res.body)
+        parseResponse("session") { PickerSession.parse(res.body) }
     }
 
     suspend fun listMediaItems(
@@ -53,36 +64,59 @@ class PhotosPickerClient(private val http: PickerHttp) {
         sessionId: String,
         pageToken: String? = null,
         pageSize: Int = 100,
-    ): MediaItemsPage = withContext(Dispatchers.IO) {
-        val sb = StringBuilder("${PickerApi.BASE_URL}/mediaItems?sessionId=$sessionId&pageSize=$pageSize")
-        if (!pageToken.isNullOrBlank()) sb.append("&pageToken=").append(pageToken)
-        val res = http.get(sb.toString(), token)
+    ): MediaItemsPage = withContext(ioDispatcher) {
+        val url = "${PickerApi.BASE_URL}/mediaItems".toHttpUrl().newBuilder()
+            .addQueryParameter("sessionId", sessionId)
+            .addQueryParameter("pageSize", pageSize.toString())
+        if (!pageToken.isNullOrBlank()) url.addQueryParameter("pageToken", pageToken)
+        val res = http.get(url.build().toString(), token)
         ensureSuccess(res, "list media items")
-        MediaItemsPage.parse(res.body)
+        parseResponse("media items") { MediaItemsPage.parse(res.body) }
     }
 
     /** Interogheaza toate paginile de poze alese si le concateneaza (sare peste videoclipuri). */
     suspend fun listAllPhotos(token: String, sessionId: String): List<PickedMediaItem> {
         val all = mutableListOf<PickedMediaItem>()
+        val seenTokens = mutableSetOf<String>()
         var pageToken: String? = null
         do {
             val page = listMediaItems(token, sessionId, pageToken)
             all += page.items
             pageToken = page.nextPageToken
+            if (!pageToken.isNullOrBlank() && !seenTokens.add(pageToken)) {
+                throw PickerException(0, "Google Photos returned a repeated page token")
+            }
         } while (!pageToken.isNullOrBlank())
         return all.filter { it.isPhoto }
     }
 
-    suspend fun deleteSession(token: String, sessionId: String) = withContext(Dispatchers.IO) {
+    suspend fun deleteSession(token: String, sessionId: String) = withContext(ioDispatcher) {
         // Best-effort: nu vrem sa doboram fluxul daca stergerea esueaza.
-        runCatching { http.delete("${PickerApi.BASE_URL}/sessions/$sessionId", token) }
+        try {
+            val url = "${PickerApi.BASE_URL}/sessions".toHttpUrl().newBuilder().addPathSegment(sessionId).build()
+            http.delete(url.toString(), token)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // Cleanup errors must not hide the import result.
+        }
         Unit
     }
 
     /** Descarca octetii la rezolutie completa ai unei poze in [dest]. */
-    suspend fun downloadPhoto(token: String, item: PickedMediaItem, dest: File) = withContext(Dispatchers.IO) {
+    suspend fun downloadPhoto(token: String, item: PickedMediaItem, dest: File) = withContext(ioDispatcher) {
+        if (item.baseUrl.toHttpUrlOrNull()?.scheme != "https") {
+            throw PickerException(0, "Google Photos returned an invalid photo URL")
+        }
         http.downloadTo(PickerApi.downloadUrl(item.baseUrl), token, dest)
     }
+
+    private fun <T> parseResponse(kind: String, parse: () -> T): T =
+        try {
+            parse()
+        } catch (_: JSONException) {
+            throw PickerException(0, "Google Photos returned invalid $kind data")
+        }
 
     private fun ensureSuccess(res: HttpResult, action: String) {
         if (!res.isSuccess) {
@@ -119,7 +153,24 @@ class OkHttpPickerHttp(
                 throw PickerException(response.code, "photo download failed (HTTP ${response.code})")
             }
             val body = response.body ?: throw PickerException(response.code, "empty photo body")
-            dest.outputStream().use { out -> body.byteStream().copyTo(out) }
+            val type = body.contentType()
+            val binary = type?.type == "application" && type.subtype == "octet-stream"
+            if (type != null && type.type != "image" && !binary) {
+                throw PickerException(response.code, "photo download did not contain an image")
+            }
+            val staged = File.createTempFile("picker-download-", ".part", dest.absoluteFile.parentFile)
+            try {
+                val count = staged.outputStream().use { out -> body.byteStream().use { it.copyTo(out) } }
+                if (count == 0L || (body.contentLength() >= 0L && count != body.contentLength())) {
+                    throw PickerException(response.code, "empty or incomplete photo body")
+                }
+                Files.move(
+                    staged.toPath(), dest.toPath(),
+                    StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING,
+                )
+            } finally {
+                staged.delete()
+            }
         }
     }
 
@@ -128,6 +179,8 @@ class OkHttpPickerHttp(
             client.newCall(request).execute().use { response ->
                 HttpResult(response.code, response.body?.string().orEmpty())
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             throw PickerException(0, e.message ?: "network error")
         }

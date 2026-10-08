@@ -20,6 +20,8 @@ class PortalFileManagerReliabilityTest {
         var failRename = false
         var corruptPush = false
         var escapedPath: String? = null
+        var createBeforePublish = false
+        var retainStageWithoutDestination = false
         val dadb = Proxy.newProxyInstance(Dadb::class.java.classLoader, arrayOf(Dadb::class.java)) { _, method, args ->
             when (method.name) {
                 "shell" -> {
@@ -41,9 +43,25 @@ class PortalFileManagerReliabilityTest {
                         command.contains("mv ") -> {
                             if (failRename) AdbShellResponse("", "rename failed", 1)
                             else {
-                                val (source, dest) = paths.takeLast(2)
-                                files[dest] = files.remove(source) ?: error("Missing staged file")
+                                val operands = command.substringAfter("mv -n ", command.substringAfter("mv -f "))
+                                val (source, dest) = Regex("'([^']*)'").findAll(operands)
+                                    .map { it.groupValues[1] }.take(2).toList()
+                                if (createBeforePublish) files[dest] = "concurrent original".toByteArray()
+                                // API 29 mv -n reports success but leaves staging on a collision.
+                                if (!(command.contains("mv -n ") && dest in files) && !retainStageWithoutDestination) {
+                                    files[dest] = files.remove(source) ?: error("Missing staged file")
+                                }
                                 AdbShellResponse("", "", 0)
+                            }
+                        }
+                        command.startsWith("if test -e ") -> {
+                            val unique = paths.distinct()
+                            val source = unique[0]
+                            val dest = unique[1]
+                            when {
+                                source in files && dest in files -> AdbShellResponse("", "", 73)
+                                source in files || dest !in files -> AdbShellResponse("", "", 1)
+                                else -> AdbShellResponse("", "", 0)
                             }
                         }
                         command.startsWith("rm ") -> {
@@ -154,6 +172,56 @@ class PortalFileManagerReliabilityTest {
             } as Dadb
             assertTrue(runCatching { PortalFileManager().push(proxy, local, "/sdcard/link", false) }.isFailure)
             assertEquals("original", device.files["/sdcard/photo.jpg"]?.decodeToString())
+        }
+    }
+
+    @Test fun `no replace preserves existing bytes and reports a collision rather than success`() = runTest {
+        withUpload { local ->
+            val device = Device()
+            val error = runCatching {
+                PortalFileManager().push(device.dadb, local, "/sdcard", false, replaceExisting = false)
+            }.exceptionOrNull()
+
+            assertTrue(error is DestinationExistsException)
+            assertEquals("original", device.files["/sdcard/photo.jpg"]?.decodeToString())
+            assertEquals(setOf("/sdcard/photo.jpg"), device.files.keys)
+        }
+    }
+
+    @Test fun `destination created between listing and publication is preserved`() = runTest {
+        withUpload { local ->
+            val device = Device().apply { files.clear(); createBeforePublish = true }
+            val error = runCatching {
+                PortalFileManager().push(device.dadb, local, "/sdcard", false, replaceExisting = false)
+            }.exceptionOrNull()
+
+            assertTrue(error is DestinationExistsException)
+            assertEquals("concurrent original", device.files["/sdcard/photo.jpg"]?.decodeToString())
+            assertEquals(setOf("/sdcard/photo.jpg"), device.files.keys)
+        }
+    }
+
+    @Test fun `no replace publishes a complete new photo and removes staging`() = runTest {
+        withUpload { local ->
+            val device = Device().apply { files.clear() }
+
+            assertEquals("/sdcard/photo.jpg",
+                PortalFileManager().push(device.dadb, local, "/sdcard", false, replaceExisting = false))
+            assertEquals("replacement", device.files["/sdcard/photo.jpg"]?.decodeToString())
+            assertEquals(setOf("/sdcard/photo.jpg"), device.files.keys)
+        }
+    }
+
+    @Test fun `successful exit with retained staging and no destination is a failure`() = runTest {
+        withUpload { local ->
+            val device = Device().apply { files.clear(); retainStageWithoutDestination = true }
+            val error = runCatching {
+                PortalFileManager().push(device.dadb, local, "/sdcard", false, replaceExisting = false)
+            }.exceptionOrNull()
+
+            assertNotNull(error)
+            assertFalse(error is DestinationExistsException)
+            assertTrue(device.files.isEmpty())
         }
     }
 }

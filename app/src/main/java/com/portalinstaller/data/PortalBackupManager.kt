@@ -6,11 +6,16 @@ import android.os.Build
 import com.portalinstaller.R
 import com.portalinstaller.data.adb.shellQuote
 import dadb.Dadb
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
+import java.io.InputStream
+import java.io.OutputStream
 import java.util.UUID
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
@@ -25,7 +30,8 @@ data class PortalRestoreSummary(
     val installedCount: Int,
     val failedPackages: List<String>,
     val restoredSettingCount: Int,
-    val stoppedEarlyReason: String? = null
+    val stoppedEarlyReason: String? = null,
+    val failedSettings: List<String> = emptyList()
 )
 
 data class PortalBackupPreview(
@@ -90,89 +96,122 @@ class PortalBackupManager {
     ): PortalBackupSummary {
         val workDir = createWorkDir(context, "backup")
         try {
-            val packages = listThirdPartyPackages(dadb).let { installed ->
-                selectedPackages?.let { selected ->
-                    installed.filter { it in selected }
-                } ?: installed
-            }
-            val appRecords = packages.map { packageName ->
-                val paths = dadb.shell("pm path ${shellQuote(packageName)}").output
-                    .lineSequence()
-                    .map { it.trim() }
-                    .filter { it.startsWith("package:") }
-                    .map { it.removePrefix("package:") }
-                    .filter { it.isNotBlank() }
-                    .toList()
-                require(paths.isNotEmpty()) { "No APK path returned for $packageName" }
-                packageName to paths
-            }
-
-            val settings = readBackupSettings(dadb)
-            val appsJson = JSONArray()
-            appRecords.forEachIndexed { appIndex, (packageName, remotePaths) ->
-                onProgress(appIndex + 1, appRecords.size, packageName)
-                val packageDir = File(workDir, "apps/$packageName").apply { mkdirs() }
-                val filesJson = JSONArray()
-
-                remotePaths.forEachIndexed { fileIndex, remotePath ->
-                    val remoteName = remotePath.substringAfterLast('/').ifBlank { "app.apk" }
-                    val localName = "${fileIndex}_${sanitizeFileName(remoteName)}"
-                    val localFile = File(packageDir, localName)
-                    dadb.pull(localFile, remotePath)
-                    require(localFile.isFile && localFile.length() > 0) {
-                        "Empty APK received for $packageName"
+            return createBackup(
+                dadb, workDir,
+                openOutput = {
+                    requireNotNull(context.contentResolver.openOutputStream(destination, "w")) {
+                        "Could not open the selected backup file"
                     }
-                    filesJson.put(localName)
-                }
-
-                appsJson.put(
-                    JSONObject()
-                        .put("packageName", packageName)
-                        .put("files", filesJson)
-                )
-            }
-            onProgress(appRecords.size, appRecords.size, "")
-
-            val manifest = JSONObject()
-                .put("formatVersion", FORMAT_VERSION)
-                .put("createdAt", System.currentTimeMillis())
-                .put(
-                    "device",
-                    JSONObject()
-                        .put("manufacturer", shellValue(dadb, "getprop ro.product.manufacturer"))
-                        .put("model", shellValue(dadb, "getprop ro.product.model"))
-                        .put("sdk", shellValue(dadb, "getprop ro.build.version.sdk"))
-                )
-                .put("settings", JSONObject(settings))
-                .put("apps", appsJson)
-
-            val output = requireNotNull(context.contentResolver.openOutputStream(destination, "w")) {
-                "Could not open the selected backup file"
-            }
-            output.use { stream ->
-                ZipOutputStream(stream.buffered()).use { zip ->
-                    zip.putNextEntry(ZipEntry(MANIFEST_ENTRY))
-                    zip.write(manifest.toString(2).toByteArray(Charsets.UTF_8))
-                    zip.closeEntry()
-
-                    appRecords.forEach { (packageName, _) ->
-                        val packageDir = File(workDir, "apps/$packageName")
-                        packageDir.listFiles()
-                            .orEmpty()
-                            .sortedBy { it.name }
-                            .forEach { apk ->
-                                zip.putNextEntry(ZipEntry("apps/$packageName/${apk.name}"))
-                                apk.inputStream().buffered().use { it.copyTo(zip) }
-                                zip.closeEntry()
-                            }
-                    }
-                }
-            }
-
-            return PortalBackupSummary(appRecords.size, settings.size)
+                },
+                selectedPackages = selectedPackages,
+                onProgress = onProgress
+            )
         } finally {
             workDir.deleteRecursively()
         }
+    }
+
+    internal suspend fun createBackup(
+        dadb: Dadb,
+        workDir: File,
+        openOutput: () -> OutputStream,
+        selectedPackages: Set<String>? = null,
+        onProgress: (Int, Int, String) -> Unit = { _, _, _ -> }
+    ): PortalBackupSummary {
+        currentCoroutineContext().ensureActive()
+        val packages = listThirdPartyPackages(dadb).let { installed ->
+            selectedPackages?.let { selected ->
+                installed.filter { it in selected }
+            } ?: installed
+        }
+        val appRecords = packages.map { packageName ->
+            currentCoroutineContext().ensureActive()
+            val paths = dadb.shell("pm path ${shellQuote(packageName)}").output
+                .lineSequence()
+                .map { it.trim() }
+                .filter { it.startsWith("package:") }
+                .map { it.removePrefix("package:") }
+                .filter { it.isNotBlank() }
+                .toList()
+            require(paths.isNotEmpty()) { "No APK path returned for $packageName" }
+            packageName to paths
+        }
+
+        val settings = readBackupSettings(dadb)
+        val appsJson = JSONArray()
+        appRecords.forEachIndexed { appIndex, (packageName, remotePaths) ->
+            onProgress(appIndex + 1, appRecords.size, packageName)
+            currentCoroutineContext().ensureActive()
+            val packageDir = File(workDir, "apps/$packageName").apply { mkdirs() }
+            val filesJson = JSONArray()
+
+            remotePaths.forEachIndexed { fileIndex, remotePath ->
+                currentCoroutineContext().ensureActive()
+                val remoteName = remotePath.substringAfterLast('/').ifBlank { "app.apk" }
+                val localName = "${fileIndex}_${sanitizeFileName(remoteName)}"
+                val localFile = File(packageDir, localName)
+                dadb.pull(localFile, remotePath)
+                currentCoroutineContext().ensureActive()
+                require(localFile.isFile && localFile.length() > 0) {
+                    "Empty APK received for $packageName"
+                }
+                filesJson.put(localName)
+            }
+
+            appsJson.put(
+                JSONObject()
+                    .put("packageName", packageName)
+                    .put("files", filesJson)
+            )
+        }
+        onProgress(appRecords.size, appRecords.size, "")
+        currentCoroutineContext().ensureActive()
+
+        val manifest = JSONObject()
+            .put("formatVersion", FORMAT_VERSION)
+            .put("createdAt", System.currentTimeMillis())
+            .put(
+                "device",
+                JSONObject()
+                    .put("manufacturer", shellValue(dadb, "getprop ro.product.manufacturer"))
+                    .put("model", shellValue(dadb, "getprop ro.product.model"))
+                    .put("sdk", shellValue(dadb, "getprop ro.build.version.sdk"))
+            )
+            .put("settings", JSONObject(settings))
+            .put("apps", appsJson)
+
+        currentCoroutineContext().ensureActive()
+        val output = openOutput()
+        output.use { stream ->
+            ZipOutputStream(stream.buffered()).use { zip ->
+                zip.putNextEntry(ZipEntry(MANIFEST_ENTRY))
+                zip.write(manifest.toString(2).toByteArray(Charsets.UTF_8))
+                zip.closeEntry()
+
+                appRecords.forEach { (packageName, _) ->
+                    val packageDir = File(workDir, "apps/$packageName")
+                    packageDir.listFiles()
+                        .orEmpty()
+                        .sortedBy { it.name }
+                        .forEach { apk ->
+                            currentCoroutineContext().ensureActive()
+                            zip.putNextEntry(ZipEntry("apps/$packageName/${apk.name}"))
+                            apk.inputStream().buffered().use { input ->
+                                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                                while (true) {
+                                    currentCoroutineContext().ensureActive()
+                                    val read = input.read(buffer)
+                                    if (read < 0) break
+                                    zip.write(buffer, 0, read)
+                                }
+                            }
+                            zip.closeEntry()
+                        }
+                }
+            }
+        }
+
+        return PortalBackupSummary(appRecords.size, settings.size)
     }
 
     suspend fun restoreBackup(
@@ -184,104 +223,127 @@ class PortalBackupManager {
         val workDir = createWorkDir(context, "restore")
         try {
             extractArchive(context, source, workDir)
-            val manifestFile = File(workDir, MANIFEST_ENTRY)
-            require(manifestFile.isFile) { "The backup manifest is missing" }
-            val manifest = JSONObject(manifestFile.readText())
-            require(isSupportedFormat(manifest.optInt("formatVersion"))) {
-                "Unsupported backup format"
-            }
-
-            val apps = manifest.optJSONArray("apps")
-                ?: error("Backup manifest has no apps section")
-            require(apps.length() <= MAX_ARCHIVE_ENTRIES) { "Backup contains too many apps" }
-            var installedCount = 0
-            val failedPackages = mutableListOf<String>()
-            var consecutiveFailures = 0
-            var stoppedEarlyReason: String? = null
-            val seenPackages = mutableSetOf<String>()
-
-            for (index in 0 until apps.length()) {
-                val app = apps.getJSONObject(index)
-                val packageName = app.getString("packageName")
-                require(isValidPackageName(packageName)) {
-                    "Invalid package name in backup"
-                }
-                require(seenPackages.add(packageName)) {
-                    "Duplicate package in backup: $packageName"
-                }
-                onProgress(index + 1, apps.length(), packageName)
-                val files = app.optJSONArray("files")
-                    ?: error("Backup has no APK list for $packageName")
-                require(files.length() in 1..MAX_ARCHIVE_ENTRIES) {
-                    "Invalid APK list for $packageName"
-                }
-                val apks = buildList {
-                    for (fileIndex in 0 until files.length()) {
-                        val fileName = files.getString(fileIndex)
-                        val apk = safeArchiveFile(workDir, "apps/$packageName/$fileName")
-                        if (apk.isFile && apk.length() > 0) add(apk)
-                    }
-                }
-
-                val installResult = runCatching {
-                    require(apks.isNotEmpty()) { "No APK files for $packageName" }
-                    apks.forEach { apk ->
-                        val archivePackage = readArchivePackageName(context, apk)
-                        require(archivePackage == packageName) {
-                            "APK ${apk.name} package does not match $packageName"
-                        }
-                    }
-                    installPackage(dadb, apks)
-                }
-
-                if (installResult.isSuccess) {
-                    installedCount++
-                    consecutiveFailures = 0
-                } else {
-                    failedPackages += packageName
-                    consecutiveFailures++
-                    if (shouldStopRestore(consecutiveFailures)) {
-                        val reason = installResult.exceptionOrNull()?.message
-                            ?: "Multiple restore operations failed"
-                        stoppedEarlyReason = context.getString(
-                            R.string.backup_restore_stopped_reason,
-                            consecutiveFailures,
-                            reason
-                        )
-                        break
-                    }
-                }
-            }
-            val processedCount = if (stoppedEarlyReason == null) {
-                apps.length()
-            } else {
-                installedCount + failedPackages.size
-            }
-            onProgress(processedCount, apps.length(), "")
-
-            val restoredSettings = if (stoppedEarlyReason == null) {
-                restoreSettings(
-                    dadb,
-                    manifest.optJSONObject("settings") ?: JSONObject()
-                )
-            } else {
-                0
-            }
-            return PortalRestoreSummary(
-                installedCount = installedCount,
-                failedPackages = failedPackages,
-                restoredSettingCount = restoredSettings,
-                stoppedEarlyReason = stoppedEarlyReason
+            return restoreBackup(
+                dadb, workDir,
+                readPackageName = { readArchivePackageName(context, it) },
+                stoppedReason = { failures, reason ->
+                    context.getString(R.string.backup_restore_stopped_reason, failures, reason)
+                },
+                onProgress = onProgress
             )
         } finally {
             workDir.deleteRecursively()
         }
     }
 
+    internal suspend fun restoreBackup(
+        dadb: Dadb,
+        workDir: File,
+        readPackageName: (File) -> String?,
+        stoppedReason: (Int, String) -> String,
+        onProgress: (Int, Int, String) -> Unit = { _, _, _ -> }
+    ): PortalRestoreSummary {
+        currentCoroutineContext().ensureActive()
+        val manifestFile = File(workDir, MANIFEST_ENTRY)
+        require(manifestFile.isFile) { "The backup manifest is missing" }
+        val manifest = JSONObject(manifestFile.readText())
+        require(isSupportedFormat(manifest.optInt("formatVersion"))) {
+            "Unsupported backup format"
+        }
+
+        val apps = manifest.optJSONArray("apps")
+            ?: error("Backup manifest has no apps section")
+        require(apps.length() <= MAX_ARCHIVE_ENTRIES) { "Backup contains too many apps" }
+        val seenPackages = mutableSetOf<String>()
+        // Validate the whole archive before any install or setting write reaches the device.
+        val plan = (0 until apps.length()).map { index ->
+            currentCoroutineContext().ensureActive()
+            val app = apps.getJSONObject(index)
+            val packageName = app.getString("packageName")
+            require(isValidPackageName(packageName)) { "Invalid package name in backup" }
+            require(seenPackages.add(packageName)) { "Duplicate package in backup: $packageName" }
+            val files = app.optJSONArray("files")
+                ?: error("Backup has no APK list for $packageName")
+            require(files.length() in 1..MAX_ARCHIVE_ENTRIES) { "Invalid APK list for $packageName" }
+            val packageDir = safeArchiveFile(workDir, "apps/$packageName")
+            val seenFiles = mutableSetOf<String>()
+            val apks = (0 until files.length()).map { fileIndex ->
+                currentCoroutineContext().ensureActive()
+                val fileName = files.getString(fileIndex)
+                require(fileName.isNotBlank() && fileName == File(fileName).name &&
+                    fileName != "." && fileName != ".." && !fileName.contains('\\')) {
+                    "Invalid APK path for $packageName"
+                }
+                require(seenFiles.add(fileName)) { "Duplicate APK for $packageName" }
+                val apk = safeArchiveFile(packageDir, fileName)
+                require(apk.isFile && apk.length() > 0) { "Missing or empty APK for $packageName: $fileName" }
+                require(readPackageName(apk) == packageName) {
+                    "APK ${apk.name} package does not match $packageName"
+                }
+                apk
+            }
+            packageName to apks
+        }
+
+        var installedCount = 0
+        val failedPackages = mutableListOf<String>()
+        var consecutiveFailures = 0
+        var stoppedEarlyReason: String? = null
+        for ((index, app) in plan.withIndex()) {
+            currentCoroutineContext().ensureActive()
+            val (packageName, apks) = app
+            onProgress(index + 1, plan.size, packageName)
+            currentCoroutineContext().ensureActive()
+            val installResult = try {
+                installPackage(dadb, apks)
+                currentCoroutineContext().ensureActive()
+                Result.success(Unit)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                Result.failure(error)
+            }
+            if (installResult.isSuccess) {
+                installedCount++
+                consecutiveFailures = 0
+            } else {
+                failedPackages += packageName
+                consecutiveFailures++
+                if (shouldStopRestore(consecutiveFailures)) {
+                    val reason = installResult.exceptionOrNull()?.message
+                        ?: "Multiple restore operations failed"
+                    stoppedEarlyReason = stoppedReason(consecutiveFailures, reason)
+                    break
+                }
+            }
+        }
+        onProgress(installedCount + failedPackages.size, plan.size, "")
+        currentCoroutineContext().ensureActive()
+        val settingsResult = if (failedPackages.isEmpty() && stoppedEarlyReason == null) {
+            restoreSettings(
+                dadb,
+                manifest.optJSONObject("settings") ?: JSONObject()
+            )
+        } else {
+            SettingsRestoreResult(0, emptyList())
+        }
+        return PortalRestoreSummary(
+            installedCount = installedCount,
+            failedPackages = failedPackages,
+            restoredSettingCount = settingsResult.restoredCount,
+            stoppedEarlyReason = stoppedEarlyReason,
+            failedSettings = settingsResult.failedSettings
+        )
+    }
+
     fun inspectBackup(context: Context, source: Uri): PortalBackupPreview {
         val input = requireNotNull(context.contentResolver.openInputStream(source)) {
             "Could not open the selected backup"
         }
+        return inspectBackup(input)
+    }
+
+    internal fun inspectBackup(input: InputStream): PortalBackupPreview {
         var preview: PortalBackupPreview? = null
         input.use { stream ->
             ZipInputStream(stream.buffered()).use { zip ->
@@ -360,21 +422,34 @@ class PortalBackupManager {
         }.toMap()
     }
 
-    private fun restoreSettings(dadb: Dadb, settings: JSONObject): Int {
+    private data class SettingsRestoreResult(val restoredCount: Int, val failedSettings: List<String>)
+
+    private suspend fun restoreSettings(dadb: Dadb, settings: JSONObject): SettingsRestoreResult {
         var restored = 0
+        val failed = mutableListOf<String>()
         BACKUP_SETTINGS.forEach { (namespace, name) ->
+            currentCoroutineContext().ensureActive()
             val value = settings.optString("$namespace.$name")
             if (value.isNotBlank() && isSafeSettingValue(value)) {
-                val output = runCatching {
-                    dadb.shell("settings put $namespace $name ${shellQuote(value)}").output
+                try {
+                    val response = dadb.shell("settings put $namespace $name ${shellQuote(value)}")
+                    if (response.exitCode == 0) {
+                        restored++
+                    } else {
+                        failed += "$namespace.$name: ${response.allOutput.trim().ifBlank { "Portal rejected the setting" }}"
+                    }
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Exception) {
+                    failed += "$namespace.$name: ${error.message ?: "Setting write failed"}"
                 }
-                if (output.isSuccess) restored++
             }
         }
-        return restored
+        return SettingsRestoreResult(restored, failed)
     }
 
-    private fun installPackage(dadb: Dadb, apks: List<File>) {
+    private suspend fun installPackage(dadb: Dadb, apks: List<File>) {
+        currentCoroutineContext().ensureActive()
         if (apks.size > 1) {
             dadb.installMultiple(apks, "-r")
             return
@@ -384,9 +459,10 @@ class PortalBackupManager {
         val remotePath = "/data/local/tmp/portal_restore_${UUID.randomUUID()}.apk"
         try {
             dadb.push(apk, remotePath)
-            val response = dadb.shell("pm install -r ${shellQuote(remotePath)}").allOutput.trim()
-            require(response.startsWith("Success", ignoreCase = true)) {
-                response.ifBlank { "Portal did not confirm APK installation" }
+            currentCoroutineContext().ensureActive()
+            val response = dadb.shell("pm install -r ${shellQuote(remotePath)}")
+            require(response.exitCode == 0 && response.allOutput.trim().equals("Success", ignoreCase = true)) {
+                response.allOutput.trim().ifBlank { "Portal did not confirm APK installation" }
             }
         } finally {
             runCatching { dadb.shell("rm -f ${shellQuote(remotePath)}") }
@@ -410,16 +486,22 @@ class PortalBackupManager {
         val input = requireNotNull(context.contentResolver.openInputStream(source)) {
             "Could not open the selected backup"
         }
+        extractArchive(input, destination)
+    }
+
+    internal fun extractArchive(input: InputStream, destination: File) {
         input.use { stream ->
             ZipInputStream(stream.buffered()).use { zip ->
                 var entryCount = 0
                 var extractedBytes = 0L
                 var manifestFound = false
+                val seenPaths = mutableSetOf<String>()
                 var entry = zip.nextEntry
                 while (entry != null) {
                     entryCount++
                     require(entryCount <= MAX_ARCHIVE_ENTRIES) { "Backup contains too many files" }
                     val outputFile = safeArchiveFile(destination, entry.name)
+                    require(seenPaths.add(outputFile.canonicalPath)) { "Duplicate file path in backup" }
                     if (entry.isDirectory) {
                         outputFile.mkdirs()
                     } else {

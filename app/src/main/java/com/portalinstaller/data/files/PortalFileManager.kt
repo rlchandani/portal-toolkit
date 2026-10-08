@@ -12,8 +12,12 @@ import com.portalinstaller.data.transfer.counting
 import okio.sink
 import okio.source
 import java.io.File
+import java.io.IOException
 import java.security.MessageDigest
 import java.util.UUID
+
+/** An upload's destination already exists; preserve it and report a skipped item. */
+class DestinationExistsException(val path: String) : IOException("Upload destination already exists: $path")
 
 /**
  * Operatii de fisiere pe Portal prin ADB. Toate ruleaza pe [Dispatchers.IO].
@@ -99,6 +103,12 @@ class PortalFileManager {
     suspend fun push(
         dadb: Dadb, localFile: File, destDir: String, advancedMode: Boolean,
         onProgress: (TransferProgress) -> Unit = {}
+    ): String = push(dadb, localFile, destDir, advancedMode, replaceExisting = true, onProgress = onProgress)
+
+    suspend fun push(
+        dadb: Dadb, localFile: File, destDir: String, advancedMode: Boolean,
+        replaceExisting: Boolean,
+        onProgress: (TransferProgress) -> Unit = {}
     ): String =
         withContext(Dispatchers.IO) {
             PathSafety.requireName(localFile.name)
@@ -135,10 +145,30 @@ class PortalFileManager {
                 // on the same filesystem, but would move INTO an existing directory.
                 requireDestinationAllowed(dadb, remote, advancedMode)
                 job.ensureActive()
+                val destination = shellQuote(remote)
+                val staged = shellQuote(staging)
                 val rename = dadb.shell(
-                    "test ! -d ${shellQuote(remote)} && mv -f ${shellQuote(staging)} ${shellQuote(remote)}"
+                    if (replaceExisting) {
+                        "test ! -d $destination && mv -f $staged $destination"
+                    } else {
+                        "if test -e $destination || test -L $destination; then exit 73; fi; " +
+                            "test ! -d $destination && mv -n $staged $destination"
+                    }
                 )
+                if (!replaceExisting && rename.exitCode == 73) throw DestinationExistsException(remote)
                 require(rename.exitCode == 0) { rename.allOutput.ifBlank { "Upload rename failed" } }
+                if (!replaceExisting) {
+                    // API 29 toybox mv -n exits zero on collision and retains the source.
+                    // Its rename publishes a complete file, but its existence check and
+                    // rename are separate syscalls on this Android version.
+                    val published = dadb.shell(
+                        "if test -e $staged || test -L $staged; then " +
+                            "if test -e $destination || test -L $destination; then exit 73; else exit 1; fi; fi; " +
+                            "test -f $destination && test ! -L $destination"
+                    )
+                    if (published.exitCode == 73) throw DestinationExistsException(remote)
+                    require(published.exitCode == 0) { "Upload publication could not be confirmed" }
+                }
             } finally {
                 withContext(NonCancellable + Dispatchers.IO) {
                     runCatching { dadb.shell("rm -f ${shellQuote(staging)}") }

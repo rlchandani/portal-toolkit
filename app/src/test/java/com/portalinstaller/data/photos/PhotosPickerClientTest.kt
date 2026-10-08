@@ -6,6 +6,12 @@ import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
 import java.io.File
+import okhttp3.HttpUrl.Companion.toHttpUrl
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.StandardTestDispatcher
 
 /**
  * JVM tests for [PhotosPickerClient] using a scripted [PickerHttp] fake — no real network.
@@ -137,5 +143,125 @@ class PhotosPickerClientTest {
         val call = fake.calls.single()
         assertEquals("DOWNLOAD", call.method)
         assertEquals("https://b/p1=d", call.url)
+    }
+
+    @Test
+    fun `pagination preserves opaque tokens containing query delimiters`() = runTest {
+        val token = "next+/=&?# page"
+        val fake = FakeHttp { _, url ->
+            val query = url.toHttpUrl()
+            assertEquals("session&1", query.queryParameter("sessionId"))
+            when (query.queryParameter("pageToken")) {
+                null -> HttpResult(200, """{"nextPageToken":"$token"}""")
+                token -> HttpResult(200, """{"mediaItems":[{"id":"last","type":"PHOTO","mediaFile":{"baseUrl":"https://b/last","filename":"last.jpg"}}]}""")
+                else -> error("Pagination token was changed")
+            }
+        }
+
+        val photos = PhotosPickerClient(fake).listAllPhotos("synthetic-token", "session&1")
+
+        assertEquals(listOf("last"), photos.map { it.id })
+        assertEquals(2, fake.calls.size)
+    }
+
+    @Test
+    fun `empty and video only pages do not end pagination early`() = runTest {
+        val responses = ArrayDeque(listOf(
+            HttpResult(200, """{"mediaItems":[],"nextPageToken":"second"}"""),
+            HttpResult(200, """{"mediaItems":[{"id":"v","type":"VIDEO"}],"nextPageToken":"third"}"""),
+            HttpResult(200, """{"mediaItems":[{"id":"p","type":"PHOTO","mediaFile":{"filename":"last.jpg","baseUrl":"https://b/p"}}],"nextPageToken":""}"""),
+        ))
+        val fake = FakeHttp { _, _ -> responses.removeFirst() }
+
+        assertEquals(listOf("p"), PhotosPickerClient(fake).listAllPhotos("synthetic-token", "s").map { it.id })
+        assertEquals(3, fake.calls.size)
+    }
+
+    @Test
+    fun `expiry on a later page fails without returning a partial selection`() = runTest {
+        for (code in listOf(401, 404, 410)) {
+            val responses = ArrayDeque(listOf(
+                HttpResult(200, """{"mediaItems":[{"id":"first","type":"PHOTO"}],"nextPageToken":"second"}"""),
+                HttpResult(code, """{"error":{"message":"expired"}}"""),
+            ))
+            val fake = FakeHttp { _, _ -> responses.removeFirst() }
+
+            val error = runCatching { PhotosPickerClient(fake).listAllPhotos("synthetic-token", "s") }.exceptionOrNull()
+
+            assertTrue(error is PickerException)
+            assertEquals(code, (error as PickerException).code)
+            assertEquals(2, fake.calls.size)
+        }
+    }
+
+    @Test
+    fun `repeated continuation token fails instead of looping forever`() = runTest {
+        var repeatedPages = 0
+        val fake = FakeHttp { _, _ ->
+            // Bound the reproduction even when the production guard is missing.
+            if (++repeatedPages > 3) throw AssertionError("Repeated page was requested again")
+            HttpResult(200, """{"nextPageToken":"same"}""")
+        }
+
+        val error = runCatching { PhotosPickerClient(fake).listAllPhotos("synthetic-token", "s") }.exceptionOrNull()
+
+        assertTrue("Expected a pagination error, got $error", error is PickerException)
+        assertEquals(2, fake.calls.size)
+    }
+
+    @Test
+    fun `deleteSession propagates cancellation`() = runTest {
+        val fake = FakeHttp { _, _ -> throw CancellationException("cancelled") }
+
+        val error = runCatching { PhotosPickerClient(fake).deleteSession("synthetic-token", "s") }.exceptionOrNull()
+
+        assertTrue(error is CancellationException)
+    }
+
+    @Test
+    fun `malformed successful API responses become recoverable picker errors`() = runTest {
+        for (body in listOf("not json", """{"mediaItems":[null]}""")) {
+            val fake = FakeHttp { _, _ -> HttpResult(200, body) }
+            val client = PhotosPickerClient(fake)
+            val error = runCatching {
+                if (body == "not json") client.createSession("synthetic-token")
+                else client.listAllPhotos("synthetic-token", "s")
+            }.exceptionOrNull()
+
+            assertTrue("A malformed API response must reach the import error state", error is PickerException)
+            assertEquals(0, (error as PickerException).code)
+        }
+    }
+
+    @Test
+    fun `cancellation after a page prevents fetching the next page`() = runTest {
+        lateinit var job: Job
+        val fake = FakeHttp { _, _ ->
+            job.cancel()
+            HttpResult(200, """{"nextPageToken":"second"}""")
+        }
+        val client = PhotosPickerClient(fake, StandardTestDispatcher(testScheduler))
+        job = launch(start = CoroutineStart.LAZY) { client.listAllPhotos("synthetic-token", "s") }
+        job.start()
+        job.join()
+
+        assertTrue(job.isCancelled)
+        assertEquals(1, fake.calls.size)
+    }
+
+    @Test
+    fun `invalid download URL fails before invoking the transport`() = runTest {
+        for (url in listOf("", "not-a-url", "file:///private/photo.jpg", "http://photos.invalid/image")) {
+            val fake = FakeHttp { _, _ -> HttpResult(200, "") }
+            val item = PickedMediaItem("p", "PHOTO", url, "image/jpeg", "photo.jpg")
+            val dest = File.createTempFile("invalid-picker", ".jpg")
+            try {
+                val error = runCatching { PhotosPickerClient(fake).downloadPhoto("synthetic-token", item, dest) }.exceptionOrNull()
+                assertTrue("An invalid media URL must not reach a transport", error is PickerException)
+                assertTrue(fake.calls.isEmpty())
+            } finally {
+                dest.delete()
+            }
+        }
     }
 }

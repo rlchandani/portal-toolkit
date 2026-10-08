@@ -7,14 +7,21 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.portalinstaller.R
 import com.portalinstaller.data.AppContainer
+import com.portalinstaller.data.AdbSession
+import com.portalinstaller.data.ConnectionHolder
 import com.portalinstaller.data.PortalBackupPreview
+import com.portalinstaller.data.PortalRestoreSummary
 import com.portalinstaller.data.store.HistoryEntry
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -31,6 +38,94 @@ sealed class BackupState {
     data class Failed(val message: String) : BackupState()
 }
 
+internal fun backupRestoreOutcome(summary: PortalRestoreSummary, message: String): BackupState =
+    if (summary.failedPackages.isEmpty() && summary.stoppedEarlyReason == null && summary.failedSettings.isEmpty()) {
+        BackupState.Success(message)
+    } else {
+        BackupState.Failed(message)
+    }
+
+internal fun shouldRefreshAfterRestore(summary: PortalRestoreSummary): Boolean =
+    summary.installedCount > 0 || summary.restoredSettingCount > 0
+
+internal suspend fun completeBackupRestore(
+    summary: PortalRestoreSummary,
+    message: String,
+    holder: ConnectionHolder,
+    session: AdbSession,
+    publishOutcome: (BackupState) -> Unit,
+    recordHistory: suspend (String, Boolean) -> Unit,
+    onRestored: () -> Unit
+) {
+    currentCoroutineContext().ensureActive()
+    holder.ensureCurrent(session)
+    val outcome = backupRestoreOutcome(summary, message)
+    publishOutcome(outcome)
+    recordHistory(message, outcome is BackupState.Success)
+    currentCoroutineContext().ensureActive()
+    // ConnectionHolder.set uses the same monitor: callback consumers capture this session.
+    synchronized(holder) {
+        holder.ensureCurrent(session)
+        if (shouldRefreshAfterRestore(summary)) onRestored()
+    }
+}
+
+/** Main-thread restore ownership; cancelled IO may finish after a newer operation starts. */
+internal class BackupRestoreLifecycle(
+    private val holder: ConnectionHolder,
+    private val scope: CoroutineScope,
+    private val state: MutableStateFlow<BackupState>,
+) {
+    private class Operation {
+        var job: Job? = null
+        var sessionWatcher: Job? = null
+    }
+
+    @Volatile private var active: Operation? = null
+
+    fun launch(session: AdbSession, block: suspend (() -> Unit) -> Unit): Job {
+        val operation = Operation()
+        active = operation
+        state.value = BackupState.Restoring(0, 0, "")
+        val job = holder.launchForSession(scope, session) {
+            block {
+                coroutineContext.ensureActive()
+                if (active !== operation) throw CancellationException("Backup restore changed")
+                holder.ensureCurrent(session)
+            }
+        }
+        operation.job = job
+        // This watcher is outside the restore job so blocked/cancelled IO cannot delay
+        // releasing its UI state when the captured connection disappears.
+        operation.sessionWatcher = scope.launch {
+            holder.session.first { !holder.isCurrent(session) }
+            cancel(operation)
+        }
+        job.invokeOnCompletion { error ->
+            operation.sessionWatcher?.cancel()
+            if (active === operation) {
+                active = null
+                if (error is CancellationException && state.value is BackupState.Restoring) {
+                    state.value = BackupState.Idle
+                }
+            }
+        }
+        return job
+    }
+
+    fun cancel() {
+        active?.let(::cancel)
+    }
+
+    private fun cancel(operation: Operation) {
+        if (active !== operation) return
+        active = null
+        operation.sessionWatcher?.cancel()
+        operation.job?.cancel()
+        if (state.value is BackupState.Restoring) state.value = BackupState.Idle
+    }
+}
+
 /**
  * Creează, inspectează și restaurează arhive de backup. Restaurarea reușită
  * cere reîmprospătarea listei de aplicații și a stării dispozitivului, dar
@@ -45,6 +140,7 @@ class BackupViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _backupState = MutableStateFlow<BackupState>(BackupState.Idle)
     val backupState: StateFlow<BackupState> = _backupState.asStateFlow()
+    private val restoreLifecycle = BackupRestoreLifecycle(holder, viewModelScope, _backupState)
 
     // Job-ul backup/restore in curs, ca sa poata fi anulat din UI.
     private var backupJob: Job? = null
@@ -116,12 +212,12 @@ class BackupViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * Restaurează dintr-o sursă. La succes complet cheamă [onRestored] pentru ca
-     * MainScreen să reîmprospăteze aplicațiile/starea (concerns din alte VM-uri).
+     * Restaurează dintr-o sursă. După orice modificare confirmată cheamă [onRestored]
+     * pentru ca MainScreen să reîmprospăteze aplicațiile/starea pe aceeași sesiune.
      */
     fun restoreBackup(context: Context, source: Uri, onRestored: () -> Unit = {}) {
-        val connection = holder.dadb.value
-        if (connection == null) {
+        val session = holder.capture()
+        if (session == null) {
             _backupState.value = BackupState.Failed(context.getString(R.string.backup_error_connect_first))
             return
         }
@@ -132,16 +228,18 @@ class BackupViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
 
-        backupJob = viewModelScope.launch {
-            _backupState.value = BackupState.Restoring(0, 0, "")
+        backupJob = restoreLifecycle.launch(session) { ensureCurrent ->
             runCatching {
                 withContext(Dispatchers.IO) {
-                    backupManager.restoreBackup(context, connection, source) {
+                    ensureCurrent()
+                    backupManager.restoreBackup(context, session.dadb, source) {
                             current, total, packageName ->
+                        ensureCurrent()
                         _backupState.value = BackupState.Restoring(current, total, packageName)
                     }
                 }
             }.onSuccess { summary ->
+                ensureCurrent()
                 val message = if (summary.stoppedEarlyReason != null) {
                     context.getString(
                         R.string.backup_restored_stopped,
@@ -149,6 +247,8 @@ class BackupViewModel(app: Application) : AndroidViewModel(app) {
                         summary.failedPackages.size,
                         summary.stoppedEarlyReason
                     )
+                } else if (summary.failedSettings.isNotEmpty()) {
+                    context.getString(R.string.backup_restore_failed, summary.failedSettings.joinToString())
                 } else if (summary.failedPackages.isEmpty()) {
                     context.getString(
                         R.string.backup_restored_success,
@@ -163,16 +263,15 @@ class BackupViewModel(app: Application) : AndroidViewModel(app) {
                         summary.failedPackages.joinToString()
                     )
                 }
-                _backupState.value = BackupState.Success(message)
-                addHistory(
-                    message,
-                    success = summary.failedPackages.isEmpty() && summary.stoppedEarlyReason == null
+                completeBackupRestore(
+                    summary, message, holder, session,
+                    publishOutcome = { _backupState.value = it },
+                    recordHistory = ::addHistory,
+                    onRestored = onRestored
                 )
-                if (summary.stoppedEarlyReason == null) {
-                    onRestored()
-                }
             }.onFailure { error ->
-                if (error is CancellationException) return@onFailure
+                if (error is CancellationException) throw error
+                ensureCurrent()
                 val message = context.getString(
                     R.string.backup_restore_failed,
                     error.message ?: context.getString(R.string.error_unknown)
@@ -185,6 +284,7 @@ class BackupViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Anuleaza backup-ul/restaurarea in curs (daca exista). */
     fun cancelBackup() {
+        restoreLifecycle.cancel()
         backupJob?.cancel()
         backupJob = null
         _backupState.value = BackupState.Idle
@@ -196,6 +296,7 @@ class BackupViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Resetează la deconectare, anulând orice backup/restore în curs. */
     fun onDisconnected() {
+        restoreLifecycle.cancel()
         backupJob?.cancel()
         backupJob = null
         _backupState.value = BackupState.Idle

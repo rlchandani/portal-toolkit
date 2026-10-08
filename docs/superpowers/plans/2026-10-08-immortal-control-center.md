@@ -15,6 +15,15 @@ Portal, OkHttp, DataStore, existing Dadb and hardware H.264 decoder.
 
 **Spec:** `docs/superpowers/specs/2026-10-08-immortal-control-center-design.md`
 
+**Implementation evidence:** The control center is implemented on
+`codex/portal-companion-control-center`, with Portal support on
+`codex/portal-companion-api` and Jarvis support on
+`codex/jarvis-companion-management`. The dated
+[extended validation record](../../companion-extended-validation-2026-10-08.md)
+is the current source of test results and remaining environmental limits.
+The original planning checklist below is retained; unexecuted destructive or
+provider-dependent checks are not represented as completed.
+
 ## Global constraints
 
 * Preserve package IDs, signing identities, persisted data, and existing features.

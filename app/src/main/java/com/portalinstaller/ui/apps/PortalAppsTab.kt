@@ -28,6 +28,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,6 +47,16 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 
+private enum class DestructiveAppAction { UNINSTALL, CLEAR_DATA }
+
+private data class PendingAppAction(
+    val action: DestructiveAppAction,
+    val packageName: String,
+    val label: String,
+    val portalIdentity: String,
+    val sessionGeneration: Long,
+)
+
 @Composable
 internal fun PortalAppsTab(
     packages: List<String>,
@@ -53,15 +64,23 @@ internal fun PortalAppsTab(
     isLoading: Boolean,
     uninstallState: UninstallState,
     sort: PortalAppsSort,
+    sessionGeneration: Long?,
+    portalIdentity: String,
     onSortChange: (PortalAppsSort) -> Unit,
     onRefresh: () -> Unit,
-    onUninstall: (String) -> Unit,
+    onUninstall: (String, Long) -> Unit,
     onLaunch: (String) -> Unit,
     onForceStop: (String) -> Unit,
-    onClearData: (String) -> Unit
+    onClearData: (String, Long) -> Unit
 ) {
-    // Confirmarea stergerii datelor: pastram pachetul selectat pentru dialog.
-    var clearDataFor by remember { mutableStateOf<String?>(null) }
+    // A reconnect can reuse the same host. Both dialogs belong to the selected session.
+    var pendingAction by remember(sessionGeneration) { mutableStateOf<PendingAppAction?>(null) }
+    val currentGeneration by rememberUpdatedState(sessionGeneration)
+    fun request(action: DestructiveAppAction, app: PortalAppInfo) {
+        val generation = sessionGeneration ?: return
+        pendingAction = PendingAppAction(action, app.packageName, app.label ?: app.name,
+            portalIdentity, generation)
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
@@ -146,33 +165,51 @@ internal fun PortalAppsTab(
                     PortalAppCard(
                         app = app,
                         uninstallState = uninstallState,
-                        onUninstall = onUninstall,
+                        destructiveActionsEnabled = sessionGeneration != null,
+                        onUninstall = { request(DestructiveAppAction.UNINSTALL, app) },
                         onLaunch = onLaunch,
                         onForceStop = onForceStop,
-                        onClearData = { clearDataFor = app.packageName }
+                        onClearData = { request(DestructiveAppAction.CLEAR_DATA, app) }
                     )
                 }
             }
         }
     }
 
-    clearDataFor?.let { packageName ->
+    pendingAction?.let { target ->
+        val uninstall = target.action == DestructiveAppAction.UNINSTALL
+        val actionText = stringResource(if (uninstall) R.string.uninstall else R.string.apps_clear_data)
+        fun dismiss() {
+            if (pendingAction == target) pendingAction = null
+        }
         AlertDialog(
-            onDismissRequest = { clearDataFor = null },
-            title = { Text(stringResource(R.string.apps_clear_data)) },
+            onDismissRequest = ::dismiss,
+            title = { Text(actionText) },
             text = {
-                Text(stringResource(R.string.apps_clear_data_confirm, packageName))
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(target.label, fontWeight = FontWeight.Medium)
+                    Text(target.packageName, style = MaterialTheme.typography.bodySmall)
+                    Text(stringResource(R.string.apps_action_portal, target.portalIdentity))
+                    Text(if (uninstall) stringResource(R.string.apps_uninstall_confirm)
+                        else stringResource(R.string.apps_clear_data_confirm, target.label))
+                }
             },
             confirmButton = {
                 TextButton(onClick = {
-                    onClearData(packageName)
-                    clearDataFor = null
+                    // Consume before dispatch so queued taps cannot confirm twice.
+                    if (pendingAction == target) {
+                        pendingAction = null
+                        if (currentGeneration == target.sessionGeneration) {
+                            if (uninstall) onUninstall(target.packageName, target.sessionGeneration)
+                            else onClearData(target.packageName, target.sessionGeneration)
+                        }
+                    }
                 }) {
-                    Text(stringResource(R.string.apps_clear_data))
+                    Text(actionText)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { clearDataFor = null }) {
+                TextButton(onClick = ::dismiss) {
                     Text(stringResource(R.string.cancel))
                 }
             }
@@ -184,6 +221,7 @@ internal fun PortalAppsTab(
 private fun PortalAppCard(
     app: PortalAppInfo,
     uninstallState: UninstallState,
+    destructiveActionsEnabled: Boolean,
     onUninstall: (String) -> Unit,
     onLaunch: (String) -> Unit,
     onForceStop: (String) -> Unit,
@@ -235,12 +273,12 @@ private fun PortalAppCard(
                 TextButton(onClick = { onForceStop(packageName) }) {
                     Text(stringResource(R.string.apps_force_stop))
                 }
-                TextButton(onClick = { onClearData(packageName) }) {
+                TextButton(onClick = { onClearData(packageName) }, enabled = destructiveActionsEnabled) {
                     Text(stringResource(R.string.apps_clear_data))
                 }
                 TextButton(
                     onClick = { onUninstall(packageName) },
-                    enabled = !isThisUninstalling
+                    enabled = destructiveActionsEnabled && !isThisUninstalling
                 ) {
                     Text(
                         if (isThisUninstalling) {

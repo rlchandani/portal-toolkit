@@ -29,6 +29,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -51,6 +52,7 @@ internal fun AppsHubTab(
     isWifiConnected: Boolean,
     activePortalName: String?,
     activePortalAddress: String,
+    sessionGeneration: Long?,
     apps: List<InstalledApp>,
     connectionState: ConnectionState,
     installState: InstallState,
@@ -69,10 +71,10 @@ internal fun AppsHubTab(
     onInstallCustomApk: (Uri) -> Unit,
     onRefreshPortalApps: () -> Unit,
     onSortPortalApps: (PortalAppsSort) -> Unit,
-    onUninstall: (String) -> Unit,
+    onUninstall: (String, Long) -> Unit,
     onLaunchApp: (String) -> Unit,
     onForceStopApp: (String) -> Unit,
-    onClearAppData: (String) -> Unit,
+    onClearAppData: (String, Long) -> Unit,
     onCreateProfile: () -> Unit,
     onApplyProfile: (AppProfile) -> Unit,
     onCancelApplyProfile: () -> Unit,
@@ -80,6 +82,7 @@ internal fun AppsHubTab(
     targetSdk: Int? = null,
 ) {
     var selectedSection by rememberSaveable { mutableIntStateOf(0) }
+    val currentGeneration by rememberUpdatedState(sessionGeneration)
 
     Column(modifier = Modifier.fillMaxSize()) {
         if (isWifiConnected) {
@@ -192,12 +195,21 @@ internal fun AppsHubTab(
                 isLoading = isLoadingPortalPackages,
                 uninstallState = uninstallState,
                 sort = portalAppsSort,
+                sessionGeneration = sessionGeneration,
+                portalIdentity = listOfNotNull(
+                    activePortalName?.takeIf { it.isNotBlank() },
+                    activePortalAddress.takeIf { it.isNotBlank() },
+                ).joinToString(" · ").ifBlank { stringResource(R.string.active_portal) },
                 onSortChange = onSortPortalApps,
                 onRefresh = onRefreshPortalApps,
-                onUninstall = onUninstall,
+                onUninstall = { packageName, generation ->
+                    if (currentGeneration == generation) onUninstall(packageName, generation)
+                },
                 onLaunch = onLaunchApp,
                 onForceStop = onForceStopApp,
-                onClearData = onClearAppData
+                onClearData = { packageName, generation ->
+                    if (currentGeneration == generation) onClearAppData(packageName, generation)
+                }
             )
         } else {
             ProfilesTab(

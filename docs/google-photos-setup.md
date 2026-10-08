@@ -47,6 +47,16 @@ project root run:
 
 Look for the `debug` variant and copy its **SHA1:** value (format `AA:BB:CC:...`).
 
+For the 1.5.2-control-center APK built on 2026-10-08, the verified signing
+certificate SHA-1 is:
+
+```text
+E6:53:20:F6:66:FE:95:BA:B7:47:62:9A:6B:F6:1F:F2:0A:7F:71:98
+```
+
+This is a public certificate fingerprint, not a credential. A build made with
+another signing key needs its own matching Android OAuth client.
+
 (Equivalent without Gradle:
 `keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android -keypass android`)
 
@@ -65,7 +75,8 @@ Look for the `debug` variant and copy its **SHA1:** value (format `AA:BB:CC:...`
 
 ## 6. Use it
 
-1. Open Portal Toolkit → **Screensaver** tab → connect to your Portal over Wi-Fi/ADB.
+1. Open Portal Toolkit → **Settings** → **Device tools**, establish its Wi-Fi/ADB
+   connection, then open the **Screensaver** tab.
 2. Tap **Google Photos**.
 3. First time: a Google sign-in / "grant access to your photos" screen appears → allow.
 4. Google's photo picker opens. Browse into the album you want, select the photos

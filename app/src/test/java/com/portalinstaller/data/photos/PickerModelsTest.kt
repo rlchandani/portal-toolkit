@@ -89,4 +89,11 @@ class PickerModelsTest {
         assertEquals(999L, parseDurationMillis("", 999L))
         assertEquals(999L, parseDurationMillis("abc", 999L))
     }
+
+    @Test
+    fun `invalid and overflowing polling durations use a bounded fallback`() {
+        for (raw in listOf("0s", "-1s", "NaNs", "Infinitys", "1e300s", "5")) {
+            assertEquals("duration=$raw", 999L, parseDurationMillis(raw, 999L))
+        }
+    }
 }

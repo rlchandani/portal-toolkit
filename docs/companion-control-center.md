@@ -3,6 +3,11 @@
 The Android app opens a native control center. Home, Remote, Photos, Apps, and
 Settings share one activity and use the Portal's approved neutral light/dark palette.
 
+The current development build is **1.5.2-control-center**. Its
+[extended validation record](companion-extended-validation-2026-10-08.md)
+includes physical Pixel/Portal checks, regression results, performance measurements,
+and the remaining environmental limits.
+
 ## Pairing
 
 On the Portal, open **Control From Your Phone** to enable the remote and show a
@@ -77,6 +82,14 @@ Wake remains opt-in; microphone status does not prove room-distance audibility.
 Device tools retain ADB/USB provisioning, APK import/uninstall, screen mirror,
 files, backups, diagnostics, OTA controls, app profiles, and Google Photos import.
 Their independent ADB connection is established inside Device tools.
+Uninstall and app-data clearing require confirmation tied to the selected app
+and device connection. Changing or losing that connection dismisses the pending
+confirmation.
+
+Backup restore validates the complete archive before applying it. Partial
+restores retain their failure details and refresh app/settings lists after
+confirmed changes. These backups contain APKs and supported settings; they do
+not capture private third-party app data.
 
 Native control metadata refreshes stop in the background. Pointer movement is
 coalesced; image requests and decoder queues are bounded. Imports stream rather
@@ -91,6 +104,8 @@ and requires an explicit Start to resume. Screen mirroring preserves the Portal'
 aspect ratio and maps touches against the measured video surface.
 While visible, the app retries an offline paired device every 30 seconds. An
 expired or revoked pairing requires pairing again rather than automatic retries.
+Activity history uses independently measured, full-width lazy rows; a long
+history does not compose every retained operation at once.
 
 Portal Toolkit keeps the phone's screen awake while its activity is visible,
 including during remote control and mirroring. Leaving the app or manually

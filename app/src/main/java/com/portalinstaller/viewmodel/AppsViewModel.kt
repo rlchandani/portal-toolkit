@@ -18,6 +18,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -90,6 +91,41 @@ internal fun foldProfileResults(
     val unconfirmed = if (cancelled) plannedPackages.filterNot { pkg -> results.any { it.first == pkg } }
         .map { it to "Cancelled before an install result was confirmed; device work may still finish" } else emptyList()
     return ProfileApplyState.Done(profileName, succeeded, failed + unconfirmed, cancelled)
+}
+
+internal suspend fun applyProfilePackages(
+    profile: AppProfile,
+    availableApps: List<InstalledApp>,
+    results: MutableList<Pair<String, Boolean>>,
+    reasons: MutableMap<String, String>,
+    appNotFound: String,
+    onProgress: (Int, String, InstalledApp?) -> Unit,
+    install: suspend (InstalledApp, List<File>) -> Result<Unit>
+): ProfileApplyState.Done {
+    val appsByPackage = availableApps.associateBy { it.packageName }
+    profile.packageNames.sorted().forEachIndexed { index, packageName ->
+        currentCoroutineContext().ensureActive()
+        val app = appsByPackage[packageName]
+        onProgress(index + 1, packageName, app)
+        currentCoroutineContext().ensureActive()
+        if (app == null) {
+            results += packageName to false
+            reasons[packageName] = appNotFound
+            return@forEachIndexed
+        }
+        val apks = listOf(File(app.sourceDir)) + app.splitSourceDirs.orEmpty().map(::File)
+        val result = try {
+            install(app, apks)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Result.failure(error)
+        }
+        currentCoroutineContext().ensureActive()
+        results += packageName to result.isSuccess
+        if (result.isFailure) reasons[packageName] = result.exceptionOrNull()?.message ?: app.name
+    }
+    return foldProfileResults(results, profile.name, reasons)
 }
 
 /**
@@ -367,47 +403,28 @@ class AppsViewModel(app: Application) : AndroidViewModel(app) {
         val reasons = mutableMapOf<String, String>()
         _profileApplyState.value = ProfileApplyState.Applying(profile.name, 0, profile.packageNames.size, "")
         profileApplyJob = holder.launchForSession(viewModelScope, session) {
-            val appsByPackage = availableApps.associateBy { it.packageName }
-
-            try {
-                packages.forEachIndexed { index, packageName ->
+            val done = applyProfilePackages(
+                profile, availableApps, results, reasons,
+                appNotFound = context.getString(R.string.profile_app_not_found),
+                onProgress = { index, packageName, app ->
                     holder.ensureCurrent(session)
-                    val app = appsByPackage[packageName]
                     _profileApplyState.value = ProfileApplyState.Applying(
                         profileName = profile.name,
-                        current = index + 1,
+                        current = index,
                         total = packages.size,
                         appName = app?.name ?: packageName
                     )
-
-                    val label = app?.name ?: packageName
-                    if (app == null) {
-                        results += packageName to false
-                        reasons[packageName] = context.getString(R.string.profile_app_not_found)
-                        return@forEachIndexed
-                    }
-
-                    val baseApk = File(app.sourceDir)
-                    val splits = app.splitSourceDirs?.map(::File).orEmpty()
-                    val result = if (splits.isEmpty()) {
-                        connectionManager.installApk(context, connection, baseApk, app.minSdkVersion)
+                },
+                install = { app, apks ->
+                    val result = if (apks.size == 1) {
+                        connectionManager.installApk(context, connection, apks.single(), app.minSdkVersion)
                     } else {
-                        connectionManager.installMultipleApks(context, connection, listOf(baseApk) + splits, app.minSdkVersion)
+                        connectionManager.installMultipleApks(context, connection, apks, app.minSdkVersion)
                     }
                     holder.ensureCurrent(session)
-                    if (result.isSuccess) {
-                        results += packageName to true
-                    } else {
-                        results += packageName to false
-                        reasons[packageName] = result.exceptionOrNull()?.message ?: label
-                    }
+                    result
                 }
-            } catch (e: CancellationException) {
-                throw e
-            }
-
-            val done = foldProfileResults(results, profile.name, reasons)
-                .copy(deviceLabel = session.label, sessionGeneration = session.generation)
+            ).copy(deviceLabel = session.label, sessionGeneration = session.generation)
             val message = if (done.failed.isEmpty()) {
                 context.getString(R.string.profile_apply_success, profile.name, done.succeeded.size)
             } else {

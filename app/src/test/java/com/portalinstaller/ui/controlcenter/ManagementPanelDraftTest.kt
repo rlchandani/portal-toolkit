@@ -136,4 +136,135 @@ class ManagementPanelDraftTest {
         original.put("gridSlots", full)
         assertEquals(original.toString(), LayoutPanelDraft.addWidget(original, "today").toString())
     }
+
+    @Test fun automaticOrdersStayAutomaticWhenAddingAndRemovingANativeWidget() {
+        val original = layout().put("gridOrder", JSONArray()).put("gridSlots", JSONArray())
+        val before = original.toString()
+        val added = LayoutPanelDraft.addWidget(original, "today")
+        assertEquals(3, added.getJSONArray("widgets").length())
+        assertEquals(0, added.getJSONArray("gridOrder").length())
+        assertEquals(0, added.getJSONArray("gridSlots").length())
+        val removed = LayoutPanelDraft.removeWidget(added, 2)
+        assertEquals(before, removed.toString())
+        assertEquals(before, original.toString())
+    }
+
+    @Test fun fullGridWithOneHoleCanAddWithoutDroppingTheLastOccupiedPosition() {
+        val original = layout()
+        val slots = JSONArray((0 until 512).map { "app:com.example.app$it" })
+        slots.put(310, JSONObject.NULL)
+        original.put("gridSlots", slots)
+        val before = original.toString()
+        val added = LayoutPanelDraft.addWidget(original, "calendar")
+        assertEquals(3, added.getJSONArray("widgets").length())
+        val widget = added.getJSONArray("widgets").getJSONObject(2)
+        assertEquals(512, added.getJSONArray("gridSlots").length())
+        assertEquals("widget-tile:custom:${widget.getString("customId")}",
+            added.getJSONArray("gridSlots").getString(310))
+        assertEquals("app:com.example.app511", added.getJSONArray("gridSlots").getString(511))
+        assertEquals(before, original.toString())
+    }
+
+    @Test fun fullExplicitOrderCannotAppendEvenWhenAnotherOrderHasAnEmptySlot() {
+        val original = layout().put("gridOrder", JSONArray((0 until 512).map { "app:com.example.app$it" }))
+        val before = original.toString()
+        assertEquals(before, LayoutPanelDraft.addWidget(original, "today").toString())
+        assertEquals(before, original.toString())
+    }
+
+    @Test fun widgetCountLimitRejectsAnAdditionButAllowsRemovalThenAddition() {
+        val original = layout()
+        val widgets = original.getJSONArray("widgets")
+        for (index in 2 until 64) widgets.put(JSONObject()
+            .put("kind", "today").put("customId", "today:$index").put("id", 0)
+            .put("package", "").put("class", "").put("spanX", 2).put("spanY", 2))
+        val before = original.toString()
+        assertEquals(before, LayoutPanelDraft.addWidget(original, "today").toString())
+        val removed = LayoutPanelDraft.removeWidget(original, 63)
+        val added = LayoutPanelDraft.addWidget(removed, "today")
+        assertEquals(64, added.getJSONArray("widgets").length())
+        assertEquals(42, added.getJSONArray("widgets").getJSONObject(0).getInt("id"))
+        assertEquals(before, original.toString())
+    }
+
+    @Test fun movingAGridHolePreservesItsPositionAndDoesNotRewriteWidgetsOrAppOrder() {
+        val original = layout()
+        val before = original.toString()
+        val moved = LayoutPanelDraft.move(original, "gridSlots", 1, 2)
+        assertEquals(
+            """["widget-tile:widget:42","app:com.example.player",null,"widget-tile:custom:weather:one"]""",
+            moved.getJSONArray("gridSlots").toString(),
+        )
+        for (field in listOf("widgets", "gridOrder", "homeOrder", "assignments", "future"))
+            assertEquals(original.get(field).toString(), moved.get(field).toString())
+        assertEquals(before, original.toString())
+    }
+
+    @Test fun invalidResizeOrReorderCannotPartiallyAlterACompleteLayout() {
+        val original = layout()
+        val before = original.toString()
+        for ((width, height) in listOf(0 to 2, 5 to 2, 2 to 0, 2 to 5))
+            assertEquals(before, LayoutPanelDraft.resizeWidget(original, 0, width, height).toString())
+        assertEquals(before, LayoutPanelDraft.resizeWidget(original, 99, 4, 4).toString())
+        for ((from, to) in listOf(-1 to 0, 0 to -1, 0 to 99, 99 to 0))
+            assertEquals(before, LayoutPanelDraft.move(original, "widgets", from, to).toString())
+        assertEquals(before, LayoutPanelDraft.move(original, "assignments", 0, 1).toString())
+        assertEquals(before, original.toString())
+    }
+
+    @Test fun sceneIdsMustBeWireStringsRatherThanCoercingNumbersOrBooleans() {
+        fun validation(id: Any): String? = ScenePanelDraft.validation(JSONArray().put(
+            JSONObject("""{"id":"valid-id","name":"Dashboard","steps":[{"type":"key","action":"home"}]}""")
+                .put("id", id)))
+        assertNull(validation("123"))
+        for (id in listOf(123, -1, true, false, JSONObject.NULL))
+            assertNotNull("Scene ID $id must not be coerced into a valid string ID.", validation(id))
+    }
+
+    @Test fun sceneWaitLimitsRejectWrongTypesAndAllowExactlyFiveSecondsTotal() {
+        val scene = JSONObject(
+            """{"id":"wait-id","name":"Wait fixture","steps":[{"type":"wait","ms":3000},{"type":"wait","ms":2000}]}""")
+        assertNull(ScenePanelDraft.validation(JSONArray().put(scene)))
+        for (value in listOf(-1, 5001, 1.5, "500", JSONObject.NULL)) {
+            scene.getJSONArray("steps").getJSONObject(1).put("ms", value)
+            assertNotNull("Invalid wait $value must block saving.", ScenePanelDraft.validation(JSONArray().put(scene)))
+        }
+        scene.getJSONArray("steps").getJSONObject(1).put("ms", 2001)
+        assertNotNull(ScenePanelDraft.validation(JSONArray().put(scene)))
+    }
+
+    @Test fun sceneSchedulesRejectDuplicateDaysAndNonIntegerTimeFields() {
+        val scene = JSONObject(
+            """{"id":"schedule-id","name":"Schedule fixture","steps":[{"type":"key","action":"home"}],
+                "schedule":{"enabled":true,"hour":0,"minute":0,"days":[1,7]}}""")
+        assertNull(ScenePanelDraft.validation(JSONArray().put(scene)))
+        val schedules = listOf(
+            """{"enabled":true,"hour":0,"minute":0,"days":[1,1]}""",
+            """{"enabled":true,"hour":0,"minute":0,"days":[]}""",
+            """{"enabled":true,"hour":24,"minute":0,"days":[1]}""",
+            """{"enabled":true,"hour":0,"minute":60,"days":[1]}""",
+            """{"enabled":true,"hour":"6","minute":0,"days":[1]}""",
+            """{"enabled":true,"hour":6.5,"minute":0,"days":[1]}""",
+            """{"enabled":"true","hour":0,"minute":0,"days":[1]}""",
+            """{"enabled":true,"hour":0,"minute":0,"days":["1"]}""",
+        )
+        for (schedule in schedules) {
+            scene.put("schedule", JSONObject(schedule))
+            assertNotNull("Malformed schedule $schedule must block saving.",
+                ScenePanelDraft.validation(JSONArray().put(scene)))
+        }
+    }
+
+    @Test fun sceneActionAndCollectionLimitsAcceptTheBoundaryAndRejectTheNextEntry() {
+        val scenes = JSONArray()
+        for (index in 0 until 20) scenes.put(JSONObject()
+            .put("id", "scene-$index").put("name", "Scene $index")
+            .put("steps", JSONArray((0 until 16).map { JSONObject("""{"type":"key","action":"home"}""") })))
+        assertNull(ScenePanelDraft.validation(scenes))
+        scenes.getJSONObject(0).getJSONArray("steps").put(JSONObject("""{"type":"key","action":"home"}"""))
+        assertNotNull(ScenePanelDraft.validation(scenes))
+        scenes.getJSONObject(0).getJSONArray("steps").remove(16)
+        scenes.put(JSONObject("""{"id":"scene-20","name":"One too many","steps":[{"type":"key","action":"home"}]}"""))
+        assertNotNull(ScenePanelDraft.validation(scenes))
+    }
 }

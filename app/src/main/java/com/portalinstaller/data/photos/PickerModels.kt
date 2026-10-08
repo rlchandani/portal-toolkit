@@ -108,8 +108,9 @@ data class MediaItemsPage(
  * in milisecunde. Intoarce [fallback] daca sirul lipseste sau nu poate fi interpretat.
  */
 internal fun parseDurationMillis(raw: String?, fallback: Long): Long {
-    if (raw.isNullOrBlank()) return fallback
+    if (raw.isNullOrBlank() || !raw.endsWith("s")) return fallback
     val seconds = raw.removeSuffix("s").toDoubleOrNull() ?: return fallback
-    val millis = (seconds * 1000.0).toLong()
-    return if (millis > 0L) millis else fallback
+    val millis = seconds * 1000.0
+    if (!millis.isFinite() || millis < 1.0 || millis >= Long.MAX_VALUE.toDouble()) return fallback
+    return millis.toLong()
 }

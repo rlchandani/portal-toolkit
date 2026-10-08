@@ -6,8 +6,9 @@ The Immortal control center pairs over local Wi-Fi for everyday controls, photo
 uploads, settings, home layouts, routines, catalog apps, and Jarvis management.
 Advanced device tools retain Wi-Fi ADB and USB OTG for provisioning and maintenance.
 
-The current development build is **1.5.0-control-center**. See
-[Companion setup and capabilities](docs/companion-control-center.md).
+The current development build is **1.5.2-control-center**. See
+[Companion setup and capabilities](docs/companion-control-center.md) and the
+[physical-device validation record](docs/companion-extended-validation-2026-10-08.md).
 
 ## Features
 
@@ -39,9 +40,13 @@ The current development build is **1.5.0-control-center**. See
 
 ## Tested on
 
-- Meta/Facebook Portal Mini
+- Meta/Facebook Portal Mini in the original toolkit
+- Portal+ on Android 10 with the Immortal companion API, controlled by a physical
+  Google Pixel 9 Pro Fold over Wi-Fi
 
-Other Portal generations may work, but have not been fully tested. Feedback and compatibility reports are welcome.
+The validation record distinguishes real device checks, synthetic regression
+tests, and integrations that still require owner setup. Other Portal generations
+may work; compatibility reports are welcome.
 
 ## Use case
 

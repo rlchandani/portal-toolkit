@@ -347,7 +347,12 @@ fun ControlCenterScreen() {
                     contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 26.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
-                    if (shown in CenterDetail.entries.filter { it != CenterDetail.NONE }.map { it.name }) {
+                    if (shown == CenterDetail.OPERATIONS.name) {
+                        item { TextButton(onClick = { detail = CenterDetail.NONE }) { Text("‹ Back") } }
+                        item { PageTitle("Activity", "Installations, routines, and retained results.") }
+                        activityRows(state.operations, state.busy,
+                            onRetry = { vm.retryOperation(it) }, onCancel = { vm.cancelOperation(it) })
+                    } else if (shown in CenterDetail.entries.filter { it != CenterDetail.NONE }.map { it.name }) {
                         item {
                             TextButton(onClick = { detail = CenterDetail.NONE }) { Text("‹ Back") }
                             when (CenterDetail.valueOf(shown)) {
@@ -389,11 +394,7 @@ fun ControlCenterScreen() {
                                         }
                                     }
                                 }
-                                CenterDetail.OPERATIONS -> {
-                                    PageTitle("Activity", "Installations, routines, and retained results.")
-                                    OperationsPanel(state.operations, state.busy,
-                                        onRetry = { vm.retryOperation(it) }, onCancel = { vm.cancelOperation(it) })
-                                }
+                                CenterDetail.OPERATIONS -> Unit
                                 CenterDetail.NONE -> Unit
                             }
                         }
@@ -405,6 +406,15 @@ fun ControlCenterScreen() {
                                     Text("Connecting to ${state.activeDevice?.name ?: "your Portal"}",
                                         style = MaterialTheme.typography.titleMedium)
                                     LinearProgressIndicator(Modifier.fillMaxWidth())
+                                }
+                            } else if (state.connection == CompanionConnection.OFFLINE && state.activeDevice != null) {
+                                GroupCard {
+                                    Text("${state.deviceName} is offline",
+                                        style = MaterialTheme.typography.titleMedium)
+                                    Text("Your pairing is saved. Check the Portal's power and Wi-Fi. This app retries while it is open.")
+                                    Button(onClick = { vm.refreshStatus() }, enabled = !state.busy) {
+                                        Text("Retry connection")
+                                    }
                                 }
                             } else if (!state.connected) {
                                 GroupCard {
@@ -523,14 +533,12 @@ fun ControlCenterScreen() {
                                             onClick = { vm.launchApp(packageName) },
                                             enabled = state.connected && !state.busy && packageName.isNotBlank()) { Text("Open") }
                                         if (showCatalog) {
-                                            val compatible = app.optBoolean("compatible")
+                                            val action = catalogAction(app)
                                             OutlinedButton(onClick = {
-                                                vm.startOperation(JSONObject().put("type", if (app.optBoolean("installed")) "update" else "install").put("packageName", packageName))
+                                                vm.startOperation(JSONObject().put("type", action.operation).put("packageName", packageName))
                                                 detail = CenterDetail.OPERATIONS
-                                            }, enabled = state.connected && !state.busy && state.supports("operations") && packageName.isNotBlank() && compatible
-                                                && (!app.optBoolean("installed") || app.optBoolean("updateAvailable"))) {
-                                                Text(if (!compatible) "Unavailable on this Portal" else if (app.optBoolean("installed") && !app.optBoolean("updateAvailable")) "Up to date"
-                                                    else if (app.optBoolean("installed")) "Update" else "Install")
+                                            }, enabled = state.connected && !state.busy && state.supports("operations") && packageName.isNotBlank() && action.enabled) {
+                                                Text(action.label)
                                             }
                                         }
                                     }
@@ -613,7 +621,7 @@ private fun ConnectionStrip(state: ControlCenterState) {
         CompanionConnection.UNPAIRED -> "No Portal selected"
         CompanionConnection.CONNECTING -> "Connecting…"
         CompanionConnection.CONNECTED -> "Connected"
-        CompanionConnection.OFFLINE -> "Offline · Showing saved information"
+        CompanionConnection.OFFLINE -> "Offline · Waiting to reconnect"
         CompanionConnection.UNAUTHORIZED -> "Pairing expired · Pair again"
     }
     Text(label, modifier = Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 4.dp),
@@ -738,37 +746,6 @@ private fun SettingsDomainPicker(domains: List<SettingsDomain>, selected: String
             domains.forEach { domain ->
                 DropdownMenuItem(text = { Text(domain.title) },
                     onClick = { onSelect(domain.id); expanded = false })
-            }
-        }
-    }
-}
-
-@Composable
-private fun OperationsPanel(operations: JSONArray, working: Boolean, onRetry: (String) -> Unit, onCancel: (String) -> Unit) {
-    if (operations.length() == 0) EmptyMessage("No recent activity", "Completed actions and errors will appear here.")
-    operations.objects().forEach { operation ->
-        GroupCard {
-            val id = operation.optString("id")
-            val status = operation.optString("state", operation.optString("status"))
-            Text(operation.optString("label", operation.optString("type", "Operation")), fontWeight = FontWeight.Medium)
-            Text(status.replace('_', ' '), color = MaterialTheme.colorScheme.onSurfaceVariant)
-            operation.optString("error").takeIf { it.isNotBlank() }?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-            operation.optJSONArray("results").objects().forEach { result ->
-                Text(result.optString("result", if (result.optBoolean("ok")) "Completed" else "Failed").replace('_', ' '),
-                    color = if (result.optBoolean("ok")) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error)
-                if (result.optBoolean("backendMayContinue")) Text("The device may still be finishing this action.",
-                    style = MaterialTheme.typography.bodySmall)
-            }
-            if (status in setOf("running", "queued") && operation.optBoolean("cancelSupported")) {
-                TextButton(onClick = { onCancel(id) }, enabled = !working) { Text("Cancel") }
-            }
-            if (operation.optBoolean("backendMayContinue")) {
-                Text("The Portal is still confirming the result. Retry will be available when it is safe.",
-                    style = MaterialTheme.typography.bodySmall)
-            }
-            if (status in setOf("failed", "cancelled", "interrupted") &&
-                operation.optBoolean("retrySupported") && !operation.optBoolean("backendMayContinue")) {
-                TextButton(onClick = { onRetry(id) }, enabled = !working) { Text("Retry") }
             }
         }
     }

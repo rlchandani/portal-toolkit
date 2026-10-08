@@ -12,8 +12,8 @@ android {
         applicationId = "com.portalinstaller"
         minSdk = 26
         targetSdk = 35
-        versionCode = 7
-        versionName = "1.5.1-control-center"
+        versionCode = 8
+        versionName = "1.5.2-control-center"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
