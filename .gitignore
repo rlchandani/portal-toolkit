@@ -8,6 +8,7 @@
 /captures
 .externalNativeBuild
 .cxx
+.kotlin/
 local.properties
 /app/build
 /*.apk

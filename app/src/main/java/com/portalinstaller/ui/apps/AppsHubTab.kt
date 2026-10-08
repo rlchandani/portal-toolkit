@@ -76,7 +76,8 @@ internal fun AppsHubTab(
     onCreateProfile: () -> Unit,
     onApplyProfile: (AppProfile) -> Unit,
     onCancelApplyProfile: () -> Unit,
-    onDeleteProfile: (AppProfile) -> Unit
+    onDeleteProfile: (AppProfile) -> Unit,
+    targetSdk: Int? = null,
 ) {
     var selectedSection by rememberSaveable { mutableIntStateOf(0) }
 
@@ -181,7 +182,8 @@ internal fun AppsHubTab(
                 selectedUri = selectedUri,
                 onPickFile = onPickFile,
                 onInstall = onInstall,
-                onInstallCustomApk = onInstallCustomApk
+                onInstallCustomApk = onInstallCustomApk,
+                targetSdk = targetSdk
             )
         } else if (selectedSection == 1) {
             PortalAppsTab(

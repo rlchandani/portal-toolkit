@@ -7,6 +7,9 @@ import com.portalinstaller.data.adb.shellQuote
 import com.portalinstaller.data.apps.AppMetadataCache
 import dadb.Dadb
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -45,6 +48,8 @@ data class OsUpdateBlockStatus(
             blockedPackages.containsAll(supportedPackages)
 }
 
+data class InstallTarget(val sdk: Int, val abis: List<String>)
+
 class PortalConnectionManager(
     private val connectRetry: ConnectRetry = ConnectRetry()
 ) {
@@ -70,13 +75,19 @@ class PortalConnectionManager(
     }
 
     suspend fun connect(context: Context, ip: String, port: Int = 5555): Result<Dadb> {
-        return withContext(Dispatchers.IO) {
-            connectRetry.run(
+        var opened: Dadb? = null
+        try {
+            return withContext(Dispatchers.IO) {
+                connectRetry.run(
                 // Un „nu e un Portal” e definitiv — nu reincercam. Orice altceva
                 // (timeout/socket picat la accept-ul dialogului) merita reincercat.
                 isRetryable = { it !is AdbError.NotPortal },
                 attempt = { attemptConnect(context, ip, port) }
-            )
+                ).onSuccess { opened = it }
+            }
+        } catch (e: CancellationException) {
+            opened?.let { withContext(kotlinx.coroutines.NonCancellable + Dispatchers.IO) { runCatching { it.close() } } }
+            throw e
         }
     }
 
@@ -138,12 +149,42 @@ class PortalConnectionManager(
             haystack.contains("meta")
     }
 
-    suspend fun installApk(context: Context, dadb: Dadb, apkFile: File): Result<Unit> {
+    suspend fun readInstallTarget(dadb: Dadb): InstallTarget = withContext(Dispatchers.IO) {
+        fun property(name: String): String {
+            val response = dadb.shell("getprop $name")
+            require(response.exitCode == 0) { "Cannot read device install compatibility" }
+            return response.output.trim()
+        }
+        val sdk = property("ro.build.version.sdk").toIntOrNull()
+        require(sdk != null && sdk > 0) { "Cannot read device API level" }
+        val abis = property("ro.product.cpu.abilist").split(',').map(String::trim).filter(String::isNotEmpty)
+            .ifEmpty { listOf(property("ro.product.cpu.abi")).filter(String::isNotEmpty) }
+        require(abis.isNotEmpty()) { "Cannot read device CPU architectures" }
+        InstallTarget(sdk, abis)
+    }
+
+    private suspend fun validateApks(context: Context, dadb: Dadb, apks: List<File>, minSdk: Int?) {
+        val target = readInstallTarget(dadb)
+        val nativeAbis = apks.flatMap { InstallPolicy.nativeAbis(it) }.toSet()
+        val minimum = minSdk ?: apks.mapNotNull {
+            @Suppress("DEPRECATION")
+            context.packageManager.getPackageArchiveInfo(it.absolutePath, 0)?.applicationInfo?.minSdkVersion
+        }.maxOrNull()
+        require(InstallPolicy.isCompatible(minimum, target.sdk, target.abis, nativeAbis)) {
+            "APK requires API ${minimum ?: "unknown"} / ${nativeAbis.joinToString().ifEmpty { "no native code" }}; " +
+                "device supports API ${target.sdk} / ${target.abis.joinToString()}"
+        }
+        currentCoroutineContext().ensureActive()
+    }
+
+    suspend fun installApk(context: Context, dadb: Dadb, apkFile: File, minSdk: Int? = null): Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
+                validateApks(context, dadb, listOf(apkFile), minSdk)
                 dadb.install(apkFile)
                 Result.success(Unit)
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 android.util.Log.e("PortalDebug", "Eroare instalare: ${e.javaClass.name} - ${e.message}", e)
                 Result.failure(
                     AdbError.InstallFailed(
@@ -161,12 +202,14 @@ class PortalConnectionManager(
         }
     }
 
-    suspend fun installMultipleApks(context: Context, dadb: Dadb, apks: List<File>): Result<Unit> {
+    suspend fun installMultipleApks(context: Context, dadb: Dadb, apks: List<File>, minSdk: Int? = null): Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
+                validateApks(context, dadb, apks, minSdk)
                 dadb.installMultiple(apks)
                 Result.success(Unit)
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 Result.failure(
                     AdbError.InstallFailed(
                         AdbErrors.formatReason(

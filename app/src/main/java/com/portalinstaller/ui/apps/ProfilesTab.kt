@@ -51,6 +51,9 @@ internal fun ProfilesTab(
     onDelete: (AppProfile) -> Unit
 ) {
     val applying = applyState as? ProfileApplyState.Applying
+    val result = applyState as? ProfileApplyState.Done
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val holder = remember(context) { com.portalinstaller.data.AppContainer.from(context).connectionHolder }
     var pendingDelete by remember { mutableStateOf<AppProfile?>(null) }
 
     LazyColumn(
@@ -58,6 +61,30 @@ internal fun ProfilesTab(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
+        if (result != null) item {
+            Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("${result.profileName} · ${result.deviceLabel.orEmpty()}",
+                        style = MaterialTheme.typography.titleSmall)
+                    Text("${result.succeeded.size} completed · ${result.failed.size} failed" +
+                        if (result.cancelled) " · Interrupted" else "")
+                    result.failed.forEach { (pkg, message) ->
+                        Text("$pkg: $message", style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error)
+                    }
+                    val profile = profiles.singleOrNull { it.name == result.profileName }
+                    val failed = result.failed.map { it.first }.toSet()
+                    if (profile != null && failed.isNotEmpty()) TextButton(
+                        onClick = {
+                            if (holder.capture()?.generation == result.sessionGeneration) {
+                                onApply(profile.copy(packageNames = profile.packageNames.intersect(failed)))
+                            }
+                        },
+                        enabled = isConnected && holder.capture()?.generation == result.sessionGeneration &&
+                            profile.packageNames.intersect(failed).isNotEmpty()) { Text("Retry failed apps") }
+                }
+            }
+        }
         item {
             Button(
                 onClick = onCreate,

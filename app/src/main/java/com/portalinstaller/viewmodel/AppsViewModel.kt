@@ -3,7 +3,6 @@ package com.portalinstaller.viewmodel
 import android.app.Application
 import android.content.Context
 import android.net.Uri
-import android.os.Build
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.portalinstaller.R
@@ -11,15 +10,14 @@ import com.portalinstaller.data.AppContainer
 import com.portalinstaller.data.ContentUriHelper
 import com.portalinstaller.data.InstalledApp
 import com.portalinstaller.data.PortalAppInfo
-import com.portalinstaller.data.InstallPolicy
-import com.portalinstaller.data.PortalDeviceConfig
+import com.portalinstaller.data.AdbSession
 import com.portalinstaller.data.store.AppProfile
 import com.portalinstaller.data.store.HistoryEntry
-import dadb.Dadb
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -32,7 +30,7 @@ sealed class InstallState {
     data object Idle : InstallState()
     data class Installing(val elapsedSeconds: Int = 0, val sizeBytes: Long = 0) : InstallState()
     data object Success : InstallState()
-    data class Failed(val message: String) : InstallState()
+    data class Failed(val message: String, val cancelled: Boolean = false) : InstallState()
 }
 
 sealed class UninstallState {
@@ -67,7 +65,10 @@ sealed class ProfileApplyState {
     data class Done(
         val profileName: String,
         val succeeded: List<String>,
-        val failed: List<Pair<String, String>>
+        val failed: List<Pair<String, String>>,
+        val cancelled: Boolean = false,
+        val deviceLabel: String? = null,
+        val sessionGeneration: Long? = null
     ) : ProfileApplyState()
     data class Failed(val message: String) : ProfileApplyState()
 }
@@ -79,12 +80,16 @@ sealed class ProfileApplyState {
 internal fun foldProfileResults(
     results: List<Pair<String, Boolean>>,
     profileName: String = "",
-    reasons: Map<String, String> = emptyMap()
+    reasons: Map<String, String> = emptyMap(),
+    plannedPackages: List<String> = emptyList(),
+    cancelled: Boolean = false
 ): ProfileApplyState.Done {
     val succeeded = results.filter { it.second }.map { it.first }
     val failed = results.filter { !it.second }
         .map { it.first to (reasons[it.first] ?: "") }
-    return ProfileApplyState.Done(profileName, succeeded, failed)
+    val unconfirmed = if (cancelled) plannedPackages.filterNot { pkg -> results.any { it.first == pkg } }
+        .map { it to "Cancelled before an install result was confirmed; device work may still finish" } else emptyList()
+    return ProfileApplyState.Done(profileName, succeeded, failed + unconfirmed, cancelled)
 }
 
 /**
@@ -140,6 +145,20 @@ class AppsViewModel(app: Application) : AndroidViewModel(app) {
     // veche cand pornim una noua sau cand conexiunea se schimba (altfel doua
     // pase scriu concurent in _portalApps).
     private var portalLoadJob: Job? = null
+    private var activeInstallSession: AdbSession? = null
+    @Volatile private var profileGeneration = 0L
+    private val _profileResults = MutableStateFlow<ProfileApplyState.Done?>(null)
+    val profileResults: StateFlow<ProfileApplyState.Done?> = _profileResults.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            var previous = holder.capture()
+            holder.session.collect { current ->
+                if (current != previous) onDisconnected()
+                previous = current
+            }
+        }
+    }
 
     fun setPortalAppsSort(sort: PortalAppsSort) {
         _portalAppsSort.value = sort
@@ -173,138 +192,107 @@ class AppsViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun installApp(context: Context, app: InstalledApp) {
-        val d = holder.dadb.value ?: return
-        // Garda de reintrare: un dublu-tap sau un apel programatic poate ajunge
-        // aici inainte ca UI-ul sa dezactiveze butonul. Nu pornim o a doua instalare.
-        if (_installState.value is InstallState.Installing) return
-        if (_profileApplyState.value is ProfileApplyState.Applying) {
-            _installState.value = InstallState.Failed(context.getString(R.string.profile_install_busy))
-            return
-        }
-        installJob = viewModelScope.launch {
-            val compatibilityError = validatePortalApp(context, app.name, app.minSdkVersion)
-            if (compatibilityError != null) {
-                _installState.value = InstallState.Failed(compatibilityError)
-                addHistory(
-                    context.getString(R.string.history_blocked_item, app.name, compatibilityError),
-                    success = false
-                )
-                return@launch
-            }
-
-            val baseApk = File(app.sourceDir)
-            val splits = app.splitSourceDirs?.map { File(it) }.orEmpty()
-            val totalSize = baseApk.length() + splits.sumOf { it.length() }
-
-            var elapsed = 0
-            _installState.value = InstallState.Installing(elapsed, totalSize)
-            val tickerJob = launch {
-                while (isActive) {
-                    delay(1000)
-                    elapsed++
-                    _installState.value = InstallState.Installing(elapsed, totalSize)
-                }
-            }
-
-            val result = if (splits.isEmpty()) {
-                connectionManager.installApk(context, d, baseApk)
-            } else {
-                connectionManager.installMultipleApks(context, d, listOf(baseApk) + splits)
-            }
-            tickerJob.cancel()
-
-            result
-                .onSuccess {
-                    _installState.value = InstallState.Success
-                    addHistory(context.getString(R.string.history_installed_item, app.name), success = true)
-                }
-                .onFailure { e ->
-                    val msg = e.message ?: context.getString(R.string.error_install_failed_generic)
-                    _installState.value = InstallState.Failed(msg)
-                    addHistory(context.getString(R.string.history_failed_item, app.name, msg), success = false)
-                }
-        }
+        beginInstall(context, app.name, app.minSdkVersion, prepare = {
+            listOf(File(app.sourceDir)) + app.splitSourceDirs.orEmpty().map(::File)
+        })
     }
 
     fun installApkFromUri(context: Context, uri: Uri) {
-        val d = holder.dadb.value ?: return
-        // Aceeasi garda de reintrare ca la installApp.
-        if (_installState.value is InstallState.Installing) return
-        if (_profileApplyState.value is ProfileApplyState.Applying) {
+        var temporary: File? = null
+        beginInstall(context, "APK", null, prepare = {
+            withContext(Dispatchers.IO) {
+                val input = context.contentResolver.openInputStream(uri)
+                    ?: throw IllegalStateException(context.getString(R.string.error_read_apk_failed))
+                input.use {
+                    val file = File.createTempFile("upload-", ".apk", context.cacheDir)
+                    temporary = file
+                    file.outputStream().use { output ->
+                        val buffer = ByteArray(64 * 1024)
+                        while (true) {
+                            kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                            val count = it.read(buffer)
+                            if (count < 0) break
+                            output.write(buffer, 0, count)
+                        }
+                    }
+                    listOf(file)
+                }
+            }
+        }, cleanup = { temporary?.delete(); Unit },
+            labelProvider = { ContentUriHelper.getDisplayName(context, uri) ?: "APK" })
+    }
+
+    private fun beginInstall(
+        context: Context, label: String, minSdk: Int?,
+        prepare: suspend () -> List<File>, cleanup: () -> Unit = {},
+        labelProvider: suspend () -> String = { label }
+    ) {
+        val session = holder.capture() ?: return
+        if (installJob?.isCompleted == false) return
+        if (profileApplyJob?.isCompleted == false) {
             _installState.value = InstallState.Failed(context.getString(R.string.profile_install_busy))
             return
         }
-        installJob = viewModelScope.launch {
-            _installState.value = InstallState.Installing()
-
-            val apkFile = withContext(Dispatchers.IO) {
-                val inputStream = context.contentResolver.openInputStream(uri) ?: return@withContext null
-                val tempFile = File(context.cacheDir, "upload_${System.nanoTime()}.apk")
-                tempFile.outputStream().use { output -> inputStream.copyTo(output) }
-                inputStream.close()
-                tempFile
-            }
-
-            if (apkFile == null) {
-                _installState.value = InstallState.Failed(context.getString(R.string.error_read_apk_failed))
-                return@launch
-            }
-
-            val fileName = ContentUriHelper.getDisplayName(context, uri) ?: apkFile.name
-            val compatibilityError = readArchiveMinSdk(context, apkFile)?.let { minSdk ->
-                validatePortalApp(context, fileName, minSdk)
-            }
-            if (compatibilityError != null) {
-                apkFile.delete()
-                _installState.value = InstallState.Failed(compatibilityError)
-                addHistory(
-                    context.getString(R.string.history_custom_apk_blocked, fileName, compatibilityError),
-                    success = false
+        activeInstallSession = session
+        _installState.value = InstallState.Installing()
+        installJob = holder.launchForSession(viewModelScope, session) {
+            var ticker: Job? = null
+            try {
+                val actualLabel = labelProvider()
+                val apks = prepare()
+                holder.ensureCurrent(session)
+                val totalSize = apks.sumOf { it.length() }
+                var elapsed = 0
+                _installState.value = InstallState.Installing(0, totalSize)
+                ticker = launch {
+                    while (isActive) {
+                        delay(1000)
+                        _installState.value = InstallState.Installing(++elapsed, totalSize)
+                    }
+                }
+                val result = if (apks.size == 1) {
+                    connectionManager.installApk(context, session.dadb, apks.single(), minSdk)
+                } else connectionManager.installMultipleApks(context, session.dadb, apks, minSdk)
+                ticker.cancel()
+                holder.ensureCurrent(session)
+                _installState.value = result.fold(
+                    onSuccess = { InstallState.Success },
+                    onFailure = { InstallState.Failed(it.message ?: context.getString(R.string.error_unknown)) }
                 )
-                return@launch
+                addHistory(if (result.isSuccess) context.getString(R.string.history_installed_item, actualLabel)
+                    else context.getString(R.string.history_failed_item, actualLabel, result.exceptionOrNull()?.message.orEmpty()),
+                    result.isSuccess)
+            } catch (e: CancellationException) {
+                if (activeInstallSession == session) _installState.value = InstallState.Failed(
+                    "Cancelled; an in-flight device installation may still finish", cancelled = true)
+                throw e
+            } catch (e: Exception) {
+                if (holder.isCurrent(session)) _installState.value = InstallState.Failed(
+                    e.message ?: context.getString(R.string.error_unknown))
+            } finally {
+                ticker?.cancel()
+                withContext(kotlinx.coroutines.NonCancellable + Dispatchers.IO) { cleanup() }
             }
-
-            var elapsed = 0
-            _installState.value = InstallState.Installing(elapsed, apkFile.length())
-            val tickerJob = launch {
-                while (isActive) {
-                    delay(1000)
-                    elapsed++
-                    _installState.value = InstallState.Installing(elapsed, apkFile.length())
-                }
-            }
-
-            connectionManager.installApk(context, d, apkFile)
-                .onSuccess {
-                    tickerJob.cancel()
-                    apkFile.delete()
-                    _installState.value = InstallState.Success
-                    addHistory(context.getString(R.string.history_custom_apk_installed, fileName), success = true)
-                }
-                .onFailure { e ->
-                    tickerJob.cancel()
-                    apkFile.delete()
-                    val msg = e.message ?: context.getString(R.string.error_install_failed_generic)
-                    _installState.value = InstallState.Failed(msg)
-                    addHistory(context.getString(R.string.history_custom_apk_failed, msg), success = false)
-                }
         }
     }
 
     fun loadPortalPackages(context: Context) {
-        val d = holder.dadb.value
-        if (d == null) {
+        val session = holder.capture()
+        if (session == null) {
             _portalPackages.value = emptyList()
             _portalPackagesError.value = context.getString(R.string.error_connect_first_for_portal_apps)
             return
         }
         // Anulam o incarcare anterioara ca sa nu se suprapuna scrierile in _portalApps.
         portalLoadJob?.cancel()
-        portalLoadJob = viewModelScope.launch {
+        val d = session.dadb
+        portalLoadJob = holder.launchForSession(viewModelScope, session) {
             _isLoadingPortalPackages.value = true
             _portalPackagesError.value = null
             connectionManager.listPortalPackages(context, d)
                 .onSuccess {
+                    holder.ensureCurrent(session)
+
                     _portalApps.value = emptyList()
                     _portalPackages.value = it
                     _portalPackagesError.value = null
@@ -314,11 +302,15 @@ class AppsViewModel(app: Application) : AndroidViewModel(app) {
                     // anularea incarcarii sa opreasca si detaliile + iconitele.
                     connectionManager.listPortalApps(context, d)
                         .onSuccess { details ->
+                            holder.ensureCurrent(session)
+
                             _portalApps.value = sortPortalApps(details, _portalAppsSort.value)
-                            enrichPortalApps(context, d)
+                            enrichPortalApps(context, session)
                         }
                 }
                 .onFailure { e ->
+                    holder.ensureCurrent(session)
+
                     _portalApps.value = emptyList()
                     _portalPackages.value = emptyList()
                     _portalPackagesError.value =
@@ -329,16 +321,22 @@ class AppsViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun uninstallApp(context: Context, packageName: String) {
-        val d = holder.dadb.value ?: return
-        viewModelScope.launch {
+        val session = holder.capture() ?: return
+        val d = session.dadb
+        holder.launchForSession(viewModelScope, session) {
             _uninstallState.value = UninstallState.InProgress(packageName)
             connectionManager.uninstallApp(context, d, packageName)
                 .onSuccess {
+                    holder.ensureCurrent(session)
+
                     _uninstallState.value = UninstallState.Success
                     addHistory(context.getString(R.string.history_uninstalled_item, packageName), success = true)
+                    holder.ensureCurrent(session)
                     loadPortalPackages(context)
                 }
                 .onFailure { e ->
+                    holder.ensureCurrent(session)
+
                     val msg = e.message ?: context.getString(R.string.error_uninstall_failed_generic)
                     _uninstallState.value = UninstallState.Failed(msg)
                     addHistory(
@@ -350,26 +348,30 @@ class AppsViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun applyProfile(context: Context, profile: AppProfile, availableApps: List<InstalledApp>) {
-        val connection = holder.dadb.value
-        if (connection == null) {
+        val session = holder.capture()
+        if (session == null) {
             _profileApplyState.value = ProfileApplyState.Failed(context.getString(R.string.profile_connect_first))
             return
         }
-        if (_profileApplyState.value is ProfileApplyState.Applying ||
-            _installState.value is InstallState.Installing
+        if (profileApplyJob?.isCompleted == false ||
+            installJob?.isCompleted == false
         ) {
             _profileApplyState.value = ProfileApplyState.Failed(context.getString(R.string.profile_install_busy))
             return
         }
 
-        profileApplyJob = viewModelScope.launch {
+        val connection = session.dadb
+        val generation = ++profileGeneration
+        val packages = profile.packageNames.sorted()
+        val results = mutableListOf<Pair<String, Boolean>>()
+        val reasons = mutableMapOf<String, String>()
+        _profileApplyState.value = ProfileApplyState.Applying(profile.name, 0, profile.packageNames.size, "")
+        profileApplyJob = holder.launchForSession(viewModelScope, session) {
             val appsByPackage = availableApps.associateBy { it.packageName }
-            val packages = profile.packageNames.sorted()
-            val results = mutableListOf<Pair<String, Boolean>>()
-            val reasons = mutableMapOf<String, String>()
 
             try {
                 packages.forEachIndexed { index, packageName ->
+                    holder.ensureCurrent(session)
                     val app = appsByPackage[packageName]
                     _profileApplyState.value = ProfileApplyState.Applying(
                         profileName = profile.name,
@@ -385,20 +387,14 @@ class AppsViewModel(app: Application) : AndroidViewModel(app) {
                         return@forEachIndexed
                     }
 
-                    val compatibilityError = validatePortalApp(context, app.name, app.minSdkVersion)
-                    if (compatibilityError != null) {
-                        results += packageName to false
-                        reasons[packageName] = compatibilityError
-                        return@forEachIndexed
-                    }
-
                     val baseApk = File(app.sourceDir)
                     val splits = app.splitSourceDirs?.map(::File).orEmpty()
                     val result = if (splits.isEmpty()) {
-                        connectionManager.installApk(context, connection, baseApk)
+                        connectionManager.installApk(context, connection, baseApk, app.minSdkVersion)
                     } else {
-                        connectionManager.installMultipleApks(context, connection, listOf(baseApk) + splits)
+                        connectionManager.installMultipleApks(context, connection, listOf(baseApk) + splits, app.minSdkVersion)
                     }
+                    holder.ensureCurrent(session)
                     if (result.isSuccess) {
                         results += packageName to true
                     } else {
@@ -407,13 +403,11 @@ class AppsViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 }
             } catch (e: CancellationException) {
-                // Anulare voita: raportam ce s-a apucat, restul raman neinstalate.
-                _profileApplyState.value = foldProfileResults(results, profile.name, reasons)
-                loadPortalPackages(context)
                 throw e
             }
 
             val done = foldProfileResults(results, profile.name, reasons)
+                .copy(deviceLabel = session.label, sessionGeneration = session.generation)
             val message = if (done.failed.isEmpty()) {
                 context.getString(R.string.profile_apply_success, profile.name, done.succeeded.size)
             } else {
@@ -424,23 +418,38 @@ class AppsViewModel(app: Application) : AndroidViewModel(app) {
                     done.failed.size
                 )
             }
+            _profileResults.value = done
             _profileApplyState.value = done
             addHistory(message, success = done.failed.isEmpty())
+            holder.ensureCurrent(session)
             loadPortalPackages(context)
+        }
+        profileApplyJob?.invokeOnCompletion { failure ->
+            if (failure is CancellationException && generation == profileGeneration) {
+                val done = foldProfileResults(results, profile.name, reasons, packages, cancelled = true)
+                    .copy(deviceLabel = session.label, sessionGeneration = session.generation)
+                _profileResults.value = done
+                if (holder.isCurrent(session)) _profileApplyState.value = done
+            }
         }
     }
 
     /** Anuleaza instalarea in curs (daca exista). */
     fun cancelInstall() {
-        installJob?.cancel()
-        installJob = null
-        _installState.value = InstallState.Idle
+        if (installJob?.isCompleted == false) {
+            installJob?.cancel()
+            _installState.value = InstallState.Failed(
+                "Cancelled; an in-flight device installation may still finish", cancelled = true)
+        }
     }
 
     /** Anuleaza aplicarea profilului in curs (daca exista). */
     fun cancelProfileApply() {
-        profileApplyJob?.cancel()
-        profileApplyJob = null
+        if (profileApplyJob?.isCompleted == false) {
+            _profileApplyState.value = ProfileApplyState.Failed(
+                "Cancellation requested; an in-flight device installation may still finish")
+            profileApplyJob?.cancel()
+        }
     }
 
     /**
@@ -448,7 +457,8 @@ class AppsViewModel(app: Application) : AndroidViewModel(app) {
      * ce APK-urile sunt descarcate si puse in cache. Actualizeaza fluxul dupa
      * fiecare aplicatie, ca UI-ul sa afiseze iconitele progresiv.
      */
-    private suspend fun enrichPortalApps(context: Context, d: Dadb) {
+    private suspend fun enrichPortalApps(context: Context, session: AdbSession) {
+        val d = session.dadb
         withContext(Dispatchers.IO) {
             val current = _portalApps.value
             current.forEach { app ->
@@ -456,6 +466,8 @@ class AppsViewModel(app: Application) : AndroidViewModel(app) {
                 // noua incarcare, aceasta bucla se opreste curat.
                 if (!isActive) return@forEach
                 val enriched = connectionManager.enrichPortalApp(context, d, app)
+                kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                holder.ensureCurrent(session)
                 if (enriched != app) {
                     _portalApps.value = sortPortalApps(
                         _portalApps.value.map { if (it.packageName == app.packageName) enriched else it },
@@ -467,15 +479,20 @@ class AppsViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun forceStopApp(context: Context, packageName: String) {
-        val d = holder.dadb.value ?: return
-        viewModelScope.launch {
+        val session = holder.capture() ?: return
+        val d = session.dadb
+        holder.launchForSession(viewModelScope, session) {
             connectionManager.forceStopApp(context, d, packageName)
                 .onSuccess {
+                    holder.ensureCurrent(session)
+
                     _appActionState.value = AppActionState.Done(
                         context.getString(R.string.apps_force_stopped, packageName)
                     )
                 }
                 .onFailure {
+                    holder.ensureCurrent(session)
+
                     _appActionState.value = AppActionState.Failed(
                         it.message ?: context.getString(R.string.error_unknown)
                     )
@@ -484,15 +501,20 @@ class AppsViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun clearAppData(context: Context, packageName: String) {
-        val d = holder.dadb.value ?: return
-        viewModelScope.launch {
+        val session = holder.capture() ?: return
+        val d = session.dadb
+        holder.launchForSession(viewModelScope, session) {
             connectionManager.clearAppData(context, d, packageName)
                 .onSuccess {
+                    holder.ensureCurrent(session)
+
                     _appActionState.value = AppActionState.Done(
                         context.getString(R.string.apps_data_cleared, packageName)
                     )
                 }
                 .onFailure {
+                    holder.ensureCurrent(session)
+
                     _appActionState.value = AppActionState.Failed(
                         it.message ?: context.getString(R.string.error_unknown)
                     )
@@ -501,15 +523,20 @@ class AppsViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun launchApp(context: Context, packageName: String) {
-        val d = holder.dadb.value ?: return
-        viewModelScope.launch {
+        val session = holder.capture() ?: return
+        val d = session.dadb
+        holder.launchForSession(viewModelScope, session) {
             connectionManager.launchApp(d, packageName)
                 .onSuccess {
+                    holder.ensureCurrent(session)
+
                     _appActionState.value = AppActionState.Done(
                         context.getString(R.string.apps_launched, packageName)
                     )
                 }
                 .onFailure {
+                    holder.ensureCurrent(session)
+
                     _appActionState.value = AppActionState.Failed(
                         it.message ?: context.getString(R.string.error_unknown)
                     )
@@ -535,40 +562,20 @@ class AppsViewModel(app: Application) : AndroidViewModel(app) {
 
     fun clearPortalPackagesError() {
         _portalPackagesError.value = null
+        _profileApplyState.value = ProfileApplyState.Idle
     }
 
     /** Resetează starea dependentă de conexiune când Portal-ul se deconectează. */
     fun onDisconnected() {
+        cancelInstall()
+        cancelProfileApply()
+        activeInstallSession = null
         portalLoadJob?.cancel()
-        portalLoadJob = null
-        _installState.value = InstallState.Idle
-        _profileApplyState.value = ProfileApplyState.Idle
+        _portalPackages.value = emptyList()
+        _portalApps.value = emptyList()
+        _isLoadingPortalPackages.value = false
         _portalPackagesError.value = null
-    }
-
-    private fun validatePortalApp(context: Context, label: String, minSdkVersion: Int): String? {
-        return if (!InstallPolicy.isCompatible(minSdkVersion)) {
-            context.getString(
-                R.string.error_portal_sdk_incompatible,
-                label,
-                minSdkVersion,
-                PortalDeviceConfig.MAX_SDK
-            )
-        } else {
-            null
-        }
-    }
-
-    private fun readArchiveMinSdk(context: Context, apkFile: File): Int? {
-        val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            context.packageManager.getPackageArchiveInfo(
-                apkFile.absolutePath,
-                android.content.pm.PackageManager.PackageInfoFlags.of(0)
-            )
-        } else {
-            @Suppress("DEPRECATION")
-            context.packageManager.getPackageArchiveInfo(apkFile.absolutePath, 0)
-        }
-        return packageInfo?.applicationInfo?.minSdkVersion
+        _uninstallState.value = UninstallState.Idle
+        _appActionState.value = AppActionState.Idle
     }
 }

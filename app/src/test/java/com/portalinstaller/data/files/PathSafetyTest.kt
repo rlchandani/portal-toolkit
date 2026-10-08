@@ -5,6 +5,15 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PathSafetyTest {
+    @Test fun `traversal is normalized before confinement`() {
+        assertTrue(!PathSafety.isWithinSdcard("/sdcard/../data/local/tmp"))
+        assertTrue(!PathSafety.isWithinSdcard("/sdcard/Pictures/../../data"))
+        assertTrue(PathSafety.isWithinSdcard("/sdcard/Pictures/../Download"))
+        assertTrue(PathSafety.isWithinSdcard("//sdcard///Pictures/./file"))
+        assertThrows(IllegalArgumentException::class.java) {
+            PathSafety.requireAllowed("/sdcard/\u0000file", false)
+        }
+    }
     @Test fun `sdcard paths are within`() {
         assertTrue(PathSafety.isWithinSdcard("/sdcard/DCIM/x.jpg"))
         assertTrue(PathSafety.isWithinSdcard("/sdcard"))

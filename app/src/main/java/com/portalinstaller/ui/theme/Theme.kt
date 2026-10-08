@@ -1,12 +1,17 @@
 package com.portalinstaller.ui.theme
 
 import android.os.Build
+import android.app.Activity
+import android.content.ContextWrapper
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.view.WindowCompat
 import com.portalinstaller.data.store.ThemeMode
 
 /** Rezolvă dacă tema efectivă este întunecată, ținând cont de alegerea utilizatorului. */
@@ -43,6 +48,21 @@ fun PortalTheme(
         }
         darkTheme -> DarkColors
         else -> LightColors
+    }
+    val context = LocalContext.current
+    SideEffect {
+        var current = context
+        while (current is ContextWrapper && current !is Activity) current = current.baseContext
+        (current as? Activity)?.window?.let { window ->
+            @Suppress("DEPRECATION")
+            window.statusBarColor = colorScheme.surface.toArgb()
+            @Suppress("DEPRECATION")
+            window.navigationBarColor = colorScheme.surface.toArgb()
+            WindowCompat.getInsetsController(window, window.decorView).apply {
+                isAppearanceLightStatusBars = !darkTheme
+                isAppearanceLightNavigationBars = !darkTheme
+            }
+        }
     }
     MaterialTheme(colorScheme = colorScheme, content = content)
 }

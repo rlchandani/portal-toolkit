@@ -133,6 +133,7 @@ fun MainScreen(
     val isLoadingPortalPackages by appsViewModel.isLoadingPortalPackages.collectAsStateWithLifecycle()
     val portalPackagesError by appsViewModel.portalPackagesError.collectAsStateWithLifecycle()
     val profileApplyState by appsViewModel.profileApplyState.collectAsStateWithLifecycle()
+    val retainedProfileResults by appsViewModel.profileResults.collectAsStateWithLifecycle()
     val portalAppsSort by appsViewModel.portalAppsSort.collectAsStateWithLifecycle()
     val appActionState by appsViewModel.appActionState.collectAsStateWithLifecycle()
 
@@ -437,8 +438,7 @@ fun MainScreen(
                 }
             }
 
-            val isWifiConnected = connectionState is ConnectionState.Connected &&
-                connectionMethod == ConnectionMethod.WIFI
+            val isWifiConnected = connectionState is ConnectionState.Connected
             val activePortalName = savedPortals.firstOrNull {
                 it.ip == ipAddress && it.port == (port.toIntOrNull() ?: 5555)
             }?.name
@@ -467,7 +467,9 @@ fun MainScreen(
                     uninstallState = uninstallState,
                     portalAppsSort = portalAppsSort,
                     profiles = appProfiles,
-                    profileApplyState = profileApplyState,
+                    profileApplyState = if (profileApplyState is ProfileApplyState.Idle)
+                        retainedProfileResults ?: profileApplyState else profileApplyState,
+                    targetSdk = deviceStatus?.sdk?.toIntOrNull(),
                     onOpenDevices = { navigateToTab(PortalRoute.Devices) },
                     onPickFile = {
                         apkPickerLauncher.launch("application/vnd.android.package-archive")

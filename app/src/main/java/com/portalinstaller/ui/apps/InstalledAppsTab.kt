@@ -87,7 +87,8 @@ internal fun InstalledAppsTab(
     selectedUri: Uri?,
     onPickFile: () -> Unit,
     onInstall: (InstalledApp) -> Unit,
-    onInstallCustomApk: (Uri) -> Unit
+    onInstallCustomApk: (Uri) -> Unit,
+    targetSdk: Int? = null,
 ) {
     val installBusy = installState is InstallState.Installing || externalInstallBusy
     var searchQuery by remember { mutableStateOf("") }
@@ -261,6 +262,7 @@ internal fun InstalledAppsTab(
                         context = context,
                         isConnected = connectionState is ConnectionState.Connected,
                         isInstalling = installBusy,
+                        targetSdk = targetSdk,
                         onInstall = {
                             val totalSize = app.apkSize +
                                 (app.splitSourceDirs?.sumOf { java.io.File(it).length() } ?: 0L)
@@ -326,9 +328,10 @@ internal fun InstalledAppItem(
     context: Context,
     isConnected: Boolean,
     isInstalling: Boolean,
-    onInstall: () -> Unit
+    onInstall: () -> Unit,
+    targetSdk: Int? = null,
 ) {
-    val isPortalCompatible = InstallPolicy.isCompatible(app.minSdkVersion)
+    val isPortalCompatible = targetSdk?.let { InstallPolicy.isCompatible(app.minSdkVersion, it) } ?: true
     val hasSplitApks = !app.splitSourceDirs.isNullOrEmpty()
     val pm = context.packageManager
     val icon by produceState<ImageBitmap?>(initialValue = null, app.packageName) {
@@ -390,12 +393,12 @@ internal fun InstalledAppItem(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                if (!InstallPolicy.isCompatible(app.minSdkVersion)) {
+                if (!isPortalCompatible) {
                 Text(
                     text = stringResource(
                         R.string.portal_api_incompatible,
                         app.minSdkVersion,
-                        PortalDeviceConfig.MAX_SDK
+                        targetSdk ?: app.minSdkVersion
                     ),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.error

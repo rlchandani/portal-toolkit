@@ -10,6 +10,13 @@ class AnnexBSplitterTest {
 
     private fun bytes(vararg v: Int): ByteArray = ByteArray(v.size) { v[it].toByte() }
 
+    @Test fun `NAL exactly at byte limit is emitted before following prefix`() {
+        val splitter = AnnexBSplitter(maxNalBytes = 8)
+        val result = splitter.feed(bytes(0, 0, 1, 0x65, 2, 2, 2, 2, 0, 0, 1, 0x41))
+        assertEquals(1, result.size)
+        assertArrayEquals(bytes(0, 0, 1, 0x65, 2, 2, 2, 2), result.single())
+    }
+
     @Test
     fun `emits complete NALs and retains the last incomplete one`() {
         val splitter = AnnexBSplitter()

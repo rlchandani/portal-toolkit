@@ -3,6 +3,12 @@ package com.portalinstaller.data.tools
 import dadb.Dadb
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
@@ -33,6 +39,7 @@ object ScreenMirrorManager {
         val m = SIZE_REGEX.find(chosen) ?: return null
         val w = m.groupValues[1].toIntOrNull() ?: return null
         val h = m.groupValues[2].toIntOrNull() ?: return null
+        if (w <= 0 || h <= 0 || w > 8192 || h > 8192) return null
         return MirrorSize(w, h)
     }
 
@@ -54,26 +61,34 @@ object ScreenMirrorManager {
             "--size ${size.width}x${size.height} -"
         while (currentCoroutineContext().isActive) {
             val adbStream = dadb.open(command)
-            try {
-                val source = adbStream.source
-                val buffer = ByteArray(CHUNK_SIZE)
-                var emittedAny = false
-                while (currentCoroutineContext().isActive) {
-                    val read = source.read(buffer)
-                    if (read == -1) break
-                    if (read > 0) {
-                        emittedAny = true
-                        emit(buffer.copyOf(read))
+            coroutineScope {
+                // A blocking Dadb read does not observe Job cancellation. A sibling IO
+                // coroutine closes this stream as soon as its owner is cancelled.
+                val closer = launch(Dispatchers.IO, start = CoroutineStart.UNDISPATCHED) {
+                    try { awaitCancellation() } finally { runCatching { adbStream.close() } }
+                }
+                try {
+                    val source = adbStream.source
+                    val buffer = ByteArray(CHUNK_SIZE)
+                    var emittedAny = false
+                    while (currentCoroutineContext().isActive) {
+                        val read = source.read(buffer)
+                        if (read == -1) break
+                        if (read > 0) {
+                            emittedAny = true
+                            emit(buffer.copyOf(read))
+                        }
                     }
+                    currentCoroutineContext().ensureActive()
+                    if (!emittedAny) {
+                        throw MirrorUnsupportedException("screenrecord nu a produs cadre")
+                    }
+                    emit(ByteArray(0)) // explicit recorder boundary for the Annex-B parser
+                } finally {
+                    closer.cancel()
+                    runCatching { adbStream.close() }
                 }
-                // Daca stream-ul s-a inchis fara niciun octet, screenrecord a
-                // esuat (suprafata securizata / neacceptat) — semnalam.
-                if (!emittedAny) {
-                    throw MirrorUnsupportedException("screenrecord nu a produs cadre")
-                }
-            } finally {
-                runCatching { adbStream.close() }
             }
         }
-    }.flowOn(Dispatchers.IO)
+    }.flowOn(Dispatchers.IO).buffer(0)
 }

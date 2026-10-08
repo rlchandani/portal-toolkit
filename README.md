@@ -2,12 +2,25 @@
 
 Portal Toolkit is an Android app for managing Meta/Facebook Portal devices directly from a phone.
 
-It connects to a Portal over Wi-Fi ADB or USB OTG and makes common setup and maintenance tasks much easier.
+The Immortal control center pairs over local Wi-Fi for everyday controls, photo
+uploads, settings, home layouts, routines, catalog apps, and Jarvis management.
+Advanced device tools retain Wi-Fi ADB and USB OTG for provisioning and maintenance.
 
-The current release is **v1.1.0**.
+The current development build is **1.5.0-control-center**. See
+[Companion setup and capabilities](docs/companion-control-center.md).
 
 ## Features
 
+- Native Home, Remote, Photos, Apps, and Settings in one continuous interface
+- Saved pairing for multiple Immortal Portals and local network discovery
+- Touchpad, keyboard, navigation, media, and volume controls
+- Photo import with retained per-image outcomes, folder activation, and slideshow preview
+- Complete server-provided settings registry, search, and an Advanced toggle
+- Home widget ordering and resizing, with stale-save protection
+- Saved scenes and local weekday schedules
+- Credential-free settings/layout snapshot files
+- Catalog installs and updates with retained operation results
+- Jarvis model, microphone status, and opt-in local wake management
 - Install APKs from apps already on the phone
 - Install custom APK files directly to the Portal
 - Upload photos
@@ -34,7 +47,7 @@ Other Portal generations may work, but have not been fully tested. Feedback and 
 
 Portal Toolkit is meant for people still repurposing Portal devices and who want a simpler phone-based tool for setup, testing, and maintenance.
 
-It is not meant to replace projects like Immortal, but to complement them as a bootstrap, provisioning, and utility tool.
+It complements Immortal as both a daily companion and a provisioning utility.
 
 ## Download
 

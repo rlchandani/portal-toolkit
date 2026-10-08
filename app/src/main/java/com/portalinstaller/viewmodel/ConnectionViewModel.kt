@@ -16,6 +16,10 @@ import com.portalinstaller.data.OsUpdateBlockStatus
 import com.portalinstaller.data.UsbPortalHelper
 import com.portalinstaller.data.store.HistoryEntry
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -88,6 +92,8 @@ class ConnectionViewModel(app: Application) : AndroidViewModel(app) {
     private var lastWifiHost: String? = null
     private var lastWifiPort: Int = 5555
     private var isUsbConnection = false
+    private var connectionJob: Job? = null
+    private var connectionGeneration = 0L
 
     /** Jurnalul de conexiune (heartbeat + reconectări), pentru DevicesTab. */
     val connectionEvents: StateFlow<List<ConnectionEvent>> = monitor.events
@@ -122,10 +128,18 @@ class ConnectionViewModel(app: Application) : AndroidViewModel(app) {
         // trec amandoua de garda (starea Connecting se scria abia in coroutina),
         // lansand doua conectari si scapand un Dadb neinchis.
         if (_connectionState.value is ConnectionState.Connecting) return
+        monitor.stop()
+        holder.clear()
+        clearDeviceState()
+        val generation = ++connectionGeneration
         _connectionState.value = ConnectionState.Connecting
-        viewModelScope.launch {
+        connectionJob = viewModelScope.launch {
             connectionManager.connect(context, ip, port)
                 .onSuccess { d ->
+                    if (generation != connectionGeneration) {
+                        withContext(Dispatchers.IO) { runCatching { d.close() } }
+                        return@launch
+                    }
                     holder.set(d, context.getString(R.string.connection_method_wifi))
                     _connectionMethod.value = ConnectionMethod.WIFI
                     _connectionState.value = ConnectionState.Connected
@@ -138,6 +152,7 @@ class ConnectionViewModel(app: Application) : AndroidViewModel(app) {
                     refreshOsUpdateStatus(context)
                 }
                 .onFailure { e ->
+                    if (generation != connectionGeneration) return@launch
                     _connectionState.value = ConnectionState.Error(
                         e.message ?: context.getString(R.string.error_unknown)
                     )
@@ -148,10 +163,18 @@ class ConnectionViewModel(app: Application) : AndroidViewModel(app) {
     fun connectUsb(context: Context) {
         // Aceeasi sentinela sincrona ca la connect() pentru a evita TOCTOU.
         if (_connectionState.value is ConnectionState.Connecting) return
+        monitor.stop()
+        holder.clear()
+        clearDeviceState()
+        val generation = ++connectionGeneration
         _connectionState.value = ConnectionState.Connecting
-        viewModelScope.launch {
+        connectionJob = viewModelScope.launch {
             UsbPortalHelper.connect(context)
                 .onSuccess { d ->
+                    if (generation != connectionGeneration) {
+                        withContext(Dispatchers.IO) { runCatching { d.close() } }
+                        return@launch
+                    }
                     holder.set(d, context.getString(R.string.connection_method_usb))
                     _connectionMethod.value = ConnectionMethod.USB
                     _connectionState.value = ConnectionState.Connected
@@ -163,6 +186,7 @@ class ConnectionViewModel(app: Application) : AndroidViewModel(app) {
                     refreshOsUpdateStatus(context)
                 }
                 .onFailure { e ->
+                    if (generation != connectionGeneration) return@launch
                     val msg = e.message ?: context.getString(R.string.error_usb_connection_open_failed)
                     _connectionState.value = ConnectionState.Error(msg)
                     addHistory(context.getString(R.string.history_usb_connect_failed, msg), success = false)
@@ -175,11 +199,14 @@ class ConnectionViewModel(app: Application) : AndroidViewModel(app) {
      * Wi-Fi refolosește ultimul host/port; USB refolosește helper-ul USB.
      */
     private fun startMonitor(context: Context) {
+        val generation = connectionGeneration
         monitor.start(
             scope = viewModelScope,
             ping = { pingConnection() },
-            reconnect = { attemptReconnect(context) },
-            onSignal = { signal -> handleMonitorSignal(context, signal) }
+            reconnect = { attemptReconnect(context, generation) },
+            onSignal = { signal ->
+                if (generation == connectionGeneration) handleMonitorSignal(context, signal)
+            }
         )
     }
 
@@ -191,16 +218,24 @@ class ConnectionViewModel(app: Application) : AndroidViewModel(app) {
      * finit pe conexiune, un link mort esueaza rapid in loc sa blocheze firul.
      */
     private suspend fun pingConnection(): Boolean = withContext(Dispatchers.IO) {
-        val d = holder.dadb.value ?: return@withContext false
+        val session = holder.capture() ?: return@withContext false
+        val d = session.dadb
         runCatching { d.shell("echo ok").output.trim() == "ok" }.getOrDefault(false)
     }
 
-    private suspend fun attemptReconnect(context: Context): Boolean {
+    private suspend fun attemptReconnect(context: Context, generation: Long): Boolean {
+        if (generation != connectionGeneration) return false
         val result = if (isUsbConnection) {
             UsbPortalHelper.connect(context)
         } else {
             val host = lastWifiHost ?: return false
             connectionManager.connect(context, host, lastWifiPort)
+        }
+        if (generation != connectionGeneration || !currentCoroutineContext().isActive) {
+            result.getOrNull()?.let { d ->
+                withContext(kotlinx.coroutines.NonCancellable + Dispatchers.IO) { runCatching { d.close() } }
+            }
+            return false
         }
         return result.onSuccess { d ->
             val label = if (isUsbConnection) {
@@ -215,6 +250,8 @@ class ConnectionViewModel(app: Application) : AndroidViewModel(app) {
     private fun handleMonitorSignal(context: Context, signal: MonitorSignal) {
         when (signal) {
             is MonitorSignal.Lost -> {
+                holder.clear()
+                clearDeviceState()
                 _connectionState.value = ConnectionState.Reconnecting(attempt = 0, nextRetryMs = 0)
             }
             is MonitorSignal.Reconnecting -> {
@@ -222,6 +259,7 @@ class ConnectionViewModel(app: Application) : AndroidViewModel(app) {
                     ConnectionState.Reconnecting(signal.attempt, signal.nextRetryMs)
             }
             is MonitorSignal.Reconnected -> {
+                _connectionMethod.value = if (isUsbConnection) ConnectionMethod.USB else ConnectionMethod.WIFI
                 _connectionState.value = ConnectionState.Connected
                 viewModelScope.launch {
                     addHistory(context.getString(R.string.history_reconnected), success = true)
@@ -240,23 +278,35 @@ class ConnectionViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun disconnect() {
+        connectionGeneration++
+        connectionJob?.cancel()
+        connectionJob = null
         monitor.stop()
         monitor.logEvent(ConnectionEventKind.DISCONNECTED)
         holder.clear()
         _connectionState.value = ConnectionState.Disconnected
+        clearDeviceState()
+    }
+
+    private fun clearDeviceState() {
         _connectionMethod.value = null
         _wirelessAdbState.value = WirelessAdbState.Idle
         _deviceStatus.value = null
         _osUpdateState.value = OsUpdateState.Idle
+        _powerControlState.value = PowerControlState.Idle
     }
 
     private fun refreshDeviceStatus() {
-        val d = holder.dadb.value ?: return
-        viewModelScope.launch {
+        val session = holder.capture() ?: return
+        val d = session.dadb
+        holder.launchForSession(viewModelScope, session) {
             // Un link mort poate arunca in mijlocul citirii getprop; fara
             // runCatching coroutina moare si dashboard-ul ramane inghetat.
             runCatching { connectionManager.getDeviceStatus(d) }
-                .onSuccess { _deviceStatus.value = it }
+                .onSuccess {
+                    holder.ensureCurrent(session)
+                    _deviceStatus.value = it
+                }
         }
     }
 
@@ -269,27 +319,33 @@ class ConnectionViewModel(app: Application) : AndroidViewModel(app) {
      * fiindcă dispozitivul repornește intenționat.
      */
     fun reboot(context: Context, recovery: Boolean) {
-        val d = holder.dadb.value ?: return
+        val session = holder.capture() ?: return
+        val d = session.dadb
         if (_powerControlState.value is PowerControlState.Working) return
-        viewModelScope.launch {
+        holder.launchForSession(viewModelScope, session) {
             _powerControlState.value = PowerControlState.Working
             connectionManager.reboot(d, recovery)
                 .onSuccess {
+                    holder.ensureCurrent(session)
+
                     val msg = context.getString(
                         if (recovery) R.string.power_reboot_recovery_done
                         else R.string.power_reboot_done
                     )
                     _powerControlState.value = PowerControlState.Success(msg)
                     addHistory(msg, success = true)
+                    holder.ensureCurrent(session)
                     monitor.stop()
                     monitor.logEvent(ConnectionEventKind.DISCONNECTED)
-                    holder.clear()
+                    holder.clearIfCurrent(session)
                     _connectionState.value = ConnectionState.Disconnected
                     _connectionMethod.value = null
                     _deviceStatus.value = null
                     _osUpdateState.value = OsUpdateState.Idle
                 }
                 .onFailure { e ->
+                    holder.ensureCurrent(session)
+
                     val msg = e.message ?: context.getString(R.string.error_unknown)
                     _powerControlState.value = PowerControlState.Failed(msg)
                     addHistory(context.getString(R.string.power_reboot_failed, msg), success = false)
@@ -298,12 +354,15 @@ class ConnectionViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun setScreenOn(context: Context, on: Boolean) {
-        val d = holder.dadb.value ?: return
+        val session = holder.capture() ?: return
+        val d = session.dadb
         if (_powerControlState.value is PowerControlState.Working) return
-        viewModelScope.launch {
+        holder.launchForSession(viewModelScope, session) {
             _powerControlState.value = PowerControlState.Working
             connectionManager.setScreenOn(d, on)
                 .onSuccess {
+                    holder.ensureCurrent(session)
+
                     _powerControlState.value = PowerControlState.Success(
                         context.getString(
                             if (on) R.string.power_screen_on_done else R.string.power_screen_off_done
@@ -311,6 +370,8 @@ class ConnectionViewModel(app: Application) : AndroidViewModel(app) {
                     )
                 }
                 .onFailure { e ->
+                    holder.ensureCurrent(session)
+
                     _powerControlState.value = PowerControlState.Failed(
                         e.message ?: context.getString(R.string.error_unknown)
                     )
@@ -319,18 +380,23 @@ class ConnectionViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun launchPortalApp(context: Context, packageName: String) {
-        val d = holder.dadb.value ?: return
+        val session = holder.capture() ?: return
+        val d = session.dadb
         if (_powerControlState.value is PowerControlState.Working) return
-        viewModelScope.launch {
+        holder.launchForSession(viewModelScope, session) {
             _powerControlState.value = PowerControlState.Working
             connectionManager.launchApp(d, packageName)
                 .onSuccess {
+                    holder.ensureCurrent(session)
+
                     _powerControlState.value = PowerControlState.Success(
                         context.getString(R.string.power_launch_done, packageName)
                     )
                     addHistory(context.getString(R.string.power_launch_done, packageName), success = true)
                 }
                 .onFailure { e ->
+                    holder.ensureCurrent(session)
+
                     val msg = e.message ?: context.getString(R.string.error_unknown)
                     _powerControlState.value = PowerControlState.Failed(msg)
                 }
@@ -342,18 +408,24 @@ class ConnectionViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun refreshOsUpdateStatus(context: Context) {
-        val connection = holder.dadb.value
-        if (connection == null) {
+        val session = holder.capture()
+        if (session == null) {
             _osUpdateState.value = OsUpdateState.Failed(
                 context.getString(R.string.update_block_connect_first)
             )
             return
         }
-        viewModelScope.launch {
+        val connection = session.dadb
+        holder.launchForSession(viewModelScope, session) {
             _osUpdateState.value = OsUpdateState.Loading
             runCatching { connectionManager.getOsUpdateBlockStatus(connection) }
-                .onSuccess { status -> _osUpdateState.value = OsUpdateState.Ready(status) }
+                .onSuccess { status ->
+                    holder.ensureCurrent(session)
+                    _osUpdateState.value = OsUpdateState.Ready(status)
+                }
                 .onFailure { error ->
+                    holder.ensureCurrent(session)
+
                     _osUpdateState.value = OsUpdateState.Failed(
                         error.message ?: context.getString(R.string.error_unknown)
                     )
@@ -362,17 +434,20 @@ class ConnectionViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun setOsUpdatesBlocked(context: Context, blocked: Boolean) {
-        val connection = holder.dadb.value
-        if (connection == null) {
+        val session = holder.capture()
+        if (session == null) {
             _osUpdateState.value = OsUpdateState.Failed(
                 context.getString(R.string.update_block_connect_first)
             )
             return
         }
-        viewModelScope.launch {
+        val connection = session.dadb
+        holder.launchForSession(viewModelScope, session) {
             _osUpdateState.value = OsUpdateState.Loading
             connectionManager.setOsUpdatesBlocked(connection, blocked)
                 .onSuccess { status ->
+                    holder.ensureCurrent(session)
+
                     _osUpdateState.value = OsUpdateState.Ready(status)
                     addHistory(
                         context.getString(
@@ -383,6 +458,8 @@ class ConnectionViewModel(app: Application) : AndroidViewModel(app) {
                     )
                 }
                 .onFailure { error ->
+                    holder.ensureCurrent(session)
+
                     val message = error.message ?: context.getString(R.string.error_unknown)
                     _osUpdateState.value = OsUpdateState.Failed(message)
                     addHistory(
@@ -394,20 +471,26 @@ class ConnectionViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun enableWirelessAdb(context: Context, port: Int = 5555) {
-        val d = holder.dadb.value ?: return
-        viewModelScope.launch {
+        val session = holder.capture() ?: return
+        val d = session.dadb
+        holder.launchForSession(viewModelScope, session) {
             _wirelessAdbState.value = WirelessAdbState.Enabling(port)
             connectionManager.enableWirelessAdb(context, d, port)
                 .onSuccess { message ->
+                    holder.ensureCurrent(session)
+
                     _wirelessAdbState.value = WirelessAdbState.Success(message)
                     addHistory(context.getString(R.string.history_wireless_adb_enabled, port), success = true)
+                    holder.ensureCurrent(session)
                     monitor.stop()
-                    holder.clear()
+                    holder.clearIfCurrent(session)
                     _connectionState.value = ConnectionState.Disconnected
                     _connectionMethod.value = null
                     _deviceStatus.value = null
                 }
                 .onFailure { e ->
+                    holder.ensureCurrent(session)
+
                     val msg = e.message ?: context.getString(R.string.error_enable_wireless_adb)
                     _wirelessAdbState.value = WirelessAdbState.Failed(msg)
                     addHistory(context.getString(R.string.history_wireless_adb_failed, msg), success = false)
@@ -451,7 +534,6 @@ class ConnectionViewModel(app: Application) : AndroidViewModel(app) {
 
     override fun onCleared() {
         super.onCleared()
-        monitor.stop()
-        holder.clear()
+        disconnect()
     }
 }

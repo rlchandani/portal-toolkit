@@ -1,6 +1,10 @@
 package com.portalinstaller.ui.tools.files
 
 import android.content.Context
+import android.content.Intent
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -34,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.portalinstaller.R
+import com.portalinstaller.data.AppContainer
 import com.portalinstaller.data.files.RemoteFile
 import com.portalinstaller.ui.common.formatFileSize
 import com.portalinstaller.viewmodel.FileTransferState
@@ -51,6 +56,29 @@ internal fun FilesTab(
 ) {
     val browser by viewModel.browser.collectAsStateWithLifecycle()
     val transfer by viewModel.transferState.collectAsStateWithLifecycle()
+    val results by viewModel.itemResults.collectAsStateWithLifecycle()
+    val holder = remember(context) { AppContainer.from(context).connectionHolder }
+    var downloadGeneration by remember { mutableStateOf<Long?>(null) }
+    var downloadSelection by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var destinationError by remember { mutableStateOf<String?>(null) }
+    val destinationPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) {
+            if (holder.capture()?.generation == downloadGeneration && browser.selection == downloadSelection) {
+                runCatching { context.contentResolver.takePersistableUriPermission(uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION) }
+                viewModel.pullSelected(context, uri)
+            } else destinationError = "The device or selection changed. Choose the files again."
+        }
+    }
+    fun download() {
+        destinationError = null
+        if (Build.VERSION.SDK_INT >= 29) viewModel.pullSelected(context)
+        else {
+            downloadGeneration = holder.capture()?.generation
+            downloadSelection = browser.selection.toSet()
+            destinationPicker.launch(null)
+        }
+    }
 
     var showNewFolder by remember { mutableStateOf(false) }
     var showMove by remember { mutableStateOf(false) }
@@ -99,13 +127,38 @@ internal fun FilesTab(
                 modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                AssistChip(onClick = { viewModel.pullSelected(context) }, label = { Text(stringResource(R.string.files_pull)) })
+                AssistChip(onClick = { download() }, label = { Text(stringResource(R.string.files_pull)) })
                 AssistChip(onClick = { showMove = true }, label = { Text(stringResource(R.string.files_move)) })
                 AssistChip(onClick = { showDeleteConfirm = true }, label = { Text(stringResource(R.string.files_delete)) })
                 if (selectedFiles.size == 1) {
                     AssistChip(onClick = { renameTarget = selectedFiles.first() }, label = { Text(stringResource(R.string.files_rename)) })
                 }
             }
+        }
+        destinationError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        if (results.isNotEmpty() && transfer !is FileTransferState.Working) {
+            Text("Last transfer · ${results.count { it.succeeded }} completed · ${results.count { !it.succeeded }} need attention",
+                style = MaterialTheme.typography.labelMedium)
+            results.filterNot { it.succeeded }.take(4).forEach { result ->
+                Text("${result.path.substringAfterLast('/')}: ${result.message.orEmpty()}",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            }
+            val retry = results.filter { !it.succeeded && it.operation == "pull" }
+            val currentSession = holder.capture()
+            if (retry.isNotEmpty()) TextButton(onClick = {
+                val fresh = holder.capture()
+                if (fresh != null && retry.all { it.sessionGeneration == fresh.generation }) {
+                    viewModel.clearSelection()
+                    retry.filter { result -> browser.entries.any { it.path == result.path } }.forEach { viewModel.toggleSelect(it.path) }
+                    if (Build.VERSION.SDK_INT >= 29) viewModel.pullSelected(context)
+                    else {
+                        downloadGeneration = fresh.generation
+                        downloadSelection = retry.map { it.path }.toSet()
+                        destinationPicker.launch(null)
+                    }
+                }
+            }, enabled = currentSession != null && retry.all { it.sessionGeneration == currentSession.generation }
+                && retry.all { result -> browser.entries.any { it.path == result.path } }) { Text("Retry failed downloads") }
         }
 
         (transfer as? FileTransferState.Working)?.let { w ->

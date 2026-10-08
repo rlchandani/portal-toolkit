@@ -12,79 +12,72 @@ package com.portalinstaller.data.tools
  * pe 4 octeti (00 00 00 01) este normalizat la 3 (octetul 00 in plus e inofensiv
  * pentru decodor, dar il eliminam ca iesirea sa fie previzibila).
  */
-class AnnexBSplitter {
-
-    private var buffer = ByteArray(0)
+class AnnexBSplitter(
+    private val maxNalBytes: Int = 2 * 1024 * 1024,
+    private val onDiscontinuity: () -> Unit = {}
+) {
+    init { require(maxNalBytes >= 4) }
+    private var buffer = ByteArray(minOf(4096, maxNalBytes))
+    private var size = 0
+    private var zeros = 0
+    private var inNal = false
+    private var discarding = false
+    val bufferedBytes: Int get() = size
 
     /**
      * Adauga octeti noi si returneaza NAL-urile complete descoperite. Fiecare
      * NAL returnat este o copie proprie (imutabil pentru apelant).
      */
     fun feed(chunk: ByteArray): List<ByteArray> {
-        if (chunk.isEmpty()) return emptyList()
-        buffer += chunk
-
         val result = mutableListOf<ByteArray>()
-        // Indexul primului cod de start din buffer (inceputul NAL-ului curent).
-        var firstStart = indexOfStartCode(buffer, 0)
-        if (firstStart < 0) {
-            // Inca nu am vazut niciun cod de start: pastram doar coada care ar
-            // putea fi inceputul unuia (cel mult 2 octeti 00 00).
-            buffer = keepPossiblePrefix(buffer)
-            return result
+        for (byte in chunk) {
+            if (byte.toInt() == 1 && zeros >= 2) {
+                if (inNal && !discarding && size >= 4) {
+                    result += buffer.copyOf(size)
+                }
+                size = 3
+                buffer[0] = 0
+                buffer[1] = 0
+                buffer[2] = 1
+                inNal = true
+                discarding = false
+                zeros = 0
+                continue
+            }
+            // Keep possible delimiter bytes separately: a complete NAL can occupy
+            // the entire limit without its following start code counting as payload.
+            if (byte.toInt() == 0) {
+                zeros = minOf(zeros + 1, maxNalBytes)
+                continue
+            }
+            if (inNal && !discarding) {
+                val required = size + zeros + 1
+                if (required > maxNalBytes) {
+                    size = 0
+                    discarding = true
+                    onDiscontinuity()
+                } else {
+                    while (required > buffer.size) {
+                        buffer = buffer.copyOf(minOf(buffer.size * 2, maxNalBytes))
+                    }
+                    buffer.fill(0, size, size + zeros)
+                    size += zeros
+                    buffer[size++] = byte
+                }
+            }
+            zeros = 0
         }
-
-        var cursor = firstStart
-        while (true) {
-            val next = indexOfStartCode(buffer, cursor + 3)
-            if (next < 0) break
-            result.add(normalize(buffer.copyOfRange(cursor, next)))
-            cursor = next
-        }
-        // Pastram in buffer NAL-ul incomplet curent (de la cursor pana la capat).
-        buffer = buffer.copyOfRange(cursor, buffer.size)
         return result
     }
 
-    /**
-     * Cauta un cod de start (00 00 01 sau 00 00 00 01) incepand de la [from] si
-     * returneaza indexul primului octet 00 al secventei 00 00 01, sau -1.
-     */
-    private fun indexOfStartCode(data: ByteArray, from: Int): Int {
-        var i = maxOf(from, 0)
-        while (i + 2 < data.size) {
-            if (data[i].toInt() == 0 && data[i + 1].toInt() == 0 && data[i + 2].toInt() == 1) {
-                return i
-            }
-            i++
-        }
-        return -1
-    }
-
-    /**
-     * Cand nu exista inca niciun cod de start, pastram doar ultimii cel mult 2
-     * octeti daca ar putea fi prefixul (00, sau 00 00) al unui cod care vine.
-     */
-    private fun keepPossiblePrefix(data: ByteArray): ByteArray {
-        val n = data.size
-        val tail = when {
-            n >= 2 && data[n - 2].toInt() == 0 && data[n - 1].toInt() == 0 -> 2
-            n >= 1 && data[n - 1].toInt() == 0 -> 1
-            else -> 0
-        }
-        return if (tail == 0) ByteArray(0) else data.copyOfRange(n - tail, n)
-    }
-
-    /** Normalizeaza un NAL ca sa inceapa cu codul de start pe 3 octeti. */
-    private fun normalize(nal: ByteArray): ByteArray {
-        // Prefix pe 4 octeti 00 00 00 01 -> aruncam primul 00.
-        if (nal.size >= 4 &&
-            nal[0].toInt() == 0 && nal[1].toInt() == 0 &&
-            nal[2].toInt() == 0 && nal[3].toInt() == 1
-        ) {
-            return nal.copyOfRange(1, nal.size)
-        }
-        return nal
+    /** Flush only at a recorder boundary; never join NAL fragments across recorder processes. */
+    fun finish(): List<ByteArray> {
+        val result = if (inNal && !discarding && size >= 4) listOf(buffer.copyOf(size)) else emptyList()
+        size = 0
+        zeros = 0
+        inNal = false
+        discarding = false
+        return result
     }
 }
 

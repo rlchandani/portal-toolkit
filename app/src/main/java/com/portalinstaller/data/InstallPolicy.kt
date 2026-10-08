@@ -1,10 +1,9 @@
 package com.portalinstaller.data
 
 /**
- * Regula de compatibilitate a instalării: dispozitivele Portal rulează Android 10
- * ([PortalDeviceConfig.MAX_SDK]), deci o aplicație al cărei minSdk depășește acest
- * plafon nu poate porni. Extrasă din AppsViewModel/InstalledAppsTab pentru a fi
- * testabilă pe JVM și pentru a avea o singură sursă de adevăr (vezi InstallPolicyTest).
+ * Installation uses the connected device's API level and supported ABIs.
+ * The historical ceiling remains a default for legacy UI callers; it is never
+ * used by PortalConnectionManager's actual install boundary.
  */
 object InstallPolicy {
 
@@ -13,8 +12,20 @@ object InstallPolicy {
      * @return `true` dacă aplicația poate rula pe Portal. `null` este permisiv:
      *   fără informație nu blocăm, lăsăm instalarea să decidă.
      */
-    fun isCompatible(minSdk: Int?): Boolean {
-        if (minSdk == null) return true
-        return minSdk <= PortalDeviceConfig.MAX_SDK
+    fun isCompatible(
+        minSdk: Int?,
+        deviceSdk: Int? = PortalDeviceConfig.MAX_SDK,
+        deviceAbis: List<String> = emptyList(),
+        apkAbis: Set<String> = emptySet()
+    ): Boolean {
+        if (minSdk != null && deviceSdk != null && minSdk > deviceSdk) return false
+        return apkAbis.isEmpty() || deviceAbis.isEmpty() || apkAbis.any { it in deviceAbis }
     }
+
+    fun nativeAbis(apk: java.io.File): Set<String> =
+        java.util.zip.ZipFile(apk).use { zip ->
+            zip.entries().asSequence().mapNotNull { entry ->
+                Regex("^lib/([^/]+)/[^/]+\\.so$").matchEntire(entry.name)?.groupValues?.get(1)
+            }.toSet()
+        }
 }

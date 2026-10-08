@@ -5,6 +5,12 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class InstallPolicyTest {
+    @Test fun `device API 28 rejects apps requiring API 29`() {
+        assertFalse(InstallPolicy.isCompatible(29, 28, listOf("arm64-v8a")))
+        assertTrue(InstallPolicy.isCompatible(29, 29, listOf("arm64-v8a")))
+        assertFalse(InstallPolicy.isCompatible(24, 29, listOf("arm64-v8a"), setOf("x86")))
+        assertTrue(InstallPolicy.isCompatible(24, 29, listOf("arm64-v8a", "armeabi-v7a"), setOf("armeabi-v7a")))
+    }
 
     @Test
     fun `null minSdk is treated as compatible`() {

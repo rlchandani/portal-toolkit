@@ -7,7 +7,7 @@ import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.portalinstaller.data.AppContainer
 import com.portalinstaller.data.store.ThemeMode
-import com.portalinstaller.ui.MainScreen
+import com.portalinstaller.ui.controlcenter.ControlCenterScreen
 import com.portalinstaller.ui.theme.PortalTheme
 import com.portalinstaller.util.AppLanguageManager
 
@@ -24,7 +24,7 @@ class MainActivity : AppCompatActivity() {
                 initialValue = false
             )
             PortalTheme(themeMode = themeMode, dynamicColor = useDynamicColor) {
-                MainScreen()
+                ControlCenterScreen()
             }
         }
     }
