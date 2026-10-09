@@ -46,8 +46,11 @@ Old Portal builds retain shallow folder browsing until they advertise `photoLibr
 - The physical Pixel metadata test passed: 20 requests per room, Family median 150 ms,
   p95 231 ms; Living median 106 ms, p95 118 ms.
 - Full slideshow configuration snapshots remained unchanged after deployment and reads.
+- The 303.57-second physical soak completed 100 requests per room with zero failures,
+  consistently returning 12 photos. Family median/p95 was 48.44/67.31 ms;
+  Living median/p95 was 55.81/74.11 ms. Maximums were 80.92 and 176.09 ms.
 
 These timings measure metadata HTTP requests, not thumbnail rendering, slideshow FPS,
 or overall device performance. The visible real-Pixel workflow requires unlocking the
-phone and remains pending. The finite five-minute metadata soak is recorded separately.
+phone and remains pending. The raw finite soak summary is retained privately.
 The broader performance and UX audit remains active.
