@@ -93,6 +93,7 @@ import com.portalinstaller.data.companion.CompanionPlayback
 import com.portalinstaller.data.companion.CompanionConnection
 import com.portalinstaller.data.companion.ControlCenterState
 import com.portalinstaller.data.companion.SettingsDomain
+import com.portalinstaller.data.companion.CompanionTargets
 import com.portalinstaller.data.store.ThemeMode
 import com.portalinstaller.ui.MainScreen
 import com.portalinstaller.ui.common.ChoiceDropdown
@@ -138,8 +139,7 @@ fun ControlCenterScreen() {
     var importDevice by rememberSaveable { mutableStateOf<String?>(null) }
     var exportGeneration by rememberSaveable { mutableStateOf(-1L) }
     var importGeneration by rememberSaveable { mutableStateOf(-1L) }
-    var photoImportDevice by rememberSaveable { mutableStateOf<String?>(null) }
-    var photoImportGeneration by rememberSaveable { mutableStateOf(-1L) }
+    var photoImportTargets by remember { mutableStateOf<CompanionTargets?>(null) }
     var settingsDomain by rememberSaveable { mutableStateOf("immortal") }
     var showAdvanced by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
@@ -165,9 +165,10 @@ fun ControlCenterScreen() {
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) {
         if (it.isNotEmpty()) {
-            val fresh = vm.state.value
-            if (fresh.activeDeviceId == photoImportDevice && fresh.sessionGeneration == photoImportGeneration) vm.uploadUris(context, it)
-            else scope.launch { snackbars.showSnackbar("Portal selection changed. Select the photos again.") }
+            val targets = photoImportTargets
+            photoImportTargets = null
+            if (targets != null) vm.uploadToTargets(context, it, targets)
+            else scope.launch { snackbars.showSnackbar("Photo target capture expired. Select the photos again.") }
         }
     }
     val export = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
@@ -323,6 +324,9 @@ fun ControlCenterScreen() {
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+            if (detail == CenterDetail.NONE && tab in listOf(CenterTab.SETTINGS, CenterTab.PHOTOS)) {
+                ManagePortalsBar(state, photos = tab == CenterTab.PHOTOS, onSelect = { vm.selectTargets(it) })
+            }
             AnimatedContent(targetState = if (detail == CenterDetail.NONE) tab.name else detail.name,
                 transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "control-center") {
                 val shown = it
@@ -355,8 +359,11 @@ fun ControlCenterScreen() {
                                     } ?: EmptyMessage("Layout unavailable", "Refresh your Portal connection.")
                                     CenterDetail.SCENES -> {
                                         PageTitle("Scenes", "Save routines and run them on your Portal.")
-                                        ScenesPanel(state.scenes, state.busy, onSave = { vm.saveScenes(it) },
-                                            onRun = { vm.runScene(it) })
+                                        if (!state.scenesLoaded) EmptyMessage("Loading scenes", "Your Portal's scenes will appear here.")
+                                        else ScenesPanel(state.scenes, state.busy, onSave = { vm.saveScenes(it) },
+                                            onRun = { vm.runScene(it) }, revision = state.scenesRevision,
+                                            onSaveWithRevision = { candidate, capturedRevision -> vm.saveScenes(candidate, capturedRevision) },
+                                            onReload = { vm.refreshScenes() })
                                     }
                                     CenterDetail.JARVIS -> state.jarvis?.let {
                                         PageTitle("Jarvis", "Voice assistant and local wake options.")
@@ -365,7 +372,7 @@ fun ControlCenterScreen() {
                                             onLaunch = { vm.launchApp("com.portal.assistant") })
                                     } ?: EmptyMessage("Jarvis unavailable", "Refresh the Portal to check assistant support.")
                                     CenterDetail.SNAPSHOTS -> {
-                                        PageTitle("Snapshots", "Keep a copy of your settings and home layout.")
+                                        PageTitle("Snapshots", "Active Portal only: ${state.deviceName}. Keep a copy of its settings and home layout.")
                                         GroupCard {
                                             Text("Snapshots include supported settings and widgets. Pairing tokens, source passwords, and API keys stay private.")
                                             ActionRow("Export snapshot", "Save a JSON file on this phone.", "backup", state.connected && !state.busy) {
@@ -443,26 +450,28 @@ fun ControlCenterScreen() {
                         }
                         CenterTab.REMOTE -> item {
                             PageSections {
-                                PageTitle("Remote", "Control the Portal without crossing the room.")
+                                PageTitle("Remote", "Active Portal only: ${state.deviceName}. Control it without crossing the room.")
                                 RemotePanel(state, vm)
                             }
                         }
                         CenterTab.PHOTOS -> item {
                             PageSections {
-                                PageTitle("Photos", "A collection that stays on your Portal.")
+                                PageTitle("Photos")
+                                Text("Browsing, deletion and slideshow sources: ${state.deviceName} only.", style = MaterialTheme.typography.bodySmall)
+                                GroupProgressPanel(state.groupOperations, { vm.retryGroupOperation(it) }, { vm.cancelGroupOperation(it) }, { vm.dismissGroupOperation(it) })
+                                Button(onClick = {
+                                    photoImportTargets = vm.capturePhotoTargets()
+                                    picker.launch("image/*")
+                                }, enabled = state.selectedTargets.isNotEmpty() && !state.targetSelectionSaving) { Text("Add photos") }
                                 if (state.connected) {
                                     if (state.supports("photos")) PhotoLibraryPanel(
                                         deviceId = state.activeDeviceId.orEmpty(),
                                         files = JSONArray().apply { state.photos.forEach { put(it.raw) } },
                                         folder = state.photoFolder,
                                         working = state.busy,
-                                        uploadDetail = state.photoTransfer?.let {
-                                            "${it.completed} of ${it.total} uploaded · ${it.bytesSent / 1024} KB${if (it.running) " · Sending" else ""}" +
-                                                if (it.failures.isNotEmpty()) " · ${it.failures.size} failed" else ""
-                                        },
+                                        uploadDetail = "Imports use each Portal's saved folder.",
                                         onImport = {
-                                            photoImportDevice = state.activeDeviceId
-                                            photoImportGeneration = state.sessionGeneration
+                                            photoImportTargets = vm.capturePhotoTargets()
                                             picker.launch("image/*")
                                         },
                                         onRefresh = { vm.listPhotos() },
@@ -478,7 +487,7 @@ fun ControlCenterScreen() {
                                         listingLoaded = state.photoListingLoaded,
                                         truncated = state.photoListingTruncated,
                                         listingError = state.photoListingError,
-                                        onAllPhotos = { vm.listAllPhotos() })
+                                        onAllPhotos = { vm.listAllPhotos() }, showImport = false)
                                     else GroupCard {
                                         Text("Allow photo imports on the Portal", fontWeight = FontWeight.Medium)
                                         Text("Open Control from your phone on the Portal, then choose Allow photo imports. Return here and refresh after granting file access.")
@@ -486,15 +495,13 @@ fun ControlCenterScreen() {
                                             Text("Check file access")
                                         }
                                     }
-                                    if (state.photoTransfer?.running == true) TextButton(onClick = { vm.cancelPhotoUpload() }) { Text("Cancel transfer") }
-                                    state.photoTransfer?.failures?.forEach { failure ->
-                                        Text("${failure.name}: ${failure.error.message}", color = MaterialTheme.colorScheme.error)
-                                    }
                                     state.photoFreeBytes?.let { Text("${it / (1024 * 1024)} MB available", style = MaterialTheme.typography.bodySmall) }
                                     state.sources?.let { PhotoSourcesPanel(it, state.busy,
                                         onSave = { source -> vm.writeSources(source) }, onPreview = { vm.previewScreensaver() }) }
-                                    state.schema?.let { RegistrySettingsPanel(it, state.busy, "", showAdvanced,
-                                        onlyDomain = "screensaver", onApply = { domain, body -> vm.writeSettings(domain, body) }) }
+                                    state.schema?.let { RegistrySettingsPanel(it, state.busy || state.selectedTargets.isEmpty(), "", showAdvanced,
+                                        onlyDomain = "screensaver", onApply = { domain, body -> vm.writeSettings(domain, body) },
+                                        activePortalName = state.deviceName, activeWorking = state.busy || !state.connected,
+                                        onActiveApply = { domain, body -> vm.writeActiveSettings(domain, body) }) }
                                 } else EmptyMessage("Connect to view photos", "Choose a paired Portal from the device menu.")
                             }
                         }
@@ -557,9 +564,12 @@ fun ControlCenterScreen() {
                                     SettingsDomainPicker(visibleSettingsDomains, shownSettingsDomain) { settingsDomain = it }
                                 },
                                 portalSettings = {
-                                    state.schema?.let { RegistrySettingsPanel(it, !state.connected || state.busy, query, showAdvanced,
+                                    GroupProgressPanel(state.groupOperations, { vm.retryGroupOperation(it) }, { vm.cancelGroupOperation(it) }, { vm.dismissGroupOperation(it) })
+                                    state.schema?.let { RegistrySettingsPanel(it, state.busy || state.selectedTargets.isEmpty(), query, showAdvanced,
                                         onlyDomain = if (query.isBlank()) shownSettingsDomain else null,
-                                        onApply = { domain, body -> vm.writeSettings(domain, body) }) }
+                                        onApply = { domain, body -> vm.writeSettings(domain, body) },
+                                        activePortalName = state.deviceName, activeWorking = !state.connected || state.busy,
+                                        onActiveApply = { domain, body -> vm.writeActiveSettings(domain, body) }) }
                                         ?: EmptyMessage("Portal settings unavailable", "Connect to load its complete settings registry.")
                                 },
                                 phonePreferences = { PhonePreferences() },

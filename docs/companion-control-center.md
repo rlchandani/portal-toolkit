@@ -3,10 +3,11 @@
 The Android app opens a native control center. Home, Remote, Photos, Apps, and
 Settings share one activity and use the Portal's approved neutral light/dark palette.
 
-The current development build is **1.5.2-control-center**. Its
-[extended validation record](companion-extended-validation-2026-10-08.md)
-includes physical Pixel/Portal checks, regression results, performance measurements,
-and the remaining environmental limits.
+The current development build is **1.6.0-control-center** (`versionCode 10`).
+The [extended validation record](companion-extended-validation-2026-10-08.md)
+covers earlier physical Pixel/Portal checks and performance measurements.
+The [multi-Portal controls](companion-multi-portal-2026-10-09.md) document describes
+the new group settings and photo imports, automated coverage, and remaining live checks.
 
 ## Pairing
 
@@ -21,8 +22,12 @@ and grant Android file access. Reading existing photos does not imply write
 access; the phone shows a setup hint until this permission is available.
 
 Saved pairings are held in private storage excluded from Android backups. Select
-another Portal in the top device menu. Every operation captures its device
-session before it starts. Changing devices invalidates pending results.
+another Portal in the top device menu. Active-device operations capture their session before starting; changing devices
+invalidates their pending results. Group settings and photo imports retain their captured
+targets and show per-Portal outcomes after a selection change. Settings and Photos expose
+**Manage Portals** with checkboxes, **Select all**, and a pinned target summary. The initial
+group selects all saved pairings; explicit choices persist privately across restarts.
+See [multi-Portal controls](companion-multi-portal-2026-10-09.md) for scope, retries and cancellation.
 With exactly one saved Portal, the phone reconnects automatically on startup.
 
 Local addresses default to port 8723. Existing private HTTPS endpoints and VPN
@@ -62,6 +67,11 @@ identity. New third-party widgets still need binding on the Portal.
 Scenes hold ordered navigation, app launch, settings, local photo source, and
 wait actions. Schedules use the Portal's local clock and weekday selection.
 Alarms are inexact on Android; this is not a precise alarm-clock replacement.
+
+Updated Portals protect full scene-list saves with a revision captured by the editor.
+If another client changes a scene or schedule, the Portal rejects the stale save;
+reload scenes before editing again. Unsaved edits retain their original list and revision.
+Older Portals without scene revisions cannot provide this concurrency protection.
 
 Snapshot JSON contains supported settings and layout, without credentials,
 pairing tokens, source connection strings, photo files, or third-party widget

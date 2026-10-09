@@ -54,6 +54,13 @@ class CompanionRepository(
     private val writeMutex = Mutex()
     private var sessions = emptyList<CompanionSession>()
     private var current: CompanionSession? = null
+    private var explicitTargetSelection = false
+    private var requestedTargetIds: Set<String>? = null
+    private var selectionSaves = 0
+    private val groups = CompanionGroupController(client, scope, io,
+        isPaired = { captured -> synchronized(lock) { sessions.any { it.device.id == captured.device.id &&
+            it.device.endpoint == captured.device.endpoint && it.token == captured.token } } },
+        publish = { operations -> mutableState.update { it.copy(groupOperations = operations) } })
     private var generation = 0L
     private var activeCalls = 0
     private var loadFailure: Throwable? = null
@@ -74,6 +81,17 @@ class CompanionRepository(
             val saved = withContext(io) { store.load() }
             synchronized(lock) { sessions = saved }
             mutableState.update { it.copy(devices = saved.map { session -> session.device }) }
+            try {
+                val selectedIds = withContext(io) { store.loadSelectedIds() }
+                explicitTargetSelection = requestedTargetIds != null || selectedIds != null
+                mutableState.update { it.copy(selectedTargetIds = (requestedTargetIds ?: selectedIds ?: saved.map { session -> session.device.id }.toSet())
+                    .intersect(saved.map { session -> session.device.id }.toSet())) }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) {
+                explicitTargetSelection = true
+                mutableState.update { it.copy(selectedTargetIds = emptySet(), error = CompanionError("selection_unreadable",
+                    "Saved target selection is unreadable. Choose targets again in Manage Portals.")) }
+            }
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (error: Exception) {
             loadFailure = error
@@ -116,6 +134,7 @@ class CompanionRepository(
     fun pair(endpoint: String, pin: String, name: String? = null): Job {
         val selectedGeneration = beginSelection()
         mutableState.update { ControlCenterState(devices = it.devices, discovered = it.discovered, discovering = it.discovering,
+            selectedTargetIds = it.selectedTargetIds, groupOperations = it.groupOperations, targetSelectionSaving = it.targetSelectionSaving,
             sessionGeneration = selectedGeneration, connection = CompanionConnection.CONNECTING, busy = true) }
         return scope.launch {
             ready.join()
@@ -144,7 +163,8 @@ class CompanionRepository(
                     }
                     synchronized(lock) { sessions = candidate; current = session }
                     mutableState.update { it.copy(devices = candidate.map { saved -> saved.device }, activeDeviceId = session.device.id,
-                        photoFolder = session.device.photoFolder, photoBrowseAll = session.device.photoBrowseAll, busy = false) }
+                        photoFolder = session.device.photoFolder, photoBrowseAll = session.device.photoBrowseAll, busy = false,
+                        selectedTargetIds = if (explicitTargetSelection) it.selectedTargetIds else candidate.map { saved -> saved.device.id }.toSet()) }
                 }
                 ticket()?.takeIf { it.generation == selectedGeneration }?.let { refreshTicket(it) }
             } catch (cancelled: CancellationException) { throw cancelled }
@@ -167,6 +187,7 @@ class CompanionRepository(
         val selectedGeneration = beginSelection()
         mutableState.update { old ->
             (cache[id] ?: ControlCenterState()).copy(devices = old.devices, discovered = old.discovered, discovering = old.discovering,
+                selectedTargetIds = old.selectedTargetIds, groupOperations = old.groupOperations, targetSelectionSaving = old.targetSelectionSaving,
                 activeDeviceId = id, sessionGeneration = selectedGeneration, connection = CompanionConnection.CONNECTING, busy = true, error = null, lastResult = null)
         }
         return scope.launch {
@@ -190,6 +211,7 @@ class CompanionRepository(
     fun disconnect() {
         val nextGeneration = beginSelection()
         mutableState.update { ControlCenterState(devices = it.devices, discovered = it.discovered, discovering = it.discovering,
+            selectedTargetIds = it.selectedTargetIds, groupOperations = it.groupOperations, targetSelectionSaving = it.targetSelectionSaving,
             sessionGeneration = nextGeneration) }
     }
 
@@ -203,7 +225,8 @@ class CompanionRepository(
                     val candidate = synchronized(lock) { sessions.filterNot { it.device.id == id } }
                     withContext(io) { store.save(candidate) }
                     synchronized(lock) { sessions = candidate; cache.remove(id) }
-                    mutableState.update { it.copy(devices = candidate.map { saved -> saved.device }) }
+                    mutableState.update { it.copy(devices = candidate.map { saved -> saved.device },
+                        selectedTargetIds = it.selectedTargetIds.intersect(candidate.map { saved -> saved.device.id }.toSet())) }
                 }
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (error: Exception) { mutableState.update { it.copy(error = errorOf(error)) } }
@@ -230,7 +253,7 @@ class CompanionRepository(
     fun refreshOperations(): Job = request(showBusy = false) { refreshRoute(it, "operations") }
     fun refreshLayout(): Job = request(showBusy = false) { refreshRoute(it, "layout") }
     fun refreshCatalog(): Job = request(showBusy = false) { refreshRoute(it, "catalog") }
-    fun refreshScenes(): Job = request(showBusy = false) { refreshRoute(it, "scenes") }
+    fun refreshScenes(): Job = request() { refreshRoute(it, "scenes") }
     fun refreshJarvis(): Job = request(showBusy = false) { refreshRoute(it, "jarvis") }
 
     fun remoteAction(action: String): Job = command("key", JSONObject().put("action", action))
@@ -331,6 +354,58 @@ class CompanionRepository(
     fun launchApp(packageName: String): Job = command("launch", JSONObject().put("packageName", packageName))
     fun previewScreensaver(): Job = remoteAction("screensaver")
 
+    /** Selection is updated synchronously; persistence is serialized with the pairing store. */
+    fun selectTargets(ids: Set<String>): Job {
+        val selected = if (ready.isCompleted) ids.toSet().intersect(state.value.devices.map { it.id }.toSet()) else ids.toSet()
+        synchronized(lock) { explicitTargetSelection = true; requestedTargetIds = selected; selectionSaves++ }
+        mutableState.update { it.copy(selectedTargetIds = selected, targetSelectionSaving = true) }
+        return scope.launch {
+            ready.join()
+            try {
+                persistenceMutex.withLock { withContext(io) { store.saveSelectedIds(state.value.selectedTargetIds) } }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) { mutableState.update { it.copy(error = CompanionError("selection_not_saved", "Target selection could not be saved. Choose targets again before restarting.")) } }
+            finally { synchronized(lock) {
+                selectionSaves--
+                mutableState.update { it.copy(targetSelectionSaving = selectionSaves > 0) }
+            } }
+        }
+    }
+    fun captureSelectedTargets(): CompanionTargets = synchronized(lock) {
+        CompanionTargets(sessions.filter { it.device.id in state.value.selectedTargetIds }.map { CompanionSession(it.device.copy(), it.token) })
+    }
+    fun writeSelectedSettings(domain: String, values: JSONObject): Job {
+        val activeRead = ticket()
+        val reference = state.value.settings.firstOrNull { it.id == domain }
+        val domainTitle = reference?.title?.takeIf { it.isNotBlank() && it != domain }
+            ?: CompanionGroupSettings.humanizedTitle(domain)
+        val controls = values.keys().asSequence().mapNotNull { key -> reference?.controls?.firstOrNull { it.key == key } }.toList()
+        val title = if (controls.size == values.length() && controls.isNotEmpty()) controls.joinToString { control ->
+            control.title.takeIf { it.isNotBlank() && it != control.key }
+                ?: CompanionGroupSettings.humanizedTitle(control.key)
+        } else domainTitle
+        return try {
+            groups.settings(captureSelectedTargets(), domain, values, title = title, domainTitle = domainTitle) { session ->
+                synchronized(lock) { cache.remove(session.device.id) }
+                if (activeRead != null && activeRead.session.device.id == session.device.id && owns(activeRead)) refreshRoute(activeRead, "settings")
+            }
+        } catch (error: Exception) { failedJob(error) }
+    }
+    fun uploadSelectedUris(context: Context, uris: List<Uri>, targets: CompanionTargets = captureSelectedTargets()): Job =
+        uploadSelectedPhotos(CompanionPhotos.uriSources(context, uris), targets)
+    fun uploadSelectedPhotos(sources: List<PhotoUploadSource>, targets: CompanionTargets = captureSelectedTargets()): Job {
+        val activeRead = ticket()
+        return try {
+            groups.photos(targets, sources) { session ->
+                invalidatePhotoImages(session)
+                if (activeRead != null && activeRead.session.device.id == session.device.id && owns(activeRead)) refreshCurrentPhotos(activeRead)
+            }
+        } catch (error: Exception) { failedJob(error) }
+    }
+    fun retryGroupOperation(id: Long): Job = groups.retry(id)
+    fun cancelGroupOperation(id: Long) = groups.cancel(id)
+    fun dismissGroupOperation(id: Long) = groups.dismiss(id)
+
     fun writeSettings(domain: String, values: JSONObject): Job {
         val copy = JSONObject(values.toString())
         return command("settings", JSONObject().put("domain", domain).put("values", copy), listOf("settings")) { result ->
@@ -381,7 +456,15 @@ class CompanionRepository(
     fun cancelOperation(id: String): Job = startOperation(JSONObject().put("type", "cancel").put("id", id))
     fun retryOperation(id: String): Job = startOperation(JSONObject().put("type", "retry").put("id", id))
     fun runScene(id: String): Job = command("scene", JSONObject().put("id", id), listOf("operations"))
-    fun saveScenes(scenes: JSONArray): Job = command("scenes", JSONObject().put("scenes", JSONArray(scenes.toString())), listOf("scenes"))
+    /** Both the list and its optional revision are captured before entering the write queue. */
+    fun writeScenes(scenes: JSONArray, expectedRevision: String? = state.value.scenesRevision): Job {
+        if (state.value.scenesRevision != null && expectedRevision == null) return failedJob(
+            IllegalStateException("Scenes changed while you were editing. Reload scenes before saving."))
+        return command("scenes", JSONObject().put("scenes", JSONArray(scenes.toString())).apply {
+            expectedRevision?.let { put("expectedRevision", it) }
+        }, listOf("scenes"))
+    }
+    fun saveScenes(scenes: JSONArray, expectedRevision: String? = state.value.scenesRevision): Job = writeScenes(scenes, expectedRevision)
     fun updateJarvis(values: JSONObject): Job = command("jarvis", JSONObject(values.toString()), listOf("jarvis"))
     fun savePresets(presets: JSONArray): Job = command("presets", JSONObject().put("presets", JSONArray(presets.toString())))
     fun runPreset(id: String): Job = command("preset", JSONObject().put("id", id))
@@ -700,7 +783,14 @@ class CompanionRepository(
                 return@withLock
             }
             synchronized(lock) { sessions = candidate; current = updated }
-            update(selected) { it.copy(activeDeviceId = updated.device.id, devices = candidate.map { saved -> saved.device }) }
+            update(selected) { oldState -> oldState.copy(activeDeviceId = updated.device.id,
+                devices = candidate.map { saved -> saved.device }, selectedTargetIds = oldState.selectedTargetIds.map {
+                    if (it == existing.device.id) updated.device.id else it
+                }.toSet()) }
+            if (existing.device.id != updated.device.id && explicitTargetSelection) {
+                requestedTargetIds = state.value.selectedTargetIds
+                withContext(io) { store.saveSelectedIds(state.value.selectedTargetIds) }
+            }
         }
     }
 
@@ -723,7 +813,8 @@ class CompanionRepository(
         "snapshot" -> old.copy(snapshot = response.optJSONObject("snapshot") ?: response)
         "catalog" -> old.copy(catalog = response)
         "operations" -> old.copy(operations = response.optJSONArray("operations") ?: JSONArray())
-        "scenes" -> old.copy(scenes = response.optJSONArray("scenes") ?: JSONArray())
+        "scenes" -> old.copy(scenes = response.optJSONArray("scenes") ?: JSONArray(), scenesLoaded = true,
+            scenesRevision = (response.opt("revision") as? String)?.takeIf { it.isNotBlank() })
         "jarvis" -> old.copy(jarvis = response.optJSONObject("jarvis") ?: response)
         else -> old
     }

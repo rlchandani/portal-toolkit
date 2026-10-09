@@ -41,6 +41,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import org.json.JSONObject
+import com.portalinstaller.data.companion.CompanionGroupSettings
 
 private val urlDraftSaver = Saver<String, String>(
     save = { nonSecretUrlDraft(it) },
@@ -55,6 +56,9 @@ internal fun RegistrySettingsPanel(
     advanced: Boolean,
     onlyDomain: String? = null,
     onApply: (String, JSONObject) -> Unit,
+    activePortalName: String? = null,
+    activeWorking: Boolean = working,
+    onActiveApply: (String, JSONObject) -> Unit = onApply,
 ) {
     PageSections {
         val domains = schema.optJSONArray("domains").objects()
@@ -74,8 +78,10 @@ internal fun RegistrySettingsPanel(
             GroupCard(Modifier.testTag("settings-domain-$id-card")) {
                 controls.forEachIndexed { index, control ->
                     key(id, control.optString("key")) {
-                        RegistryControl(control, working, advanced) { value ->
-                            onApply(id, JSONObject().put(control.getString("key"), value))
+                        val activeOnly = CompanionGroupSettings.activeOnly(id, control.optString("key"), control)
+                        if (activeOnly && activePortalName != null) Text("Active Portal only: $activePortalName", style = MaterialTheme.typography.labelMedium)
+                        RegistryControl(control, if (activeOnly) activeWorking else working, advanced) { value ->
+                            (if (activeOnly) onActiveApply else onApply)(id, JSONObject().put(control.getString("key"), value))
                         }
                     }
                     if (index != controls.lastIndex) HorizontalDivider(

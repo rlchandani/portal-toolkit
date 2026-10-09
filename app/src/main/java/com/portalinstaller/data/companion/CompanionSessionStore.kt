@@ -18,6 +18,8 @@ import org.json.JSONObject
 interface CompanionSessionStore {
     suspend fun load(): List<CompanionSession>
     suspend fun save(sessions: List<CompanionSession>)
+    suspend fun loadSelectedIds(): Set<String>? = null
+    suspend fun saveSelectedIds(ids: Set<String>) {}
 }
 
 /** Android production factory always uses private noBackupFilesDir, separate from ADB records. */
@@ -64,6 +66,35 @@ class FileCompanionSessionStore(private val directory: File) : CompanionSessionS
                 output.fd.sync()
             }
             Files.move(temp.toPath(), file.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+        } finally { temp.delete() }
+    }
+
+    /** Same no-backup private directory as credentials, without tokens or endpoint metadata. */
+    override suspend fun loadSelectedIds(): Set<String>? {
+        val selection = File(directory, "companion-targets.json")
+        if (!selection.exists()) return null
+        try {
+            val root = JSONObject(selection.readText())
+            require(root.getInt("version") == 1)
+            val ids = root.getJSONArray("ids")
+            return (0 until ids.length()).map { ids.getString(it) }.toSet()
+        } catch (_: Exception) {
+            throw IOException("Saved target selection is unreadable. Choose targets again in Manage Portals.")
+        }
+    }
+
+    override suspend fun saveSelectedIds(ids: Set<String>) {
+        check(directory.isDirectory || directory.mkdirs())
+        val temp = File.createTempFile("companion-targets-", ".tmp", directory)
+        try {
+            temp.setReadable(false, false)
+            temp.setWritable(false, false)
+            check(temp.setReadable(true, true) && temp.setWritable(true, true))
+            FileOutputStream(temp).use { output ->
+                output.write(JSONObject().put("version", 1).put("ids", JSONArray(ids.sorted())).toString().toByteArray(Charsets.UTF_8))
+                output.fd.sync()
+            }
+            Files.move(temp.toPath(), File(directory, "companion-targets.json").toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
         } finally { temp.delete() }
     }
 

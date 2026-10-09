@@ -11,6 +11,7 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.portalinstaller.data.companion.CompanionRepository
+import com.portalinstaller.data.companion.CompanionTargets
 import com.portalinstaller.ui.controlcenter.CenterRefresh
 import com.portalinstaller.ui.controlcenter.centerRefreshRequests
 import kotlinx.coroutines.Job
@@ -91,7 +92,14 @@ class ControlCenterViewModel(private val repository: CompanionRepository) : View
     fun volume(direction: String) = repository.volume(direction)
     fun setVolume(level: Int) = repository.setVolume(level)
     fun launchApp(packageName: String) = repository.launchApp(packageName)
-    fun writeSettings(domain: String, values: JSONObject) = repository.writeSettings(domain, values)
+    fun writeSettings(domain: String, values: JSONObject) = repository.writeSelectedSettings(domain, values)
+    fun writeActiveSettings(domain: String, values: JSONObject) = repository.writeSettings(domain, values)
+    fun selectTargets(ids: Set<String>) = repository.selectTargets(ids)
+    fun capturePhotoTargets() = repository.captureSelectedTargets()
+    fun retryGroupOperation(id: Long) = repository.retryGroupOperation(id)
+    fun cancelGroupOperation(id: Long) = repository.cancelGroupOperation(id)
+    fun dismissGroupOperation(id: Long) = repository.dismissGroupOperation(id)
+    fun uploadToTargets(context: Context, uris: List<Uri>, targets: CompanionTargets) = repository.uploadSelectedUris(context, uris, targets)
     fun writeSources(values: JSONObject) = repository.writeSources(values)
     fun previewScreensaver() = repository.previewScreensaver()
     fun updateLayout(layout: JSONObject, expectedRevision: String? = null) = repository.updateLayout(layout, expectedRevision)
@@ -102,7 +110,7 @@ class ControlCenterViewModel(private val repository: CompanionRepository) : View
     fun cancelOperation(id: String) = repository.cancelOperation(id)
     fun retryOperation(id: String) = repository.retryOperation(id)
     fun runScene(id: String) = repository.runScene(id)
-    fun saveScenes(scenes: JSONArray) = repository.saveScenes(scenes)
+    fun saveScenes(scenes: JSONArray, expectedRevision: String? = state.value.scenesRevision) = repository.writeScenes(scenes, expectedRevision)
     fun updateJarvis(values: JSONObject) = repository.updateJarvis(values)
     fun fetchImmichAlbums(url: String, key: String) = repository.fetchImmichAlbums(url, key)
     fun savePresets(presets: JSONArray) = repository.savePresets(presets)

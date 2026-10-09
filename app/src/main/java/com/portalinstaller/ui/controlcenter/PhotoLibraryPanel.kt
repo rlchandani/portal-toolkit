@@ -104,6 +104,7 @@ internal fun PhotoLibraryPanel(
     truncated: Boolean = false,
     onAllPhotos: () -> Unit = {},
     listingError: String? = null,
+    showImport: Boolean = true,
 ) {
     var page by remember(deviceId, folder, allPhotos) { mutableIntStateOf(0) }
     var previewTarget by remember(deviceId) { mutableStateOf<JSONObject?>(null) }
@@ -121,7 +122,7 @@ internal fun PhotoLibraryPanel(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Button(onClick = onImport, enabled = !working) { Text("Add photos") }
+            if (showImport) Button(onClick = onImport, enabled = !working) { Text("Add photos") }
             OutlinedButton(onClick = onRefresh, enabled = !working) { Text("Refresh") }
         }
         if (!uploadDetail.isNullOrBlank()) {

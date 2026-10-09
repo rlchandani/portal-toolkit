@@ -26,6 +26,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -151,15 +152,29 @@ internal fun ScenesPanel(
     working: Boolean,
     onSave: (JSONArray) -> Unit,
     onRun: (String) -> Unit,
+    revision: String? = null,
+    onSaveWithRevision: (JSONArray, String?) -> Unit = { candidate, _ -> onSave(candidate) },
+    onReload: (() -> Unit)? = null,
 ) {
     val received = scenes.toString()
-    var draftText by rememberSaveable(received) { mutableStateOf(received) }
+    var baselineText by rememberSaveable { mutableStateOf(received) }
+    var baselineRevision by rememberSaveable { mutableStateOf(revision) }
+    var draftText by rememberSaveable { mutableStateOf(received) }
+    // Initial reads and confirmed save echoes can advance the baseline. A newer remote
+    // list must never silently replace an edited draft or its concurrency token.
+    LaunchedEffect(received, revision, draftText, baselineText) {
+        if (draftText == baselineText || received == draftText) {
+            baselineText = received
+            baselineRevision = revision
+            draftText = received
+        }
+    }
     val draft = remember(draftText) { JSONArray(draftText) }
     var selectedId by rememberSaveable { mutableStateOf("") }
     val objects = draft.objects()
     val selected = objects.firstOrNull { it.optString("id") == selectedId } ?: objects.firstOrNull()
     val index = (0 until draft.length()).firstOrNull { draft.optJSONObject(it) === selected }
-    val changed = received != draftText
+    val changed = baselineText != draftText
     val numericSettings = remember(received) {
         scenes.objects().flatMap { it.optJSONArray("steps").objects() }
             .filter { it.optString("type") == "settings" }.flatMap { step ->
@@ -186,9 +201,13 @@ internal fun ScenesPanel(
                 color = MaterialTheme.colorScheme.primary)
             if (error != null) Text(error, style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error)
-            Button(onClick = { onSave(JSONArray(draftText)) }, enabled = !working && changed && error == null,
+            Button(onClick = { onSaveWithRevision(JSONArray(draftText), baselineRevision) }, enabled = !working && changed && error == null,
                 modifier = Modifier.fillMaxWidth()) { Text(if (working) "Working…" else "Save scenes") }
-            if (changed) TextButton(onClick = { draftText = received }, enabled = !working) { Text("Discard changes") }
+            if (changed) TextButton(onClick = { draftText = received; baselineText = received; baselineRevision = revision }, enabled = !working) { Text("Discard changes") }
+            if (onReload != null) TextButton(onClick = {
+                draftText = received; baselineText = received; baselineRevision = revision
+                onReload()
+            }, enabled = !working) { Text(if (changed) "Reload scenes and discard edits" else "Reload scenes") }
         }
 
         SectionTitle("Start with a template")

@@ -48,6 +48,9 @@ data class ControlCenterState(
     val discovered: List<DiscoveredPortal> = emptyList(),
     val discovering: Boolean = false,
     val activeDeviceId: String? = null,
+    val selectedTargetIds: Set<String> = emptySet(),
+    val groupOperations: List<GroupOperation> = emptyList(),
+    val targetSelectionSaving: Boolean = false,
     val sessionGeneration: Long = 0,
     val connection: CompanionConnection = CompanionConnection.UNPAIRED,
     val busy: Boolean = false,
@@ -62,6 +65,8 @@ data class ControlCenterState(
     val catalog: JSONObject? = null,
     val operations: JSONArray = JSONArray(),
     val scenes: JSONArray = JSONArray(),
+    val scenesRevision: String? = null,
+    val scenesLoaded: Boolean = false,
     val jarvis: JSONObject? = null,
     val lastUpdatedAt: Long? = null,
     val error: CompanionError? = null,
@@ -77,6 +82,7 @@ data class ControlCenterState(
     val photoListingError: String? = null,
     val photoListingAll: Boolean = false,
 ) {
+    val selectedTargets: List<CompanionDevice> get() = devices.filter { it.id in selectedTargetIds }
     val activeDevice: CompanionDevice? get() = devices.firstOrNull { it.id == activeDeviceId }
     val deviceName: String get() = activeDevice?.name ?: "Portal"
     val connected: Boolean get() = connection == CompanionConnection.CONNECTED
