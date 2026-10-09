@@ -13,8 +13,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -35,7 +33,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import com.portalinstaller.ui.common.InlineSettingRow
-import com.portalinstaller.ui.common.SettingValueButton
+import com.portalinstaller.ui.common.ChoiceDropdown
+import com.portalinstaller.ui.common.ChoiceOption
 import com.portalinstaller.ui.common.SettingStepper
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -110,23 +109,18 @@ private fun RegistryControl(
             Switch(checked = value == true, onCheckedChange = { onApply(it) }, enabled = enabled)
         }
         "enum" -> {
-            var expanded by remember { mutableStateOf(false) }
             val options = control.optJSONArray("options").objects()
-            val current = options.firstOrNull { it.optString("value") == value?.toString() }
             InlineSettingRow(title, help, rowModifier) {
-                Box {
-                    SettingValueButton(current?.optString("label") ?: value?.toString().orEmpty(),
-                        onClick = { expanded = true }, enabled = enabled,
-                        modifier = Modifier.testTag("registry-$key-value"))
-                    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                        options.filter { advanced || it.optString("tier") != "advanced" ||
-                            it.optString("value") == value?.toString() }.forEach { option ->
-                            DropdownMenuItem(
-                                text = { Text(option.optString("label", option.optString("value"))) },
-                                onClick = { expanded = false; onApply(option.getString("value")) })
-                        }
-                    }
-                }
+                ChoiceDropdown(value = value?.toString().orEmpty(),
+                    options = options.filter { advanced || it.optString("tier") != "advanced" ||
+                        it.optString("value") == value?.toString() }.map { option ->
+                        ChoiceOption(option.getString("value"),
+                            option.optString("label", option.optString("value")))
+                    },
+                    onSelect = onApply,
+                    enabled = enabled,
+                    accessibilityLabel = title,
+                    modifier = Modifier.testTag("registry-$key-value"))
             }
         }
         "int" -> {

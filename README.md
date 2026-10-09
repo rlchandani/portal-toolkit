@@ -11,6 +11,8 @@ The current development build is **1.5.2-control-center**. See
 [physical-device validation record](docs/companion-extended-validation-2026-10-08.md).
 The [mobile UI layout audit](docs/companion-ui-layout-validation-2026-10-08.md)
 records the settings-row redesign, spacing corrections, and compact-screen checks.
+The [native control refinement](docs/companion-premium-controls-validation-2026-10-08.md)
+covers dropdowns and joined navigation, playback, and volume controls.
 
 ## Features
 

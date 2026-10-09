@@ -7,13 +7,10 @@
 package com.portalinstaller.ui.controlcenter
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.Button
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -30,8 +27,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.portalinstaller.ui.common.ChoiceDropdown
+import com.portalinstaller.ui.common.ChoiceOption
 import com.portalinstaller.ui.common.InlineSettingRow
-import com.portalinstaller.ui.common.SettingValueButton
 import org.json.JSONObject
 
 @Composable
@@ -56,7 +54,6 @@ internal fun JarvisManagementPanel(
     }
     var model by rememberSaveable(currentModel) { mutableStateOf(currentModel) }
     var wake by rememberSaveable(currentWake, wakeSupported) { mutableStateOf(currentWake) }
-    var expanded by remember { mutableStateOf(false) }
     val modelChanged = model != currentModel && model in models
     val wakeChanged = wakeSupported && status.opt("wakeEnabled") is Boolean && wake != currentWake
     val enabled = !working && installed && supported
@@ -92,20 +89,14 @@ internal fun JarvisManagementPanel(
                     help = if (models.isEmpty()) "Jarvis has not reported an available model list."
                         else "Choices come from the Jarvis version installed on this Portal.",
                 ) {
-                    Box {
-                        SettingValueButton(
-                            value = model.ifBlank { "Model unavailable" },
-                            onClick = { expanded = true },
-                            enabled = enabled && models.isNotEmpty(),
-                        )
-                        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                            models.forEach { available ->
-                                DropdownMenuItem(text = { Text(available) }, enabled = enabled, onClick = {
-                                    model = available; expanded = false
-                                })
-                            }
-                        }
-                    }
+                    ChoiceDropdown(
+                        value = model,
+                        options = models.map { ChoiceOption(it, it) },
+                        onSelect = { model = it },
+                        enabled = enabled && models.isNotEmpty(),
+                        placeholder = "Model unavailable",
+                        accessibilityLabel = "Conversation model",
+                    )
                 }
             }
             if (wakeSupported) {

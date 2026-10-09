@@ -27,6 +27,9 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -53,14 +56,17 @@ internal fun InlineSettingRow(
 ) {
     BoxWithConstraints(modifier.fillMaxWidth()) {
         val controlMaxWidth = maxWidth * .6f
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(title, fontWeight = FontWeight.Medium)
+                Box(Modifier.heightIn(min = 48.dp), contentAlignment = Alignment.CenterStart) {
+                    Text(title, fontWeight = FontWeight.Medium)
+                }
                 if (help.isNotBlank()) Text(help, style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Spacer(Modifier.width(12.dp))
-            Box(Modifier.widthIn(max = controlMaxWidth), contentAlignment = Alignment.CenterEnd) {
+            Box(Modifier.widthIn(max = controlMaxWidth).heightIn(min = 48.dp),
+                contentAlignment = Alignment.TopEnd) {
                 control()
             }
         }
@@ -68,17 +74,19 @@ internal fun InlineSettingRow(
 }
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 internal fun SettingValueButton(
     value: String,
     onClick: () -> Unit,
     enabled: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
-    TextButton(onClick = onClick, enabled = enabled, modifier = modifier) {
+    OutlinedButton(onClick = onClick, enabled = enabled, modifier = modifier,
+        shape = RoundedCornerShape(14.dp)) {
         Text(value, modifier = Modifier.weight(1f, fill = false), maxLines = 2,
             overflow = TextOverflow.Ellipsis, textAlign = TextAlign.End)
         Spacer(Modifier.width(6.dp))
-        Text("⌄")
+        ExposedDropdownMenuDefaults.TrailingIcon(false)
     }
 }
 

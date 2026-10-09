@@ -26,6 +26,7 @@ import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isPopup
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -77,6 +78,12 @@ class SettingControlAlignmentUiTest {
             assertEquals("celsius", applied[0].second.getString("unit"))
             assertEquals(35, applied[1].second.getInt("interval"))
         }
+    }
+
+    @Test fun dropdownMarksTheCurrentChoiceInsideItsMenu() {
+        showRegistry(1.1f)
+        compose.onNodeWithTag("registry-unit-value").performScrollTo().performClick()
+        compose.onNode(hasText("Automatic") and hasAnyAncestor(isPopup())).assertIsSelected()
     }
 
     @Test fun segmentedAppearanceSelectionUpdatesAndStaysMutuallyExclusive() {

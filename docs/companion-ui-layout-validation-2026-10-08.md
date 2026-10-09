@@ -4,22 +4,29 @@ Portal Toolkit 1.5.2-control-center, version code 8. Changes remain on
 `codex/portal-companion-control-center`; the original checkout and earlier commits
 are preserved.
 
-**Validation in progress:** the revised layout is built and installed on the
-Pixel 9 Pro Fold. All 422 JVM tests pass. A complete 98-test Pixel run passed
-before the final keyboard-send addition. The following 100-test run was
-interrupted by the phone locking and is excluded from valid evidence. A
-test-only runner now holds every fixture window awake. Final Pixel validation
-and render measurements await owner unlock.
+**Validation completed in the subsequent native-control refinement:** the
+revised layout is built and installed on the Pixel 9 Pro Fold. All 422 JVM tests
+and the complete 108-test Pixel suite pass, including keyboard Send and the new
+dropdown/action fixtures. See the
+[native-control validation record](companion-premium-controls-validation-2026-10-08.md)
+for the final build's measurements and screenshots.
 
-The final Android 14 emulator run reported **100 tests**, with all **92
+A complete 98-test Pixel run passed before the keyboard-send addition. The next
+100-test run was interrupted by the phone locking and remains excluded from
+valid evidence. A test-only runner now holds every fixture window awake; the
+successful combined 108-test run resolves that earlier pending verification.
+
+The original layout-audit Android 14 emulator run reported **100 tests**, with all **92
 account-free fixtures passing** and the eight paired-device checks disabled
 by their opt-in conditions. It completed in 114.999 seconds. The final keyboard
 submission and guard fixtures are included.
 
 An initial emulator run hit a Compose `SlotTable` exception during photo-preview
 fixture teardown. All seven preview tests and six Shell tests passed in isolation
-(13 tests, 15.074 seconds), and the fresh full run passed. The one-off teardown
-failure was not reproduced; it is recorded rather than claimed eliminated.
+(13 tests, 15.074 seconds), and the fresh full run passed. The exception recurred
+in a later Pixel photo-preview fixture teardown during the native-control
+refinement; all seven preview tests passed in isolation again. The intermittent
+teardown failure remains recorded and is not claimed eliminated.
 
 ## Corrections
 

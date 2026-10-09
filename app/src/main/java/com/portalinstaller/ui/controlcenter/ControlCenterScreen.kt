@@ -35,6 +35,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -43,7 +44,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -98,6 +98,10 @@ import com.portalinstaller.data.companion.ControlCenterState
 import com.portalinstaller.data.companion.SettingsDomain
 import com.portalinstaller.data.store.ThemeMode
 import com.portalinstaller.ui.MainScreen
+import com.portalinstaller.ui.common.ChoiceDropdown
+import com.portalinstaller.ui.common.ChoiceOption
+import com.portalinstaller.ui.common.JoinedAction
+import com.portalinstaller.ui.common.JoinedActionGroup
 import com.portalinstaller.viewmodel.ControlCenterViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -131,7 +135,6 @@ fun ControlCenterScreen() {
     var detail by rememberSaveable(state.activeDeviceId) { mutableStateOf(CenterDetail.NONE) }
     var advancedTools by rememberSaveable { mutableStateOf(false) }
     var pairDialog by rememberSaveable { mutableStateOf(false) }
-    var deviceMenu by remember { mutableStateOf(false) }
     var pairAddress by rememberSaveable { mutableStateOf("") }
     var pendingRestore by remember { mutableStateOf<RestoreCandidate?>(null) }
     var exportDevice by rememberSaveable { mutableStateOf<String?>(null) }
@@ -288,27 +291,26 @@ fun ControlCenterScreen() {
     Scaffold(
         topBar = {
             TopAppBar(title = {
-                Column {
-                    TextButton(onClick = { deviceMenu = true }) {
-                        Text(state.activeDevice?.name ?: "Immortal", style = MaterialTheme.typography.titleLarge)
-                        Spacer(Modifier.width(6.dp)); Text("⌄")
-                    }
-                    DropdownMenu(deviceMenu, onDismissRequest = { deviceMenu = false }) {
-                        state.devices.forEach { device ->
-                            DropdownMenuItem(
-                                text = { Text(device.name + if (device.id == state.activeDeviceId) " · Selected" else "") },
-                                onClick = { deviceMenu = false; detail = CenterDetail.NONE; vm.selectDevice(device.id) })
-                        }
+                ChoiceDropdown(
+                    value = state.activeDeviceId.orEmpty(),
+                    options = state.devices.map { ChoiceOption(it.id, it.name) },
+                    onSelect = { detail = CenterDetail.NONE; vm.selectDevice(it) },
+                    placeholder = "Immortal",
+                    accessibilityLabel = "Active Portal",
+                    modifier = Modifier.widthIn(max = 200.dp),
+                    matchAnchorWidth = true,
+                    menuActions = { dismiss ->
+                        if (state.devices.isNotEmpty()) HorizontalDivider()
                         DropdownMenuItem(text = { Text("Add a Portal") },
-                            onClick = { deviceMenu = false; pairDialog = true })
+                            onClick = { dismiss(); pairDialog = true })
                         state.activeDevice?.let {
                             DropdownMenuItem(text = { Text("Disconnect") },
-                                onClick = { deviceMenu = false; vm.disconnect() })
+                                onClick = { dismiss(); vm.disconnect() })
                             DropdownMenuItem(text = { Text("Forget this Portal") },
-                                onClick = { deviceMenu = false; forgetDevice = it.id })
+                                onClick = { dismiss(); forgetDevice = it.id })
                         }
-                    }
-                }
+                    },
+                )
             }, actions = {
                 TextButton(onClick = {
                     if (toolbarRefresh?.isActive != true) {
@@ -442,10 +444,12 @@ fun ControlCenterScreen() {
                                             state.info?.optJSONObject("app")?.optString("versionName"))
                                             .filter { it.isNotBlank() }.joinToString(" · "),
                                             color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                            Button(onClick = { vm.remoteAction("home") }, enabled = !state.busy) { Text("Home") }
-                                            OutlinedButton(onClick = { vm.previewScreensaver() }, enabled = !state.busy) { Text("Slideshow") }
-                                        }
+                                        JoinedActionGroup(listOf(
+                                            JoinedAction("Home", { vm.remoteAction("home") },
+                                                enabled = !state.busy, emphasized = true),
+                                            JoinedAction("Slideshow", { vm.previewScreensaver() },
+                                                enabled = !state.busy),
+                                        ))
                                     }
                                     SectionTitle("Manage")
                                     GroupCard {
@@ -665,11 +669,11 @@ private fun RemotePanel(state: ControlCenterState, vm: ControlCenterViewModel) {
     val enabled = state.connected
     PageSections {
         GroupCard {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                OutlinedButton(onClick = { vm.remoteAction("back") }, enabled = enabled) { Text("Back") }
-                Button(onClick = { vm.remoteAction("home") }, enabled = enabled) { Text("Home") }
-                OutlinedButton(onClick = { vm.previewScreensaver() }, enabled = enabled) { Text("Slideshow") }
-            }
+            JoinedActionGroup(listOf(
+                JoinedAction("Back", { vm.remoteAction("back") }, enabled),
+                JoinedAction("Home", { vm.remoteAction("home") }, enabled, emphasized = true),
+                JoinedAction("Slideshow", { vm.previewScreensaver() }, enabled),
+            ))
             Box(Modifier.fillMaxWidth().height(220.dp)
                 .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(20.dp))
                 .pointerInput(enabled, state.activeDeviceId) {
@@ -687,10 +691,10 @@ private fun RemotePanel(state: ControlCenterState, vm: ControlCenterViewModel) {
                     Text("Move to point · Tap to select", style = MaterialTheme.typography.bodySmall)
                 }
             }
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                TextButton(onClick = { vm.scroll("up") }, enabled = enabled) { Text("Scroll up") }
-                TextButton(onClick = { vm.scroll("down") }, enabled = enabled) { Text("Scroll down") }
-            }
+            JoinedActionGroup(listOf(
+                JoinedAction("Scroll up", { vm.scroll("up") }, enabled),
+                JoinedAction("Scroll down", { vm.scroll("down") }, enabled),
+            ))
             OutlinedTextField(keyboard, onValueChange = { keyboard = it }, label = { Text("Type on the Portal") },
                 supportingText = { Text("Select a text field on the Portal first.") },
                 modifier = Modifier.fillMaxWidth(), enabled = enabled)
@@ -709,16 +713,18 @@ private fun MediaPanel(state: ControlCenterState, vm: ControlCenterViewModel) {
             Text(media?.optString("title")?.ifBlank { "Nothing playing" } ?: "Nothing playing",
                 style = MaterialTheme.typography.titleMedium)
             media?.optString("artist")?.takeIf { it.isNotBlank() }?.let { Text(it) }
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                TextButton(onClick = { vm.media("previous") }, enabled = state.connected) { Text("Previous") }
-                Button(onClick = { vm.media("playpause") },
-                    enabled = state.connected && media?.optBoolean("active") == true) { Text(if (media?.optBoolean("playing") == true) "Pause" else "Play") }
-                TextButton(onClick = { vm.media("next") }, enabled = state.connected) { Text("Next") }
-            }
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                OutlinedButton(onClick = { vm.volume("down") }, enabled = state.connected) { Text("Volume −") }
-                OutlinedButton(onClick = { vm.volume("up") }, enabled = state.connected) { Text("Volume +") }
-            }
+            JoinedActionGroup(listOf(
+                JoinedAction("Previous", { vm.media("previous") }, state.connected),
+                JoinedAction(if (media?.optBoolean("playing") == true) "Pause" else "Play",
+                    { vm.media("playpause") },
+                    enabled = state.connected && media?.optBoolean("active") == true,
+                    emphasized = true),
+                JoinedAction("Next", { vm.media("next") }, state.connected),
+            ))
+            JoinedActionGroup(listOf(
+                JoinedAction("Volume −", { vm.volume("down") }, state.connected),
+                JoinedAction("Volume +", { vm.volume("up") }, state.connected),
+            ))
         }
     }
 }
@@ -740,19 +746,15 @@ private fun AppIcon(deviceId: String, packageName: String, vm: ControlCenterView
 
 @Composable
 private fun SettingsDomainPicker(domains: List<SettingsDomain>, selected: String, onSelect: (String) -> Unit) {
-    var expanded by remember { mutableStateOf(false) }
-    Box {
-        OutlinedButton(onClick = { expanded = true }) {
-            Text(domains.firstOrNull { it.id == selected }?.title ?: "Choose a category")
-            Spacer(Modifier.width(10.dp)); Text("⌄")
-        }
-        DropdownMenu(expanded, onDismissRequest = { expanded = false }) {
-            domains.forEach { domain ->
-                DropdownMenuItem(text = { Text(domain.title) },
-                    onClick = { onSelect(domain.id); expanded = false })
-            }
-        }
-    }
+    ChoiceDropdown(
+        value = selected,
+        options = domains.map { ChoiceOption(it.id, it.title) },
+        onSelect = onSelect,
+        modifier = Modifier.fillMaxWidth(),
+        placeholder = "Choose a category",
+        accessibilityLabel = "Settings category",
+        matchAnchorWidth = true,
+    )
 }
 
 @Composable

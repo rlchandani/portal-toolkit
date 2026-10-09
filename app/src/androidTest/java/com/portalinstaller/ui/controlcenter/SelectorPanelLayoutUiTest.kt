@@ -27,6 +27,9 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
@@ -200,7 +203,8 @@ class SelectorPanelLayoutUiTest {
     }
 
     private fun button(text: String) = compose.onNode(
-        hasText(text) and hasClickAction() and !hasSetTextAction())
+        hasText(text) and hasClickAction() and (
+            !hasSetTextAction() or SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.DropdownList)))
     private fun click(text: String) { button(text).performScrollTo().performClick() }
     private fun choose(text: String) {
         compose.onNode(hasText(text) and hasClickAction() and hasAnyAncestor(isPopup())).performClick()

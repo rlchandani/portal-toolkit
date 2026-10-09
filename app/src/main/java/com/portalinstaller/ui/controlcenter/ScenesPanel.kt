@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -41,7 +40,10 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.portalinstaller.ui.common.ChoiceDropdown
+import com.portalinstaller.ui.common.ChoiceOption
 import com.portalinstaller.ui.common.InlineSettingRow
+import com.portalinstaller.ui.common.PremiumDropdownMenu
 import com.portalinstaller.ui.common.SettingValueButton
 import org.json.JSONArray
 import org.json.JSONObject
@@ -260,10 +262,10 @@ internal fun ScenesPanel(
                 }
                 if (steps.length() == 0) Text("Add at least one action.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 var adding by remember { mutableStateOf(false) }
-                Column {
+                Box {
                     OutlinedButton(onClick = { adding = true }, enabled = !working && steps.length() < 16,
                         modifier = Modifier.fillMaxWidth()) { Text("Add action") }
-                    DropdownMenu(expanded = adding, onDismissRequest = { adding = false }) {
+                    PremiumDropdownMenu(expanded = adding, onDismissRequest = { adding = false }) {
                         ScenePanelDraft.types.forEach { (type, title) ->
                             DropdownMenuItem(text = { Text(title) }, enabled = !working, onClick = {
                                 adding = false
@@ -300,21 +302,14 @@ private fun SceneChoice(
     enabled: Boolean,
     onSelect: (String) -> Unit,
 ) {
-    var expanded by remember { mutableStateOf(false) }
     InlineSettingRow(title = title) {
-        Box {
-            SettingValueButton(
-                value = options.firstOrNull { it.first == value }?.second ?: value.ifBlank { "Choose" },
-                onClick = { expanded = true },
-                enabled = enabled,
-            )
-            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                options.forEach { (id, label) ->
-                    DropdownMenuItem(text = { Text(label) }, enabled = enabled,
-                        onClick = { expanded = false; onSelect(id) })
-                }
-            }
-        }
+        ChoiceDropdown(
+            value = value,
+            options = options.map { (id, label) -> ChoiceOption(id, label) },
+            onSelect = onSelect,
+            enabled = enabled,
+            accessibilityLabel = title,
+        )
     }
 }
 

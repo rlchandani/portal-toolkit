@@ -32,7 +32,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -63,6 +62,7 @@ import com.portalinstaller.R
 import com.portalinstaller.data.files.RemoteFile
 import com.portalinstaller.data.screensaver.HintLevel
 import com.portalinstaller.data.screensaver.screensaverHint
+import com.portalinstaller.ui.common.PremiumDropdownMenu
 import com.portalinstaller.ui.common.formatFileSize
 import com.portalinstaller.viewmodel.ScreensaverState
 import com.portalinstaller.viewmodel.ScreensaverViewModel
@@ -210,7 +210,7 @@ internal fun ScreensaverTab(
                     IconButton(onClick = { showActionsMenu = true }) {
                         Text(text = "⋮", style = MaterialTheme.typography.titleLarge)
                     }
-                    DropdownMenu(
+                    PremiumDropdownMenu(
                         expanded = showActionsMenu,
                         onDismissRequest = { showActionsMenu = false }
                     ) {

@@ -7,14 +7,11 @@
 package com.portalinstaller.ui.controlcenter
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.Button
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -23,7 +20,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.mapSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -33,8 +29,9 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.portalinstaller.data.companion.CompanionPhotos
+import com.portalinstaller.ui.common.ChoiceDropdown
+import com.portalinstaller.ui.common.ChoiceOption
 import com.portalinstaller.ui.common.InlineSettingRow
-import com.portalinstaller.ui.common.SettingValueButton
 import org.json.JSONObject
 
 private data class SourceField(
@@ -102,7 +99,6 @@ internal fun PhotoSourcesPanel(
                     if (field.key == "folderPath") "/sdcard/Pictures/Immortal" else ""))
             }
     } }
-    var expanded by remember { mutableStateOf(false) }
     fun configured(key: String): Boolean = sources.optBoolean("${key}Configured") ||
         sources.optBoolean("has${key.replaceFirstChar(Char::titlecase)}")
     fun sameEndpoint(): Boolean = when (selected) {
@@ -117,18 +113,13 @@ internal fun PhotoSourcesPanel(
         SectionTitle("Photo source")
         GroupCard {
             InlineSettingRow(title = "Source", help = "Choose what your Portal displays.") {
-                Box {
-                    SettingValueButton(
-                        value = sourceLabels[selected] ?: selected,
-                        onClick = { expanded = true },
-                        enabled = !working,
-                    )
-                    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                        sourceLabels.forEach { (id, label) ->
-                            DropdownMenuItem(text = { Text(label) }, onClick = { selected = id; expanded = false })
-                        }
-                    }
-                }
+                ChoiceDropdown(
+                    value = selected,
+                    options = sourceLabels.map { (id, label) -> ChoiceOption(id, label) },
+                    onSelect = { selected = it },
+                    enabled = !working,
+                    accessibilityLabel = "Source",
+                )
             }
             fieldsFor(selected).forEach { field ->
                 OutlinedTextField(

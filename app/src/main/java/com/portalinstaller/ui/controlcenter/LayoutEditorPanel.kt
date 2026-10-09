@@ -9,6 +9,7 @@ package com.portalinstaller.ui.controlcenter
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -17,7 +18,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -48,7 +48,10 @@ import androidx.compose.ui.unit.dp
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
+import com.portalinstaller.ui.common.ChoiceDropdown
+import com.portalinstaller.ui.common.ChoiceOption
 import com.portalinstaller.ui.common.InlineSettingRow
+import com.portalinstaller.ui.common.PremiumDropdownMenu
 import com.portalinstaller.ui.common.SettingStepper
 
 /** All edits copy the complete wire document; fields this editor doesn't own survive a save. */
@@ -212,11 +215,11 @@ internal fun LayoutEditorPanel(
             val slots = draft.optJSONArray("gridSlots")
             val slotsFull = slots != null && slots.length() >= 512 &&
                 (0 until slots.length()).none { slots.isNull(it) || slots.opt(it) == "" }
-            Column {
+            Box {
                 OutlinedButton(onClick = { adding = true },
                     enabled = enabled && widgets.length() < 64 && !orderFull && !slotsFull,
                     modifier = Modifier.fillMaxWidth()) { Text("Add Immortal widget") }
-                DropdownMenu(expanded = adding, onDismissRequest = { adding = false }) {
+                PremiumDropdownMenu(expanded = adding, onDismissRequest = { adding = false }) {
                     LayoutPanelDraft.kinds.forEach { (kind, title) ->
                         DropdownMenuItem(text = { Text(title) }, onClick = {
                             adding = false
@@ -405,24 +408,22 @@ private fun LayoutAssignments(draft: JSONObject, enabled: Boolean, onEdit: (JSON
     }.sorted()
     var selected by rememberSaveable { mutableStateOf("") }
     var folder by rememberSaveable(selected) { mutableStateOf(assignments.optString(selected)) }
-    var choosing by remember { mutableStateOf(false) }
     GroupCard {
         ActionRow("Folders", "${assignments.length()} app assignments", glyph = "apps",
             onClick = { expanded = !expanded })
         if (expanded) {
             Text("Choose a home app and set its folder. An empty folder places it outside folders.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Column {
-                OutlinedButton(onClick = { choosing = true }, enabled = enabled && packages.isNotEmpty(),
-                    modifier = Modifier.fillMaxWidth()) { Text(selected.ifBlank { "Choose an app" }) }
-                DropdownMenu(expanded = choosing, onDismissRequest = { choosing = false }) {
-                    packages.forEach { pkg ->
-                        DropdownMenuItem(text = { Text(pkg) }, onClick = {
-                            selected = pkg; folder = assignments.optString(pkg); choosing = false
-                        }, enabled = enabled)
-                    }
-                }
-            }
+            ChoiceDropdown(
+                value = selected,
+                options = packages.map { ChoiceOption(it, it) },
+                onSelect = { pkg -> selected = pkg; folder = assignments.optString(pkg) },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = enabled && packages.isNotEmpty(),
+                placeholder = "Choose an app",
+                accessibilityLabel = "Home app",
+                matchAnchorWidth = true,
+            )
             if (packages.isEmpty()) Text("No app placements are in this layout yet.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (selected in packages) {
