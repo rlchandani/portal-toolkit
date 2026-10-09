@@ -19,8 +19,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -60,7 +58,6 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -74,7 +71,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -93,6 +89,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.portalinstaller.data.AppContainer
+import com.portalinstaller.data.companion.CompanionPlayback
 import com.portalinstaller.data.companion.CompanionConnection
 import com.portalinstaller.data.companion.ControlCenterState
 import com.portalinstaller.data.companion.SettingsDomain
@@ -290,29 +287,14 @@ fun ControlCenterScreen() {
 
     Scaffold(
         topBar = {
-            TopAppBar(title = {
-                ChoiceDropdown(
-                    value = state.activeDeviceId.orEmpty(),
-                    options = state.devices.map { ChoiceOption(it.id, it.name) },
-                    onSelect = { detail = CenterDetail.NONE; vm.selectDevice(it) },
-                    placeholder = "Immortal",
-                    accessibilityLabel = "Active Portal",
-                    modifier = Modifier.widthIn(max = 200.dp),
-                    matchAnchorWidth = true,
-                    menuActions = { dismiss ->
-                        if (state.devices.isNotEmpty()) HorizontalDivider()
-                        DropdownMenuItem(text = { Text("Add a Portal") },
-                            onClick = { dismiss(); pairDialog = true })
-                        state.activeDevice?.let {
-                            DropdownMenuItem(text = { Text("Disconnect") },
-                                onClick = { dismiss(); vm.disconnect() })
-                            DropdownMenuItem(text = { Text("Forget this Portal") },
-                                onClick = { dismiss(); forgetDevice = it.id })
-                        }
-                    },
-                )
-            }, actions = {
-                TextButton(onClick = {
+            CompactPortalHeader(
+                state = state,
+                refreshing = toolbarRefresh?.isActive == true,
+                onSelectDevice = { detail = CenterDetail.NONE; vm.selectDevice(it) },
+                onAddPortal = { pairDialog = true },
+                onDisconnect = { vm.disconnect() },
+                onForgetPortal = { forgetDevice = it },
+                onRefresh = {
                     if (toolbarRefresh?.isActive != true) {
                         val request = vm.refreshPage(pageRefreshes, includeStatus = true)
                         toolbarRefresh = scope.launch {
@@ -323,12 +305,7 @@ fun ControlCenterScreen() {
                         }
                     }
                 },
-                    enabled = state.activeDeviceId != null && !state.busy &&
-                        toolbarRefresh?.isActive != true,
-                    modifier = Modifier.semantics { contentDescription = "Refresh current page" }) {
-                    ControlGlyph("refresh", modifier = Modifier.size(22.dp))
-                }
-            })
+            )
         },
         bottomBar = {
             NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
@@ -343,7 +320,6 @@ fun ControlCenterScreen() {
         snackbarHost = { SnackbarHost(snackbars) },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
-            ConnectionStrip(state)
             if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             AnimatedContent(targetState = if (detail == CenterDetail.NONE) tab.name else detail.name,
                 transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "control-center") {
@@ -620,21 +596,6 @@ fun ControlCenterScreen() {
 }
 
 @Composable
-private fun ConnectionStrip(state: ControlCenterState) {
-    val label = when (state.connection) {
-        CompanionConnection.UNPAIRED -> "No Portal selected"
-        CompanionConnection.CONNECTING -> "Connecting…"
-        CompanionConnection.CONNECTED -> "Connected"
-        CompanionConnection.OFFLINE -> "Offline · Waiting to reconnect"
-        CompanionConnection.UNAUTHORIZED -> "Pairing expired · Pair again"
-    }
-    Text(label, modifier = Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 4.dp),
-        style = MaterialTheme.typography.labelMedium,
-        color = if (state.connection == CompanionConnection.UNAUTHORIZED) MaterialTheme.colorScheme.error
-            else MaterialTheme.colorScheme.onSurfaceVariant)
-}
-
-@Composable
 private fun PairPortalDialog(
     state: ControlCenterState, address: String, onAddress: (String) -> Unit,
     onDismiss: () -> Unit, onPair: (String, String) -> Unit,
@@ -665,68 +626,45 @@ private fun PairPortalDialog(
 
 @Composable
 private fun RemotePanel(state: ControlCenterState, vm: ControlCenterViewModel) {
-    var keyboard by rememberSaveable { mutableStateOf("") }
-    val enabled = state.connected
-    PageSections {
-        GroupCard {
-            JoinedActionGroup(listOf(
-                JoinedAction("Back", { vm.remoteAction("back") }, enabled),
-                JoinedAction("Home", { vm.remoteAction("home") }, enabled, emphasized = true),
-                JoinedAction("Slideshow", { vm.previewScreensaver() }, enabled),
-            ))
-            Box(Modifier.fillMaxWidth().height(220.dp)
-                .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(20.dp))
-                .pointerInput(enabled, state.activeDeviceId) {
-                    if (enabled) detectDragGestures { change, drag ->
-                        change.consume()
-                        vm.moveCursor(drag.x, drag.y)
-                    }
-                }
-                .pointerInput(enabled, state.activeDeviceId) { if (enabled) detectTapGestures(onTap = { vm.tap() }) },
-                contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    ControlGlyph("remote", modifier = Modifier.size(36.dp))
-                    Spacer(Modifier.height(10.dp))
-                    Text("Touchpad")
-                    Text("Move to point · Tap to select", style = MaterialTheme.typography.bodySmall)
-                }
-            }
-            JoinedActionGroup(listOf(
-                JoinedAction("Scroll up", { vm.scroll("up") }, enabled),
-                JoinedAction("Scroll down", { vm.scroll("down") }, enabled),
-            ))
-            OutlinedTextField(keyboard, onValueChange = { keyboard = it }, label = { Text("Type on the Portal") },
-                supportingText = { Text("Select a text field on the Portal first.") },
-                modifier = Modifier.fillMaxWidth(), enabled = enabled)
-            Button(onClick = { vm.sendText(keyboard); keyboard = "" }, enabled = enabled && keyboard.isNotBlank()) { Text("Send text") }
-        }
-        MediaPanel(state, vm)
-    }
+    RemoteControlsPanel(
+        deviceKey = "${state.activeDeviceId}:${state.sessionGeneration}",
+        enabled = state.connected,
+        onNavigate = { vm.remoteAction(it) },
+        onSlideshow = { vm.previewScreensaver() },
+        onMove = { x, y -> vm.moveCursor(x, y) },
+        onTap = { vm.tap() },
+        onScroll = { vm.scroll(it) },
+        textController = vm.remoteText,
+        playback = { MediaPanel(state, vm) },
+    )
 }
 
 @Composable
 private fun MediaPanel(state: ControlCenterState, vm: ControlCenterViewModel) {
-    val media = state.nowPlaying
-    PageSections {
-        SectionTitle("Now playing")
-        GroupCard {
-            Text(media?.optString("title")?.ifBlank { "Nothing playing" } ?: "Nothing playing",
-                style = MaterialTheme.typography.titleMedium)
-            media?.optString("artist")?.takeIf { it.isNotBlank() }?.let { Text(it) }
-            JoinedActionGroup(listOf(
-                JoinedAction("Previous", { vm.media("previous") }, state.connected),
-                JoinedAction(if (media?.optBoolean("playing") == true) "Pause" else "Play",
-                    { vm.media("playpause") },
-                    enabled = state.connected && media?.optBoolean("active") == true,
-                    emphasized = true),
-                JoinedAction("Next", { vm.media("next") }, state.connected),
-            ))
-            JoinedActionGroup(listOf(
-                JoinedAction("Volume −", { vm.volume("down") }, state.connected),
-                JoinedAction("Volume +", { vm.volume("up") }, state.connected),
-            ))
-        }
-    }
+    val playback = remember(state.nowPlaying) { CompanionPlayback.fromJson(state.nowPlaying) }
+    PlaybackPanel(
+        playback = playback,
+        deviceKey = "${state.activeDeviceId}:${state.sessionGeneration}",
+        connected = state.connected,
+        busy = state.busy,
+        onMedia = { action, position -> vm.media(action, position) },
+        onRelativeVolume = { vm.volume(it) },
+        onSetVolume = { vm.setVolume(it) },
+        loadArtwork = { version ->
+            withContext(Dispatchers.IO) { vm.mediaArtBytes(version)?.let(::decodePlaybackArtwork) }
+        },
+    )
+}
+
+/** Decode small covers off the UI thread; compressed-byte and decoded-pixel bounds are independent. */
+internal fun decodePlaybackArtwork(bytes: ByteArray): ImageBitmap? {
+    val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+    if (bounds.outWidth !in 1..8192 || bounds.outHeight !in 1..8192) return null
+    var sample = 1
+    while (maxOf(bounds.outWidth, bounds.outHeight) / sample > 256) sample *= 2
+    val options = android.graphics.BitmapFactory.Options().apply { inSampleSize = sample }
+    return android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)?.asImageBitmap()
 }
 
 @Composable

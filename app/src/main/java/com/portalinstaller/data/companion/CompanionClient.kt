@@ -151,6 +151,9 @@ class CompanionClient(private val transport: CompanionTransport = OkHttpCompanio
         return imageBytes(session, "icon", mapOf("pkg" to packageName), 256L * 1024)
     }
 
+    suspend fun mediaArtBytes(session: CompanionSession, version: String): ByteArray =
+        imageBytes(session, "art", mapOf("v" to version), 512L * 1024)
+
     private suspend fun imageBytes(session: CompanionSession, route: String, query: Map<String, String>, limit: Long): ByteArray {
         val response = transport.execute(CompanionRequest("GET", photoUrl(session, route, query),
             session.token, binary = true, maxResponseBytes = limit))

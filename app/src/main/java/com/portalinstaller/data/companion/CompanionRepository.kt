@@ -306,8 +306,24 @@ class CompanionRepository(
     fun swipe(dx: Float, dy: Float): Job = inputAction("swipe", delta(dx, dy))
     fun scroll(direction: String): Job = inputAction("scroll", JSONObject().put("dir", direction))
     fun sendText(text: String, mode: String = "set"): Job = command("text", JSONObject().put("text", text).put("mode", mode))
+    suspend fun sendTextConfirmed(text: String): Boolean {
+        var confirmed = false
+        request { selected ->
+            writeMutex.withLock {
+                if (!owns(selected)) return@withLock
+                val result = withContext(io) {
+                    client.post(selected.session, "text", JSONObject().put("text", text).put("mode", "set"))
+                }
+                if (!owns(selected)) return@withLock
+                update(selected) { it.copy(lastResult = CompanionClient.sanitized(result), error = null) }
+                confirmed = true
+            }
+        }.join()
+        return confirmed
+    }
     fun media(action: String, positionMs: Long? = null): Job = command("media", JSONObject().put("action", action).apply { positionMs?.let { put("positionMs", it) } }, listOf("nowplaying"))
-    fun volume(direction: String): Job = command("volume", JSONObject().put("dir", direction))
+    fun volume(direction: String): Job = command("volume", JSONObject().put("dir", direction), listOf("nowplaying"))
+    fun setVolume(level: Int): Job = command("volume", JSONObject().put("dir", "set").put("level", level), listOf("nowplaying"))
     fun launchApp(packageName: String): Job = command("launch", JSONObject().put("packageName", packageName))
     fun previewScreensaver(): Job = remoteAction("screensaver")
 
@@ -454,6 +470,9 @@ class CompanionRepository(
     suspend fun appIconBytes(packageName: String): ByteArray? =
         imageBytes("icon", packageName, true) { client.appIconBytes(it, packageName) }
 
+    suspend fun mediaArtBytes(version: String): ByteArray? =
+        imageBytes("art", version, true) { client.mediaArtBytes(it, version) }
+
     private fun credentialFingerprint(session: CompanionSession): String =
         MessageDigest.getInstance("SHA-256").digest(session.token.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
 
@@ -473,9 +492,9 @@ class CompanionRepository(
     private suspend fun imageBytes(kind: String, target: String, cacheable: Boolean, load: suspend (CompanionSession) -> ByteArray): ByteArray? {
         val selected = ticket() ?: return null
         val metadata = if (kind == "photo") state.value.photos.firstOrNull { it.path == target }?.let { "${it.size}:${it.modified}" }.orEmpty()
-            else state.value.apps.let { apps ->
+            else if (kind == "icon") state.value.apps.let { apps ->
                 (0 until apps.length()).mapNotNull { apps.optJSONObject(it) }.firstOrNull { it.optString("packageName") == target }?.opt("versionCode")?.toString().orEmpty()
-            }
+            } else ""
         val key = ImageKey(selected.session.device.id, selected.session.device.endpoint, credentialFingerprint(selected.session), kind, target, metadata)
         fun cached(): ByteArray? = synchronized(lock) {
             if (!owns(selected) || !cacheable) null

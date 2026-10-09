@@ -10,11 +10,13 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
@@ -50,6 +52,17 @@ class CompanionNativeUiTest {
         assumeTrue("Pair exactly one Portal before running live UI tests.", saved.size == 1)
         session = saved.single()
         waitForText("Home layout")
+    }
+
+    @Test fun remoteKeyboardOpensOnDemandAndCanCloseWithoutSending() {
+        selectTab("Remote")
+        waitForText("Touchpad")
+        compose.onAllNodes(hasSetTextAction()).assertCountEquals(0)
+        compose.onNodeWithText("Type on Portal").performScrollTo().performClick()
+        compose.onNodeWithTag("remote-text-input").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Close keyboard").performClick()
+        compose.onAllNodes(hasSetTextAction()).assertCountEquals(0)
+        compose.onNodeWithText("Touchpad").assertIsDisplayed()
     }
 
     @Test fun nativeTabsAndManagementPagesStayInTheMainActivity() {

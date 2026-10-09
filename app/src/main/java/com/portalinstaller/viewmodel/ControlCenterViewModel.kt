@@ -14,6 +14,7 @@ import com.portalinstaller.data.companion.CompanionRepository
 import com.portalinstaller.ui.controlcenter.CenterRefresh
 import com.portalinstaller.ui.controlcenter.centerRefreshRequests
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import org.json.JSONArray
@@ -22,7 +23,17 @@ import org.json.JSONObject
 class ControlCenterViewModel(private val repository: CompanionRepository) : ViewModel() {
     constructor(context: Context) : this(CompanionRepository.create(context))
     val state = repository.state
+    val remoteText = RemoteTextController(viewModelScope) { deviceKey, text ->
+        val selected = state.value
+        if (deviceKey != "${selected.activeDeviceId}:${selected.sessionGeneration}" || !selected.connected) false
+        else repository.sendTextConfirmed(text)
+    }
     init {
+        viewModelScope.launch {
+            state.collect { selected ->
+                remoteText.updateSession("${selected.activeDeviceId}:${selected.sessionGeneration}", selected.connected)
+            }
+        }
         viewModelScope.launch {
             repository.ready.join()
             val initial = state.value
@@ -75,8 +86,10 @@ class ControlCenterViewModel(private val repository: CompanionRepository) : View
     fun swipe(dx: Float, dy: Float) = repository.swipe(dx, dy)
     fun scroll(direction: String) = repository.scroll(direction)
     fun sendText(text: String, mode: String = "set") = repository.sendText(text, mode)
+    suspend fun sendTextConfirmed(text: String) = repository.sendTextConfirmed(text)
     fun media(action: String, positionMs: Long? = null) = repository.media(action, positionMs)
     fun volume(direction: String) = repository.volume(direction)
+    fun setVolume(level: Int) = repository.setVolume(level)
     fun launchApp(packageName: String) = repository.launchApp(packageName)
     fun writeSettings(domain: String, values: JSONObject) = repository.writeSettings(domain, values)
     fun writeSources(values: JSONObject) = repository.writeSources(values)
@@ -103,6 +116,7 @@ class ControlCenterViewModel(private val repository: CompanionRepository) : View
     fun cancelPhotoUpload() = repository.cancelPhotoUpload()
     suspend fun photoBytes(path: String, thumbnail: Boolean = true): ByteArray? = repository.photoBytes(path, thumbnail)
     suspend fun appIconBytes(packageName: String): ByteArray? = repository.appIconBytes(packageName)
+    suspend fun mediaArtBytes(version: String): ByteArray? = repository.mediaArtBytes(version)
     fun startDiscovery() = repository.startDiscovery()
     fun stopDiscovery() = repository.stopDiscovery()
     fun clearError() = repository.clearError()
