@@ -12,6 +12,21 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class CompanionSessionStoreTest {
+    @Test fun oldPairingRecordsDefaultToAutomaticDiscoveryWithoutLosingTheirUploadFolder() = runTest {
+        val directory = Files.createTempDirectory("companion-photo-migration").toFile()
+        try {
+            directory.resolve("companion-sessions.json").writeText("""{"version":1,"sessions":[
+                {"id":"a","name":"Family","endpoint":"http://a:8723","photoFolder":"/sdcard/Pictures/PortalInstaller","token":"fixture"}]}""")
+            val store = FileCompanionSessionStore(directory)
+            val old = store.load().single()
+            assertTrue(old.device.photoBrowseAll)
+            assertEquals("/sdcard/Pictures/PortalInstaller", old.device.photoFolder)
+            store.save(listOf(CompanionSession(old.device.copy(photoFolder = "/sdcard/Album ", photoBrowseAll = false), old.token)))
+            val chosen = store.load().single()
+            assertFalse(chosen.device.photoBrowseAll)
+            assertEquals("/sdcard/Album ", chosen.device.photoFolder)
+        } finally { directory.deleteRecursively() }
+    }
     @Test fun privateFileRoundTripKeepsIndependentDevicesAndForget() = runTest {
         val directory = Files.createTempDirectory("companion-session-test").toFile()
         try {

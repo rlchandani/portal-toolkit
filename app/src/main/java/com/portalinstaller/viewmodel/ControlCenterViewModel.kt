@@ -70,7 +70,7 @@ class ControlCenterViewModel(private val repository: CompanionRepository) : View
                 CenterRefresh.JARVIS -> repository.refreshJarvis()
                 CenterRefresh.OPERATIONS -> repository.refreshOperations()
                 CenterRefresh.SOURCES -> repository.refreshSources()
-                CenterRefresh.PHOTOS -> repository.listPhotos(selected.photoFolder)
+                CenterRefresh.PHOTOS -> repository.listPhotos()
                 CenterRefresh.SETTINGS -> repository.refreshSettings()
                 CenterRefresh.APPS -> repository.refreshApps()
                 CenterRefresh.CATALOG -> repository.refreshCatalog()
@@ -108,7 +108,8 @@ class ControlCenterViewModel(private val repository: CompanionRepository) : View
     fun savePresets(presets: JSONArray) = repository.savePresets(presets)
     fun runPreset(id: String) = repository.runPreset(id)
     fun refreshPresets() = repository.refreshPresets()
-    fun listPhotos(folder: String = state.value.photoFolder) = repository.listPhotos(folder)
+    fun listPhotos(folder: String? = null) = repository.listPhotos(folder)
+    fun listAllPhotos() = repository.listAllPhotos()
     fun uploadUris(context: Context, uris: List<Uri>, folder: String = state.value.photoFolder) =
         repository.uploadUris(context, uris, folder)
     fun deletePhoto(path: String) = repository.deletePhoto(path)

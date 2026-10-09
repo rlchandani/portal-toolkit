@@ -34,7 +34,8 @@ class FileCompanionSessionStore(private val directory: File) : CompanionSessionS
                 val item = list.getJSONObject(index)
                 val device = CompanionDevice(item.getString("id"), item.getString("name"), CompanionEndpoint.normalize(item.getString("endpoint")),
                     item.optString("model").ifBlank { null }, item.optInt("apiLevel").takeIf { it > 0 },
-                    CompanionPhotos.folder(item.optString("photoFolder", CompanionPhotos.DEFAULT_FOLDER)))
+                    CompanionPhotos.exactFolder(item.optString("photoFolder", CompanionPhotos.DEFAULT_FOLDER)),
+                    item.optBoolean("photoBrowseAll", true))
                 val token = item.getString("token")
                 require(token.isNotBlank())
                 CompanionSession(device, token)
@@ -50,7 +51,8 @@ class FileCompanionSessionStore(private val directory: File) : CompanionSessionS
         sessions.forEach { session ->
             array.put(JSONObject().put("id", session.device.id).put("name", session.device.name)
                 .put("endpoint", session.device.endpoint).put("model", session.device.model)
-                .put("apiLevel", session.device.apiLevel).put("photoFolder", session.device.photoFolder).put("token", session.token))
+                .put("apiLevel", session.device.apiLevel).put("photoFolder", session.device.photoFolder)
+                .put("photoBrowseAll", session.device.photoBrowseAll).put("token", session.token))
         }
         val temp = File.createTempFile("companion-sessions-", ".tmp", directory)
         try {

@@ -158,6 +158,7 @@ fun ControlCenterScreen() {
     val selectedDeviceId = state.activeDeviceId
     val selectedGeneration = state.sessionGeneration
     val connected = state.connected
+    val photoLibraryAvailable = state.supports("photoLibrary")
     val operationsVisible = detail == CenterDetail.OPERATIONS
     val controlCenterVisible = !advancedTools
     val pairingVisible = pairDialog && controlCenterVisible
@@ -212,7 +213,8 @@ fun ControlCenterScreen() {
     LaunchedEffect(state.error) {
         state.error?.let { snackbars.showSnackbar(it.message); vm.clearError() }
     }
-    LaunchedEffect(vm, lifecycleOwner, selectedDeviceId, selectedGeneration, pageRefreshes, connected, controlCenterVisible) {
+    LaunchedEffect(vm, lifecycleOwner, selectedDeviceId, selectedGeneration, pageRefreshes, connected, controlCenterVisible,
+        photoLibraryAvailable) {
         if (!connected || !controlCenterVisible) return@LaunchedEffect
         lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             val fresh = vm.state.value
@@ -465,9 +467,18 @@ fun ControlCenterScreen() {
                                         },
                                         onRefresh = { vm.listPhotos() },
                                         onChangeFolder = { vm.listPhotos(it) },
-                                        onActivateFolder = { vm.writeSources(JSONObject().put("folderPath", state.photoFolder)) },
+                                        onActivateFolder = { vm.writeSources(JSONObject().put("folderPath",
+                                            if (state.photoListingAll) "/sdcard" else state.photoFolder)) },
                                         onDelete = { vm.deletePhoto(it) },
-                                        loadThumbnail = { vm.photoBytes(it) })
+                                        loadThumbnail = { vm.photoBytes(it) },
+                                        allPhotos = if (state.photoListingLoaded) state.photoListingAll
+                                            else state.photoBrowseAll && photoLibraryAvailable,
+                                        canBrowseAll = state.supports("photoLibrary"),
+                                        folders = state.photoFolders,
+                                        listingLoaded = state.photoListingLoaded,
+                                        truncated = state.photoListingTruncated,
+                                        listingError = state.photoListingError,
+                                        onAllPhotos = { vm.listAllPhotos() })
                                     else GroupCard {
                                         Text("Allow photo imports on the Portal", fontWeight = FontWeight.Medium)
                                         Text("Open Control from your phone on the Portal, then choose Allow photo imports. Return here and refresh after granting file access.")

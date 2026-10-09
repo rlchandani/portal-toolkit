@@ -177,6 +177,7 @@ internal fun ControlGlyph(
                 drawArc(tint,35f,290f,false,point(4f,4f),Size(16*u,16*u),style=stroke)
                 line(20f,4f,20f,10f);line(15f,10f,20f,10f)
             }
+            "chevron" -> { line(8f,5f,15f,12f); line(15f,12f,8f,19f) }
             else -> {
                 drawCircle(tint,8*u,point(12f,12f),style=stroke)
                 drawCircle(tint,1.5f*u,point(12f,12f))

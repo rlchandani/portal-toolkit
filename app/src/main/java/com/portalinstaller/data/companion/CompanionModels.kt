@@ -21,6 +21,7 @@ data class CompanionDevice(
     val model: String? = null,
     val apiLevel: Int? = null,
     val photoFolder: String = CompanionPhotos.DEFAULT_FOLDER,
+    val photoBrowseAll: Boolean = true,
 )
 
 /** Credentials belong to persistence/transport, never ControlCenterState. */
@@ -69,6 +70,12 @@ data class ControlCenterState(
     val photos: List<CompanionPhoto> = emptyList(),
     val photoFreeBytes: Long? = null,
     val photoTransfer: PhotoTransferState? = null,
+    val photoBrowseAll: Boolean = true,
+    val photoFolders: List<CompanionPhotoFolder> = emptyList(),
+    val photoListingTruncated: Boolean = false,
+    val photoListingLoaded: Boolean = false,
+    val photoListingError: String? = null,
+    val photoListingAll: Boolean = false,
 ) {
     val activeDevice: CompanionDevice? get() = devices.firstOrNull { it.id == activeDeviceId }
     val deviceName: String get() = activeDevice?.name ?: "Portal"

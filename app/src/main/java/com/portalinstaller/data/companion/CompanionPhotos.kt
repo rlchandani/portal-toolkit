@@ -14,6 +14,7 @@ import java.io.InputStream
 import org.json.JSONObject
 
 data class CompanionPhoto(val name: String, val path: String, val size: Long, val modified: Long, val raw: JSONObject = JSONObject())
+data class CompanionPhotoFolder(val path: String, val count: Int)
 data class PhotoTransferFailure(val name: String, val error: CompanionError)
 data class PhotoTransferState(
     val total: Int,
@@ -46,7 +47,9 @@ object CompanionPhotos {
         require(name.substringAfterLast('.', "").lowercase() in mimeTypes) { "Use a JPEG, PNG, WebP, or GIF image." }
         return name
     }
-    fun folder(path: String): String = sharedStoragePath(path.trim().trimEnd('/'))
+    fun folder(path: String): String = exactFolder(path.trim())
+    /** Discovered filesystem names are identities; trailing whitespace is significant. */
+    fun exactFolder(path: String): String = sharedStoragePath(path.trimEnd('/'))
     fun photoPath(path: String): String {
         safeName(path.substringAfterLast('/'))
         return sharedStoragePath(path)
@@ -66,6 +69,17 @@ object CompanionPhotos {
             if (runCatching { photoPath(path) }.isFailure) return@mapNotNull null
             CompanionPhoto(file.optString("name", path.substringAfterLast('/')), path, file.optLong("size"), file.optLong("modified"), JSONObject(file.toString()))
         }
+    }
+
+    fun folders(response: JSONObject): List<CompanionPhotoFolder> {
+        val folders = response.optJSONArray("folders") ?: return emptyList()
+        return (0 until folders.length()).mapNotNull { index ->
+            val entry = folders.optJSONObject(index) ?: return@mapNotNull null
+            val path = runCatching { exactFolder(entry.getString("path")) }.getOrNull() ?: return@mapNotNull null
+            val count = entry.optInt("count")
+            if (count <= 0) return@mapNotNull null
+            CompanionPhotoFolder(path, count)
+        }.distinctBy { it.path }
     }
 
     fun uriSources(context: Context, uris: List<Uri>): List<PhotoUploadSource> {

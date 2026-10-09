@@ -10,6 +10,7 @@ import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,6 +33,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -49,9 +51,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.portalinstaller.data.companion.CompanionPhotos
+import com.portalinstaller.data.companion.CompanionPhotoFolder
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -93,12 +97,20 @@ internal fun PhotoLibraryPanel(
     onActivateFolder: () -> Unit,
     onDelete: (String) -> Unit,
     loadThumbnail: suspend (String) -> ByteArray?,
+    allPhotos: Boolean = false,
+    canBrowseAll: Boolean = false,
+    folders: List<CompanionPhotoFolder> = emptyList(),
+    listingLoaded: Boolean = true,
+    truncated: Boolean = false,
+    onAllPhotos: () -> Unit = {},
+    listingError: String? = null,
 ) {
-    var page by remember(deviceId, folder) { mutableIntStateOf(0) }
+    var page by remember(deviceId, folder, allPhotos) { mutableIntStateOf(0) }
     var previewTarget by remember(deviceId) { mutableStateOf<JSONObject?>(null) }
     var deleteTarget by remember(deviceId) { mutableStateOf<JSONObject?>(null) }
     var chooseFolder by rememberSaveable(deviceId) { mutableStateOf(false) }
     var folderDraft by rememberSaveable(deviceId, folder) { mutableStateOf(folder) }
+    var enterPath by rememberSaveable(deviceId) { mutableStateOf(false) }
     val photos = files.objects()
     val pages = ((photos.size + 23) / 24).coerceAtLeast(1)
     val currentPage = page.coerceIn(0, pages - 1)
@@ -115,22 +127,36 @@ internal fun PhotoLibraryPanel(
         if (!uploadDetail.isNullOrBlank()) {
             Text(uploadDetail, style = MaterialTheme.typography.bodyMedium)
         }
-        Text("${photos.size} ${if (photos.size == 1) "photo" else "photos"}", style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
-        TextButton(onClick = { folderDraft = folder; chooseFolder = true }, enabled = !working) {
-            Text("Folder: $folder")
+        if (listingLoaded) Text("${photos.size} ${if (photos.size == 1) "photo" else "photos"}",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        TextButton(onClick = { folderDraft = folder; enterPath = false; chooseFolder = true },
+            enabled = !working, modifier = Modifier.fillMaxWidth()) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(if (allPhotos) "All photos on Portal" else "Folder: $folder",
+                    modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                ControlGlyph("chevron", modifier = Modifier.size(20.dp))
+            }
         }
-        OutlinedButton(onClick = onActivateFolder, enabled = !working && photos.isNotEmpty()) {
-            Text("Use for slideshow")
+        if (truncated) Text("This is a partial collection. Choose a folder to browse it directly.",
+            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        OutlinedButton(onClick = onActivateFolder, enabled = !working && photos.isNotEmpty() && !truncated) {
+            Text(if (allPhotos) "Use all photos for slideshow" else "Use for slideshow")
         }
-        if (photos.isEmpty()) EmptyMessage("Your collection starts here",
-            "Add photos, activate the folder, and preview them on your Portal.")
+        if (listingError != null) Text(listingError, style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.error)
+        if (!listingLoaded && listingError == null) Row(horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
+            Text("Finding photos…")
+        } else if (listingError == null && photos.isEmpty()) EmptyMessage(if (truncated) "Collection scan is incomplete" else "No photos found",
+            if (allPhotos) "Add photos or choose a folder to browse."
+            else "Add photos here or choose another folder.")
         photos.drop(currentPage * 24).take(24).chunked(3).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                 row.forEach { photo ->
                     val path = photo.optString("path")
-                    key(deviceId, path, photo.opt("modified")) {
-                    val bitmap by produceState<ImageBitmap?>(null, deviceId, path, photo.opt("modified")) {
+                    key(deviceId, path, photo.opt("modified"), photo.opt("size")) {
+                    val bitmap by produceState<ImageBitmap?>(null, deviceId, path, photo.opt("modified"), photo.opt("size")) {
                         value = loadPhotoThumbnail(path, loadThumbnail)
                     }
                     Box(Modifier.weight(1f).aspectRatio(1f).clip(RoundedCornerShape(14.dp))
@@ -158,7 +184,7 @@ internal fun PhotoLibraryPanel(
     }
     previewTarget?.let { target ->
         val path = target.optString("path")
-        key(deviceId, path, target.opt("modified")) {
+        key(deviceId, path, target.opt("modified"), target.opt("size")) {
             var requestGeneration by remember { mutableIntStateOf(0) }
             // Keep the observed state stable across retries; restart only its producer.
             val preview by produceState<PhotoPreviewState>(PhotoPreviewState.Loading, requestGeneration) {
@@ -216,15 +242,42 @@ internal fun PhotoLibraryPanel(
                 modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text("Choose a public folder on the Portal. Browsing does not change your slideshow.")
-                OutlinedTextField(folderDraft, onValueChange = { folderDraft = it },
-                    label = { Text("Folder on Portal") }, singleLine = true,
-                    modifier = Modifier.fillMaxWidth())
+                Text("Choose a collection. Browsing does not change your slideshow.")
+                if (canBrowseAll) PhotoFolderChoice("All photos", "Every discovered photo folder",
+                    allPhotos, onClick = { chooseFolder = false; onAllPhotos() })
+                folders.forEach { discovered ->
+                    PhotoFolderChoice(
+                        if (discovered.path == "/sdcard") "Shared storage" else discovered.path.substringAfterLast('/'),
+                        "${discovered.count} photos · ${discovered.path}",
+                        !allPhotos && folder == discovered.path,
+                        onClick = { chooseFolder = false; onChangeFolder(discovered.path) })
+                }
+                if (!enterPath && (canBrowseAll || folders.isNotEmpty())) TextButton(onClick = { enterPath = true }) {
+                    Text("Enter a folder path")
+                }
+                if (enterPath || !canBrowseAll && folders.isEmpty()) OutlinedTextField(
+                    folderDraft, onValueChange = { folderDraft = it },
+                    label = { Text("Folder on Portal") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             }
         },
         confirmButton = {
-            TextButton(onClick = { chooseFolder = false; onChangeFolder(folderDraft.trim()) },
+            if (enterPath || !canBrowseAll && folders.isEmpty()) TextButton(
+                onClick = { chooseFolder = false; onChangeFolder(folderDraft.trim()) },
                 enabled = !working && runCatching { CompanionPhotos.folder(folderDraft) }.isSuccess) { Text("Browse folder") }
         },
         dismissButton = { TextButton(onClick = { chooseFolder = false }) { Text("Cancel") } })
+}
+
+@Composable
+private fun PhotoFolderChoice(title: String, subtitle: String, selected: Boolean, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+        .selectable(selected = selected, role = Role.RadioButton, onClick = onClick).padding(8.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        RadioButton(selected = selected, onClick = null)
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleSmall)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
 }

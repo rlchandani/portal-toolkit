@@ -122,8 +122,14 @@ class CompanionClient(private val transport: CompanionTransport = OkHttpCompanio
     suspend fun get(session: CompanionSession, route: String): JSONObject = request(session.device.endpoint, session.token, route)
     suspend fun post(session: CompanionSession, route: String, body: JSONObject): JSONObject = request(session.device.endpoint, session.token, route, body)
 
-    suspend fun photos(session: CompanionSession, folder: String): JSONObject =
-        executeJson(CompanionRequest("GET", photoUrl(session, "photos", mapOf("path" to CompanionPhotos.folder(folder))), session.token))
+    suspend fun photos(session: CompanionSession, folder: String, recursive: Boolean = false): JSONObject =
+        photosExact(session, CompanionPhotos.folder(folder), recursive)
+
+    internal suspend fun photosExact(session: CompanionSession, folder: String, recursive: Boolean = false): JSONObject =
+        executeJson(CompanionRequest("GET", photoUrl(session, "photos", buildMap {
+            put("path", CompanionPhotos.exactFolder(folder))
+            if (recursive) put("recursive", "1")
+        }), session.token))
 
     suspend fun deletePhoto(session: CompanionSession, path: String): JSONObject =
         executeJson(CompanionRequest("DELETE", photoUrl(session, "photo", mapOf("path" to CompanionPhotos.photoPath(path))), session.token))
@@ -132,7 +138,7 @@ class CompanionClient(private val transport: CompanionTransport = OkHttpCompanio
         CompanionPhotos.safeName(upload.name)
         require(upload.length in 1..CompanionPhotos.MAX_IMAGE_BYTES) { "Images must be nonempty and at most 20 MiB. Choose a smaller image." }
         val response = executeJson(CompanionRequest("POST", photoUrl(session, "photo-upload",
-            mapOf("path" to CompanionPhotos.folder(folder), "name" to upload.name)), session.token,
+            mapOf("path" to CompanionPhotos.exactFolder(folder), "name" to upload.name)), session.token,
             upload = upload, onUploadProgress = progress))
         if (response.optLong("bytes", -1) != upload.length) throw CompanionException(CompanionError("incomplete_upload", "Portal could not verify the complete image.", details = sanitized(response)))
         return response

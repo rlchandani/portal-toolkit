@@ -60,6 +60,7 @@ class CompanionRepository(
     private val cache = mutableMapOf<String, ControlCenterState>()
     private var discoveryGeneration = 0L
     private var photoUploadJob: Job? = null
+    private var photoRequestRevision = 0L
     private var cursorJob: Job? = null
     private val inputQueue = ArrayDeque<InputWork>()
     private val imageSlots = Semaphore(4)
@@ -102,6 +103,7 @@ class CompanionRepository(
     private fun beginSelection(): Long = synchronized(lock) {
         rememberState()
         generation++
+        photoRequestRevision++
         inputQueue.forEach { it.completion?.cancel() }
         inputQueue.clear()
         cursorJob?.cancel()
@@ -124,7 +126,8 @@ class CompanionRepository(
                 if (synchronized(lock) { generation != selectedGeneration }) return@launch
                 val previous = synchronized(lock) { sessions.firstOrNull { it.device.endpoint == normalized } }
                 val provisional = CompanionDevice(previous?.device?.id ?: "legacy:${UUID.randomUUID()}", name?.takeIf { it.isNotBlank() } ?: paired.optString("name", "Portal"), normalized,
-                    photoFolder = previous?.device?.photoFolder ?: CompanionPhotos.DEFAULT_FOLDER)
+                    photoFolder = previous?.device?.photoFolder ?: CompanionPhotos.DEFAULT_FOLDER,
+                    photoBrowseAll = previous?.device?.photoBrowseAll ?: true)
                 var session = CompanionSession(provisional, paired.getString("token"))
                 val info = withContext(io) { optionalGet(session, "companion") }
                 if (info != null) session = CompanionSession(deviceFromInfo(session.device, info, allowIdentityChange = true), session.token)
@@ -140,7 +143,8 @@ class CompanionRepository(
                         return@withLock
                     }
                     synchronized(lock) { sessions = candidate; current = session }
-                    mutableState.update { it.copy(devices = candidate.map { saved -> saved.device }, activeDeviceId = session.device.id, photoFolder = session.device.photoFolder, busy = false) }
+                    mutableState.update { it.copy(devices = candidate.map { saved -> saved.device }, activeDeviceId = session.device.id,
+                        photoFolder = session.device.photoFolder, photoBrowseAll = session.device.photoBrowseAll, busy = false) }
                 }
                 ticket()?.takeIf { it.generation == selectedGeneration }?.let { refreshTicket(it) }
             } catch (cancelled: CancellationException) { throw cancelled }
@@ -177,7 +181,7 @@ class CompanionRepository(
                         error = CompanionError("unknown_device", "Select a saved Portal or pair a new one.")) }
                 }
             } else {
-                mutableState.update { it.copy(photoFolder = session.device.photoFolder) }
+                mutableState.update { it.copy(photoFolder = session.device.photoFolder, photoBrowseAll = session.device.photoBrowseAll) }
                 runTicket(Ticket(session, selectedGeneration)) { refreshTicket(it) }
             }
         }
@@ -386,17 +390,32 @@ class CompanionRepository(
         update(ticket) { it.copy(lastResult = result) }
     }
 
-    fun listPhotos(folder: String = state.value.photoFolder): Job = request { selected ->
-        val safeFolder = CompanionPhotos.folder(folder)
-        refreshPhotos(selected, safeFolder)
-        persistPhotoFolder(selected, safeFolder)
+    fun listPhotos(folder: String? = null): Job {
+        val view = state.value
+        val all = folder == null && view.photoBrowseAll
+        val revision = nextPhotoRevision()
+        return request { selected ->
+            val safeFolder = CompanionPhotos.exactFolder(folder ?: view.photoFolder)
+            if (refreshPhotos(selected, safeFolder, all, revision))
+                persistPhotoFolder(selected, safeFolder, all, revision)
+        }
+    }
+
+    fun listAllPhotos(): Job {
+        val view = state.value
+        if (!view.supports("photoLibrary")) return failedJob(
+            IllegalStateException("Update Immortal on this Portal to browse all photo folders."))
+        val revision = nextPhotoRevision()
+        return request { selected ->
+            if (refreshPhotos(selected, view.photoFolder, true, revision))
+                persistPhotoFolder(selected, view.photoFolder, true, revision)
+        }
     }
 
     fun deletePhoto(path: String): Job = request { selected ->
-        val folder = state.value.photoFolder
         withContext(io) { client.deletePhoto(selected.session, path) }
         invalidatePhotoImages(selected.session)
-        refreshPhotos(selected, folder)
+        refreshCurrentPhotos(selected)
     }
 
     fun uploadUris(context: Context, uris: List<Uri>, folder: String = state.value.photoFolder): Job =
@@ -405,7 +424,7 @@ class CompanionRepository(
     fun uploadPhotos(sources: List<PhotoUploadSource>, folder: String = state.value.photoFolder): Job {
         if (photoUploadJob?.isActive == true) return failedJob(IllegalStateException("Wait for the current photo transfer to finish."))
         val selected = ticket() ?: return failedJob(IllegalStateException("Select a paired Portal first."))
-        val safeFolder = try { CompanionPhotos.folder(folder) } catch (error: Exception) { return failedJob(error) }
+        val safeFolder = try { CompanionPhotos.exactFolder(folder) } catch (error: Exception) { return failedJob(error) }
         val imports = sources.toList()
         return scope.launch {
             runTicket(selected) {
@@ -445,8 +464,7 @@ class CompanionRepository(
                         } finally { withContext(io + NonCancellable) { upload?.dispose?.invoke() } }
                     }
                     if (owns(selected)) {
-                        refreshPhotos(selected, safeFolder)
-                        persistPhotoFolder(selected, safeFolder)
+                        refreshCurrentPhotos(selected)
                         update(selected) { old ->
                             val failures = old.photoTransfer?.failures.orEmpty()
                             old.copy(error = if (failures.isEmpty()) null else CompanionError("photo_transfer_failed",
@@ -531,26 +549,60 @@ class CompanionRepository(
         }
     }
 
-    private suspend fun refreshPhotos(selected: Ticket, folder: String) {
+    private fun nextPhotoRevision(): Long = synchronized(lock) { ++photoRequestRevision }
+    private fun ownsPhoto(selected: Ticket, revision: Long): Boolean =
+        synchronized(lock) { owns(selected) && photoRequestRevision == revision }
+
+    private suspend fun refreshCurrentPhotos(selected: Ticket) {
         if (!owns(selected)) return
-        val response = try {
-            withContext(io) { client.photos(selected.session, folder) }
-        } catch (error: CompanionException) {
-            if (error.error.status != 404 || error.error.code != "folder_not_found") throw error
-            // The first upload creates its destination. A new collection is empty until then.
-            JSONObject().put("ok", true).put("path", folder).put("files", JSONArray())
-        }
-        update(selected) { it.copy(photoFolder = folder, photos = CompanionPhotos.parse(response),
-            photoFreeBytes = response.optLong("freeBytes", -1).takeIf { bytes -> bytes >= 0 }) }
+        val view = state.value
+        refreshPhotos(selected, view.photoFolder, view.photoBrowseAll, nextPhotoRevision())
     }
 
-    private suspend fun persistPhotoFolder(selected: Ticket, folder: String) {
+    private suspend fun refreshPhotos(selected: Ticket, folder: String, all: Boolean, revision: Long): Boolean {
+        if (!ownsPhoto(selected, revision)) return false
+        try {
+            val recursive = all && state.value.supports("photoLibrary")
+            val response = try {
+                withContext(io) { client.photosExact(selected.session, if (recursive) "/sdcard" else folder, recursive = recursive) }
+            } catch (error: CompanionException) {
+                if (recursive || error.error.status != 404 || error.error.code != "folder_not_found") throw error
+                // The first upload creates its destination. A new collection is empty until then.
+                JSONObject().put("ok", true).put("path", folder).put("files", JSONArray())
+            }
+            if (recursive && !response.optBoolean("recursive")) throw IllegalStateException(
+                "This Portal did not return a complete photo-library listing. Update Immortal and retry.")
+            synchronized(lock) {
+                if (!ownsPhoto(selected, revision)) return false
+                update(selected) { it.copy(photoFolder = folder, photos = CompanionPhotos.parse(response),
+                    photoBrowseAll = all, photoListingLoaded = true, photoListingError = null, photoListingAll = recursive,
+                    photoFolders = if (recursive) CompanionPhotos.folders(response) else it.photoFolders,
+                    photoListingTruncated = response.optBoolean("truncated"),
+                    photoFreeBytes = response.optLong("freeBytes", -1).takeIf { bytes -> bytes >= 0 }) }
+            }
+            return true
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            if (!ownsPhoto(selected, revision)) return false
+            update(selected) { it.copy(photoListingError = errorOf(error).message) }
+            throw error
+        }
+    }
+
+    private suspend fun persistPhotoFolder(selected: Ticket, folder: String, all: Boolean, revision: Long) {
         persistenceMutex.withLock {
-            if (!owns(selected)) return@withLock
-            val candidate = synchronized(lock) { sessions.map {
-                if (it.token == selected.session.token && it.device.endpoint == selected.session.device.endpoint) CompanionSession(it.device.copy(photoFolder = folder), it.token) else it
-            } }
-            withContext(io) { store.save(candidate) }
+            if (!ownsPhoto(selected, revision)) return@withLock
+            val old = synchronized(lock) { sessions }
+            val candidate = old.map {
+                if (it.token == selected.session.token && it.device.endpoint == selected.session.device.endpoint)
+                    CompanionSession(it.device.copy(photoFolder = folder, photoBrowseAll = all), it.token) else it
+            }
+            withContext(io + NonCancellable) { store.save(candidate) }
+            if (!ownsPhoto(selected, revision)) {
+                withContext(io + NonCancellable) { store.save(old) }
+                return@withLock
+            }
             synchronized(lock) { sessions = candidate }
             mutableState.update { it.copy(devices = candidate.map { saved -> saved.device }) }
         }
@@ -638,7 +690,8 @@ class CompanionRepository(
             if (!owns(selected)) return@withLock
             val old = synchronized(lock) { sessions }
             val existing = old.firstOrNull { it.token == selected.session.token && it.device.endpoint == selected.session.device.endpoint } ?: return@withLock
-            val updated = CompanionSession(device.copy(photoFolder = existing.device.photoFolder), existing.token)
+            val updated = CompanionSession(device.copy(photoFolder = existing.device.photoFolder,
+                photoBrowseAll = existing.device.photoBrowseAll), existing.token)
             if (existing.device == updated.device) return@withLock
             val candidate = old.filterNot { it === existing || it.device.id == updated.device.id } + updated
             withContext(io) { store.save(candidate) }
