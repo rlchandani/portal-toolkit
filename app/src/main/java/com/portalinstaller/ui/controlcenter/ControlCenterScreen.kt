@@ -294,6 +294,7 @@ fun ControlCenterScreen() {
                 state = state,
                 refreshing = toolbarRefresh?.isActive == true,
                 onSelectDevice = { detail = CenterDetail.NONE; vm.selectDevice(it) },
+                onSelectTargets = { vm.selectTargets(it) },
                 onAddPortal = { pairDialog = true },
                 onDisconnect = { vm.disconnect() },
                 onForgetPortal = { forgetDevice = it },
@@ -325,7 +326,7 @@ fun ControlCenterScreen() {
         Column(Modifier.fillMaxSize().padding(padding)) {
             if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             if (detail == CenterDetail.NONE && tab in listOf(CenterTab.SETTINGS, CenterTab.PHOTOS)) {
-                ManagePortalsBar(state, photos = tab == CenterTab.PHOTOS, onSelect = { vm.selectTargets(it) })
+                ManagePortalsBar(state, photos = tab == CenterTab.PHOTOS)
             }
             AnimatedContent(targetState = if (detail == CenterDetail.NONE) tab.name else detail.name,
                 transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "control-center") {

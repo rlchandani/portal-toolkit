@@ -24,9 +24,11 @@ access; the phone shows a setup hint until this permission is available.
 Saved pairings are held in private storage excluded from Android backups. Select
 another Portal in the top device menu. Active-device operations capture their session before starting; changing devices
 invalidates their pending results. Group settings and photo imports retain their captured
-targets and show per-Portal outcomes after a selection change. Settings and Photos expose
-**Manage Portals** with checkboxes, **Select all**, and a pinned target summary. The initial
-group selects all saved pairings; explicit choices persist privately across restarts.
+targets and show per-Portal outcomes after a selection change. The top Portal menu owns
+both **View Portal** and **Send changes to**. The latter has destination checkboxes,
+**Select all**, and **Clear selection**; Settings and Photos show a passive destination
+summary. The initial group selects all saved pairings; explicit choices persist privately
+across restarts. Viewing another Portal does not change those destinations.
 See [multi-Portal controls](companion-multi-portal-2026-10-09.md) for scope, retries and cancellation.
 With exactly one saved Portal, the phone reconnects automatically on startup.
 

@@ -79,7 +79,7 @@ class FileCompanionSessionStore(private val directory: File) : CompanionSessionS
             val ids = root.getJSONArray("ids")
             return (0 until ids.length()).map { ids.getString(it) }.toSet()
         } catch (_: Exception) {
-            throw IOException("Saved target selection is unreadable. Choose targets again in Manage Portals.")
+            throw IOException("Saved target selection is unreadable. Choose targets again in the top Portal menu.")
         }
     }
 

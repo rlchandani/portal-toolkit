@@ -90,7 +90,7 @@ class CompanionRepository(
             catch (_: Exception) {
                 explicitTargetSelection = true
                 mutableState.update { it.copy(selectedTargetIds = emptySet(), error = CompanionError("selection_unreadable",
-                    "Saved target selection is unreadable. Choose targets again in Manage Portals.")) }
+                    "Saved target selection is unreadable. Choose targets again in the top Portal menu.")) }
             }
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (error: Exception) {

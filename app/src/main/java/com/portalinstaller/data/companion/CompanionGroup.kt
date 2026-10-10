@@ -145,7 +145,7 @@ internal class CompanionGroupController(
         start(Plan(targets, null, null, sources.toList(), onFinished, "Send ${sources.size} photo(s)", null))
 
     private fun start(plan: Plan): Job = synchronized(lock) {
-        require(plan.targets.sessions.isNotEmpty()) { "Select at least one Portal in Manage Portals." }
+        require(plan.targets.sessions.isNotEmpty()) { "Select at least one Portal under Send changes to in the top menu." }
         require(plan.domain != null || plan.sources.isNotEmpty()) { "Select photos to send." }
         // Keep failures until explicitly dismissed; never lose the only retry ledger.
         require(operations.size < 32) { "Dismiss a finished group operation before starting more." }

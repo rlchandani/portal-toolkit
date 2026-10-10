@@ -10,13 +10,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -24,63 +18,31 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.style.TextOverflow
 import com.portalinstaller.data.companion.ControlCenterState
 import com.portalinstaller.data.companion.GroupOperation
 import com.portalinstaller.data.companion.GroupWorkStatus
 
-/** Pinned above the page scroller so the write destination never disappears. */
+/** Passive destination summary; the top Portal menu owns all selection controls. */
 @Composable
-internal fun ManagePortalsBar(state: ControlCenterState, photos: Boolean, onSelect: (Set<String>) -> Unit) {
-    var manage by rememberSaveable { mutableStateOf(false) }
+internal fun ManagePortalsBar(state: ControlCenterState, photos: Boolean) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)
         .testTag("group-target-summary"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = { manage = true }, modifier = Modifier.testTag("manage-portals")) { Text("Manage Portals") }
-            Text("${state.selectedTargets.size} selected", style = MaterialTheme.typography.labelLarge)
-        }
-        Text(if (state.selectedTargets.isEmpty()) "No targets selected. Choose Portals before applying changes."
+        Text("${state.selectedTargets.size} selected", style = MaterialTheme.typography.labelLarge)
+        Text(if (state.selectedTargets.isEmpty()) "No targets selected. Choose Portals in the top menu before applying changes."
             else "${if (photos) "Uploads to" else "Settings apply to"}: ${state.selectedTargets.joinToString { it.name }}",
             style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
         Text("Values from: ${state.activeDevice?.name ?: "no active Portal"}",
             style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
         if (state.selectedTargets.size > 1) Text("Other rooms may differ.",
             style = MaterialTheme.typography.bodySmall)
+        if (state.targetSelectionSaving) Text("Saving selection…",
+            style = MaterialTheme.typography.bodySmall)
     }
-    if (manage) AlertDialog(onDismissRequest = { manage = false }, title = { Text("Manage Portals") },
-        text = {
-            Column(Modifier.fillMaxWidth().heightIn(max = 380.dp).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Choose settings and photo import targets. The top menu changes the active Portal.")
-                TextButton(onClick = { onSelect(state.devices.map { it.id }.toSet()) },
-                    modifier = Modifier.testTag("select-all-portals")) { Text("Select all") }
-                TextButton(onClick = { onSelect(emptySet()) }) { Text("Clear selection") }
-                for (device in state.devices) {
-                    val checked = device.id in state.selectedTargetIds
-                    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp)
-                        .toggleable(checked, role = Role.Checkbox, onValueChange = { selected ->
-                            onSelect(if (selected) state.selectedTargetIds + device.id else state.selectedTargetIds - device.id)
-                        }).testTag("group-target-${device.id}"), verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked, onCheckedChange = null)
-                        Column(Modifier.weight(1f)) {
-                            Text(device.name)
-                            Text("Imports: ${device.photoFolder}", style = MaterialTheme.typography.bodySmall)
-                            if (device.id == state.activeDeviceId) Text("Active · ${state.connection.name.lowercase()}", style = MaterialTheme.typography.bodySmall)
-                            else Text("Connection checked when applying", style = MaterialTheme.typography.bodySmall)
-                        }
-                    }
-                }
-                if (state.targetSelectionSaving) Text("Saving selection…")
-            }
-        }, confirmButton = { TextButton(onClick = { manage = false }) { Text("Done") } })
 }
 
 @Composable

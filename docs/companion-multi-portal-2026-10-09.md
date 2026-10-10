@@ -1,9 +1,10 @@
 # Android multi-Portal controls
 
-Current Android development build: **1.6.0-control-center** (`versionCode 10`).
+Current Android development build: **1.6.1-control-center** (`versionCode 11`).
 
-Settings and Photos have a pinned **Manage Portals** summary. Open it to check saved
-Portals, **Select all**, or clear the selection. The first group defaults to every saved
+Open the top Portal menu to choose **View Portal** or select destinations under
+**Send changes to**, including **Select all** and **Clear selection**. Settings and Photos
+show a passive destination summary without a second selection control. The first group defaults to every saved
 pairing; explicit choices, including an empty selection, survive app restarts in the
 private `noBackupFilesDir/companion/companion-targets.json` store. It contains ids only,
 is written atomically with owner-only access, and is separate from pairing credentials.

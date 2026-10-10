@@ -33,11 +33,14 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.isPopup
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -142,29 +145,104 @@ class CompactPortalHeaderUiTest {
     }
 
     @Test fun menuSelectionEmitsTheRawIdOnceUpdatesSelectionAndDismisses() {
-        var state by mutableStateOf(selectedState())
+        var state by mutableStateOf(selectedState().copy(selectedTargetIds = setOf(kitchen.id)))
         val selected = mutableListOf<String>()
+        val targets = mutableListOf<Set<String>>()
         fixture {
             header(state, onSelect = { id ->
                 selected.add(id)
                 state = state.copy(activeDeviceId = id)
-            })
+            }, onSelectTargets = { targets.add(it) })
         }
 
         selector().performTouchInput { click() }
         menuItem(kitchen.name).assert(SemanticsMatcher.expectValue(
+            SemanticsProperties.Role, Role.RadioButton))
+        menuItem(kitchen.name).assert(SemanticsMatcher.expectValue(
             SemanticsProperties.Selected, true))
-        menuItem(studio.name).assert(SemanticsMatcher.expectValue(
+        menuItem(studio.name).performScrollTo().assert(SemanticsMatcher.expectValue(
             SemanticsProperties.Selected, false)).performClick()
         compose.onNode(isPopup()).assertDoesNotExist()
         selector().assert(hasText(studio.name))
-        compose.runOnIdle { assertEquals(listOf("portal/raw:studio-02"), selected) }
+        compose.runOnIdle {
+            assertEquals(listOf("portal/raw:studio-02"), selected)
+            assertEquals(setOf("portal/raw:kitchen-01"), state.selectedTargetIds)
+            assertTrue("Viewing a Portal must not emit a target change", targets.isEmpty())
+        }
 
         selector().performClick()
-        menuItem(studio.name).assert(SemanticsMatcher.expectValue(
+        menuItem(studio.name).performScrollTo().assert(SemanticsMatcher.expectValue(
             SemanticsProperties.Selected, true))
         menuItem(kitchen.name).assert(SemanticsMatcher.expectValue(
             SemanticsProperties.Selected, false))
+    }
+
+    @Test fun targetCheckboxesKeepTheViewedLibraryAndMenuOpen() {
+        var state by mutableStateOf(selectedState().copy(
+            selectedTargetIds = setOf(kitchen.id), photoFolder = "/sdcard/KitchenLibrary"))
+        val views = mutableListOf<String>()
+        val targets = mutableListOf<Set<String>>()
+        fixture {
+            header(state, onSelect = { views.add(it) }, onSelectTargets = {
+                targets.add(it)
+                state = state.copy(selectedTargetIds = it)
+            })
+        }
+
+        selector().performClick()
+        compose.onNodeWithText("View Portal").assertIsDisplayed()
+        compose.onNodeWithText("Send changes to").performScrollTo().assertIsDisplayed()
+        target(studio.id).performScrollTo().assertIsOff().performClick().assertIsOn()
+        target(kitchen.id).performScrollTo().assertIsOn().performClick().assertIsOff()
+        compose.onNode(isPopup()).assertExists()
+        selector().assert(hasText(kitchen.name))
+        compose.runOnIdle {
+            assertEquals(listOf(setOf("portal/raw:kitchen-01", "portal/raw:studio-02"),
+                setOf("portal/raw:studio-02")), targets)
+            assertEquals("portal/raw:kitchen-01", state.activeDeviceId)
+            assertEquals("/sdcard/KitchenLibrary", state.photoFolder)
+            assertTrue("Target checkboxes must not select a viewed Portal", views.isEmpty())
+        }
+    }
+
+    @Test fun selectAllAndClearEmitExplicitTargetsAndShowTheEmptySelection() {
+        var state by mutableStateOf(selectedState().copy(selectedTargetIds = setOf(studio.id)))
+        val views = mutableListOf<String>()
+        val targets = mutableListOf<Set<String>>()
+        fixture {
+            header(state, onSelect = { views.add(it) }, onSelectTargets = {
+                targets.add(it)
+                state = state.copy(selectedTargetIds = it)
+            })
+        }
+
+        selector().performClick()
+        compose.onNodeWithTag("select-all-portals").performScrollTo().performClick()
+        target(kitchen.id).performScrollTo().assertIsOn()
+        target(studio.id).performScrollTo().assertIsOn()
+        compose.onNodeWithTag("clear-portal-selection").performScrollTo().performClick()
+        compose.onNodeWithText("No targets selected. Choose Portals before applying changes.")
+            .performScrollTo().assertIsDisplayed()
+        target(kitchen.id).performScrollTo().assertIsOff()
+        target(studio.id).performScrollTo().assertIsOff()
+        compose.onNode(isPopup()).assertExists()
+        compose.runOnIdle {
+            assertEquals(listOf(setOf("portal/raw:kitchen-01", "portal/raw:studio-02"),
+                emptySet<String>()), targets)
+            assertEquals("portal/raw:kitchen-01", state.activeDeviceId)
+            assertTrue(views.isEmpty())
+        }
+    }
+
+    @Test fun noSavedPortalsExplainsTheEmptyMenuAndKeepsAddAvailable() {
+        fixture { header(ControlCenterState()) }
+
+        selector().performClick()
+        compose.onNodeWithText("No paired Portals. Add a Portal to get started.")
+            .assertIsDisplayed()
+        compose.onNodeWithTag("select-all-portals").performScrollTo().assertIsNotEnabled()
+        compose.onNodeWithTag("clear-portal-selection").performScrollTo().assertIsNotEnabled()
+        menuItem("Add a Portal").performScrollTo().assertIsEnabled()
     }
 
     @Test fun manySavedPortalsUseABoundedScrollableNativeMenu() {
@@ -188,6 +266,54 @@ class CompactPortalHeaderUiTest {
         compose.runOnIdle { assertEquals(listOf("portal/raw:59"), selected) }
     }
 
+    @Test fun unifiedMenuAt280DpAndDoubleFontScaleBoundsLongNamesAndEveryTouchTarget() {
+        val devices = List(12) { index ->
+            CompanionDevice("portal/raw:$index", "$LONG_NAME $index", "http://portal$index.local:8723")
+        }
+        fixture(fontScale = 2f) {
+            header(ControlCenterState(devices = devices, activeDeviceId = devices.first().id,
+                selectedTargetIds = setOf(devices.first().id)))
+        }
+
+        selector().performClick()
+        val density = compose.activity.resources.displayMetrics.density
+        val popup = bounds(compose.onNode(isPopup()))
+        assertTrue("The menu must fit a 280dp phone width", popup.width <= 280 * density + 1)
+        assertTrue("The menu must keep its native bounded height", popup.height <= 360 * density + 1)
+        compose.onNode(hasScrollAction() and hasAnyAncestor(isPopup())).assertExists()
+        val scrollBounds = bounds(compose.onNode(hasScrollAction() and hasAnyAncestor(isPopup())))
+        target(devices.last().id).assertIsNotDisplayed()
+        val controls = devices.map { compose.onNodeWithTag("view-portal-${it.id}") } +
+            listOf(compose.onNodeWithTag("select-all-portals"),
+                compose.onNodeWithTag("clear-portal-selection")) +
+            devices.map { target(it.id) } +
+            listOf(menuItem("Add a Portal"), menuItem("Disconnect"), menuItem("Forget this Portal"))
+        for (control in controls) {
+            control.performScrollTo().assertIsDisplayed()
+            val targetBounds = bounds(control)
+            assertTrue("Every menu action needs a 48dp touch target",
+                targetBounds.width >= 48 * density - 1 && targetBounds.height >= 48 * density - 1)
+            assertInside("Menu action", targetBounds, scrollBounds)
+        }
+        for (tag in listOf("view-portal-${devices.last().id}", "group-target-${devices.last().id}")) {
+            val row = compose.onNodeWithTag(tag).performScrollTo()
+            val name = compose.onNode(
+                hasText(devices.last().name) and hasAnyAncestor(hasTestTag(tag)),
+                useUnmergedTree = true)
+            assertInside("Long menu name", bounds(name), bounds(row))
+            val layouts = mutableListOf<TextLayoutResult>()
+            name.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { action ->
+                assertTrue(action(layouts))
+            }
+            val layout = layouts.single()
+            assertTrue("Menu names must stay within two lines", layout.lineCount in 1..2)
+            assertTrue("Long menu names must ellipsize",
+                layout.isLineEllipsized(layout.lineCount - 1))
+            assertTrue("Name glyphs must fit the measured height",
+                layout.getLineBottom(layout.lineCount - 1) <= layout.size.height + 1)
+        }
+    }
+
     @Test fun addRemainsAvailableWithoutASelectionWhileDeviceActionsAreGuarded() {
         var state by mutableStateOf(ControlCenterState())
         val actions = mutableListOf<String>()
@@ -208,7 +334,7 @@ class CompactPortalHeaderUiTest {
             selector().assertIsEnabled().performClick()
             menuItem("Disconnect").assertDoesNotExist()
             menuItem("Forget this Portal").assertDoesNotExist()
-            menuItem("Add a Portal").assertIsEnabled().performClick()
+            menuItem("Add a Portal").performScrollTo().assertIsEnabled().performClick()
             compose.onNode(isPopup()).assertDoesNotExist()
         }
         compose.runOnIdle { assertEquals(listOf("add", "add", "add"), actions) }
@@ -227,13 +353,13 @@ class CompactPortalHeaderUiTest {
             CompanionConnection.OFFLINE, CompanionConnection.UNAUTHORIZED)) {
             compose.runOnIdle { state = selectedState().copy(connection = connection, busy = true) }
             selector().performClick()
-            menuItem("Add a Portal").assertIsEnabled().performClick()
+            menuItem("Add a Portal").performScrollTo().assertIsEnabled().performClick()
             compose.onNode(isPopup()).assertDoesNotExist()
             selector().performClick()
-            menuItem("Disconnect").assertIsEnabled().performClick()
+            menuItem("Disconnect").performScrollTo().assertIsEnabled().performClick()
             compose.onNode(isPopup()).assertDoesNotExist()
             selector().performClick()
-            menuItem("Forget this Portal").assertIsEnabled().performClick()
+            menuItem("Forget this Portal").performScrollTo().assertIsEnabled().performClick()
             compose.onNode(isPopup()).assertDoesNotExist()
         }
         compose.runOnIdle {
@@ -251,7 +377,7 @@ class CompactPortalHeaderUiTest {
         }
 
         selector().performClick()
-        menuItem("Forget this Portal").assertIsDisplayed()
+        menuItem("Forget this Portal").performScrollTo().assertIsDisplayed()
         compose.runOnIdle { state = state.copy(devices = listOf(studio)) }
         menuItem("Disconnect").assertDoesNotExist()
         menuItem("Forget this Portal").assertDoesNotExist()
@@ -294,8 +420,11 @@ class CompactPortalHeaderUiTest {
         onDisconnect: () -> Unit = {},
         onForget: (String) -> Unit = {},
         onRefresh: () -> Unit = {},
+        onSelectTargets: (Set<String>) -> Unit = {},
     ) {
-        CompactPortalHeader(state, refreshing, onSelect, onAdd, onDisconnect, onForget, onRefresh)
+        CompactPortalHeader(state = state, refreshing = refreshing, onSelectDevice = onSelect,
+            onSelectTargets = onSelectTargets, onAddPortal = onAdd, onDisconnect = onDisconnect,
+            onForgetPortal = onForget, onRefresh = onRefresh)
     }
 
     private fun fixture(fontScale: Float = 1f, content: @Composable () -> Unit) {
@@ -321,8 +450,12 @@ class CompactPortalHeaderUiTest {
 
     private fun selector() = compose.onNodeWithContentDescription("Active Portal")
     private fun refresh() = compose.onNodeWithContentDescription("Refresh current page")
+    private fun target(id: String) = compose.onNodeWithTag("group-target-$id")
     private fun menuItem(label: String) = compose.onNode(
-        hasText(label) and hasClickAction() and hasAnyAncestor(isPopup()))
+        hasText(label) and hasClickAction() and hasAnyAncestor(isPopup()) and
+            SemanticsMatcher("Not a write-target checkbox") {
+                it.config.getOrNull(SemanticsProperties.Role) != Role.Checkbox
+            })
 
     // Use layout size, since a clipped semantics rectangle can hide a real overlap.
     private fun bounds(node: SemanticsNodeInteraction): Rect {

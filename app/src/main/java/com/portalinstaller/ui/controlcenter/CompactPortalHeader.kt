@@ -17,14 +17,18 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -37,6 +41,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -51,13 +56,14 @@ import com.portalinstaller.data.companion.CompanionConnection
 import com.portalinstaller.data.companion.ControlCenterState
 import com.portalinstaller.ui.common.PremiumDropdownMenu
 
-/** One native app bar owns Portal selection, connection status, and the current-page refresh. */
+/** One native app bar owns viewing and write targets independently, plus status and refresh. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun CompactPortalHeader(
     state: ControlCenterState,
     refreshing: Boolean,
     onSelectDevice: (String) -> Unit,
+    onSelectTargets: (Set<String>) -> Unit,
     onAddPortal: () -> Unit,
     onDisconnect: () -> Unit,
     onForgetPortal: (String) -> Unit,
@@ -93,6 +99,7 @@ internal fun CompactPortalHeader(
                     colors = ButtonDefaults.textButtonColors(
                         contentColor = MaterialTheme.colorScheme.onSurface),
                     modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp, max = 64.dp)
+                        .testTag("manage-portals")
                         .semantics {
                             role = Role.DropdownList
                             contentDescription = "Active Portal"
@@ -128,7 +135,15 @@ internal fun CompactPortalHeader(
                 PremiumDropdownMenu(
                     expanded = expanded,
                     onDismissRequest = { expanded = false },
+                    modifier = Modifier.widthIn(max = 280.dp),
                 ) {
+                    Text("View Portal", modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        style = MaterialTheme.typography.titleSmall)
+                    if (state.devices.isEmpty()) {
+                        Text("No paired Portals. Add a Portal to get started.",
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            style = MaterialTheme.typography.bodySmall)
+                    }
                     state.devices.forEach { device ->
                         val current = device.id == state.activeDeviceId
                         DropdownMenuItem(
@@ -136,27 +151,81 @@ internal fun CompactPortalHeader(
                                 Text(device.name, maxLines = 2, overflow = TextOverflow.Ellipsis,
                                     fontWeight = if (current) FontWeight.SemiBold else FontWeight.Normal)
                             },
+                            leadingIcon = { RadioButton(selected = current, onClick = null) },
                             onClick = { expanded = false; onSelectDevice(device.id) },
-                            modifier = Modifier.background(
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).background(
                                 if (current) MaterialTheme.colorScheme.secondaryContainer
                                 else Color.Transparent,
-                            ).semantics { selected = current },
+                            ).testTag("view-portal-${device.id}").semantics {
+                                role = Role.RadioButton
+                                selected = current
+                            },
                         )
                     }
-                    if (state.devices.isNotEmpty()) HorizontalDivider()
+                    HorizontalDivider()
+                    Text("Send changes to", modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        style = MaterialTheme.typography.titleSmall)
+                    DropdownMenuItem(
+                        text = { Text("Select all") },
+                        onClick = { onSelectTargets(state.devices.map { it.id }.toSet()) },
+                        enabled = state.devices.isNotEmpty(),
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                            .testTag("select-all-portals"),
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Clear selection") },
+                        onClick = { onSelectTargets(emptySet()) },
+                        enabled = state.selectedTargetIds.isNotEmpty(),
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                            .testTag("clear-portal-selection"),
+                    )
+                    if (state.selectedTargets.isEmpty()) {
+                        Text("No targets selected. Choose Portals before applying changes.",
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            style = MaterialTheme.typography.bodySmall)
+                    }
+                    state.devices.forEach { device ->
+                        val checked = device.id in state.selectedTargetIds
+                        Row(
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                                .toggleable(checked, role = Role.Checkbox, onValueChange = { selected ->
+                                    onSelectTargets(if (selected) state.selectedTargetIds + device.id
+                                        else state.selectedTargetIds - device.id)
+                                }).testTag("group-target-${device.id}")
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Checkbox(checked = checked, onCheckedChange = null)
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(device.name, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                Text("Imports: ${device.photoFolder}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            }
+                        }
+                    }
+                    if (state.targetSelectionSaving) {
+                        Text("Saving selection…", modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            style = MaterialTheme.typography.bodySmall)
+                    }
+                    HorizontalDivider()
                     DropdownMenuItem(
                         text = { Text("Add a Portal") },
                         onClick = { expanded = false; onAddPortal() },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                     )
                     // A saved selection can be disconnected or forgotten even while offline/busy.
                     activeDevice?.let { device ->
                         DropdownMenuItem(
                             text = { Text("Disconnect") },
                             onClick = { expanded = false; onDisconnect() },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                         )
                         DropdownMenuItem(
                             text = { Text("Forget this Portal") },
                             onClick = { expanded = false; onForgetPortal(device.id) },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                         )
                     }
                 }
