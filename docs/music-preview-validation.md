@@ -18,9 +18,13 @@ Source/player/queue replacement discards unfinished dialogs and drag gestures. A
 - Existing main/test APKs were backed up and signing compatibility verified before in-place installation. Pairings and app data were not cleared. The previous physical test APK was restored successfully.
 - Final **20/20 UI tests passed** and the corrected preview installed on the Pixel successfully. The temporary owned emulator was shut down. UI tests run on an owned temporary emulator, not the locked physical phone.
 
-## Remaining review finding
+## Resolved pending-capability review finding
 
-Independent final review identified one P2: Speakers can still close when actual pending readback clears its capability flags (`supportsSpeakers` / `supportedSheet`). The 20-test suite retains those flags in its pending fixture; it does not cover that case. Writes remain guarded, but full pending-panel UX acceptance is **not complete**. This unresolved item was parked at the 30-minute window rather than reopening an unbounded investigation.
+The additional P2 was reproduced against the actual Compose panel: withdrawing all command/row capabilities while a command remained pending closed Speakers, Queue and Lyrics (**3/3 regressions failed**). One shared `readableSheet` rule now retains an already-open view during pending confirmation; current command permissions still govern all writes. Source/player/queue keys still reset views, Lyrics requires the current track, and terminal unsupported/lifecycle states still close views. Independent scoped review found no actionable remaining findings in the changed panel/tests.
+
+The final full JVM gate passed **533 tests / zero failures/errors/skips**, debug and test assembly passed, and **23/23 Android UI tests passed in 38.87 seconds**.
+
+Actual paired Pixel acceptance then passed **2 tests in 3.312 seconds**. In addition to stale-source rejection, the phone issued a valid one-step Family-only volume change, waited for a new source/revision/request-correlated `set_volume / confirmed` result with the actual target value, then restored the original volume. The probe checked unchanged other-room volume, group membership, queue and track, with no pending command after cleanup. Pairings stayed in the phone and the previous test APK was restored. These elapsed values cover whole test runs, not command latency or a p95 benchmark.
 
 ## Remaining gates
 
@@ -28,4 +32,6 @@ This is companion integration, not completion of the full music goal. Actual You
 
 Private receipts and APK rollback copies reside under `/private/tmp/toolkit-music-validation/`; UI/physical logs are `/private/tmp/toolkit-music-ui-final-device.log` and `/private/tmp/toolkit-music-live-phone.log`. No credentials are included in this document or Git.
 
-Installed preview APK SHA-256: `aa86465195cefbe3a503e797f8fa71fa1ce9ca4258505ce7e9c4dc9df7bd277f`.
+Installed preview APK SHA-256: `cbcc3b8df774e0890e4f7659fd587f975ac39e30e4abb0c1724db21b98bf9585`.
+
+Additional private receipts: `/private/tmp/toolkit-music-capability-red.log`, `/private/tmp/toolkit-music-capability-green-build.log`, `/private/tmp/toolkit-music-capability-green-ui.log`, `/private/tmp/toolkit-music-valid-volume-phone.log`.

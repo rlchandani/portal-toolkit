@@ -113,8 +113,15 @@ internal fun MusicPanel(
             MusicSheet.Lyrics -> music?.capabilities?.lyrics == true && track != null
             null -> false
         }
-        LaunchedEffect(connected, ready, supportedSheet) {
-            if (!connected || !ready || !supportedSheet) {
+        // Capability flags are command admission, not read permission. Pending readback
+        // withdraws every command while the current source's data is still readable.
+        val readableSheet = supportedSheet || (music?.pending != null && when (sheet) {
+            MusicSheet.Queue, MusicSheet.Speakers -> true
+            MusicSheet.Lyrics -> track != null
+            null -> false
+        })
+        LaunchedEffect(connected, ready, readableSheet) {
+            if (!connected || !ready || !readableSheet) {
                 sheet = null
                 roomChange = null
             }
@@ -259,7 +266,7 @@ internal fun MusicPanel(
                 }
             }
         }
-        if (sheet != null && supportedSheet && connected && ready && music != null) {
+        if (sheet != null && readableSheet && connected && ready && music != null) {
             val currentSheet = sheet!!
             ModalBottomSheet(
                 onDismissRequest = { sheet = null; roomChange = null },

@@ -503,6 +503,54 @@ class MusicPanelUiTest {
         compose.runOnIdle { assertTrue(fixture.sent.isEmpty()) }
     }
 
+    @Test fun speakersStayOpenWhenPendingReadbackWithdrawsAllCommandCapabilities() {
+        val fixture = showPanel(Fixture(parse(state())))
+        open("Speakers")
+        withdrawCapabilitiesDuringPending(fixture)
+        compose.onNodeWithTag("music-room-list").assertIsDisplayed()
+        compose.onNodeWithTag("music-sheet-feedback").assertIsDisplayed()
+        compose.onNodeWithText("Join group").assertDoesNotExist()
+        compose.onNodeWithTag("music-volume-ma:leader").assertDoesNotExist()
+        compose.runOnIdle { assertTrue(fixture.sent.isEmpty()) }
+    }
+
+    @Test fun queueStaysReadableWhenPendingReadbackWithdrawsSelectionPermission() {
+        val fixture = showPanel(Fixture(parse(state())))
+        open("Queue")
+        withdrawCapabilitiesDuringPending(fixture)
+        compose.onNodeWithTag("music-queue-list").assertIsDisplayed()
+        compose.onNodeWithTag("music-queue-item-a").assertIsNotEnabled()
+        compose.onNodeWithTag("music-sheet-feedback").assertIsDisplayed()
+        compose.runOnIdle { assertTrue(fixture.sent.isEmpty()) }
+    }
+
+    @Test fun lyricsStayReadableWhenPendingReadbackWithdrawsCommandCapabilities() {
+        val fixture = showPanel(Fixture(parse(state())))
+        open("Lyrics")
+        withdrawCapabilitiesDuringPending(fixture)
+        compose.onNodeWithText("First line").assertIsDisplayed()
+        compose.onNodeWithTag("music-sheet-feedback").assertIsDisplayed()
+        compose.runOnIdle { assertTrue(fixture.sent.isEmpty()) }
+    }
+
+    private fun withdrawCapabilitiesDuringPending(fixture: Fixture) {
+        compose.runOnIdle {
+            val pending = state().put("pending", JSONObject().put("requestId", 8L)
+                .put("command", "set_volume").put("startedAtElapsedMs", 100L))
+            val capabilities = pending.getJSONObject("capabilities")
+            capabilities.keys().asSequence().toList().forEach { capabilities.put(it, false) }
+            pending.getJSONArray("queue").getJSONObject(0).put("canSelect", false)
+            val rooms = pending.getJSONArray("rooms")
+            for (index in 0 until rooms.length()) {
+                listOf("canSelect", "canJoin", "canRemove", "canSetVolume")
+                    .forEach { rooms.getJSONObject(index).put(it, false) }
+            }
+            fixture.music = parse(pending)
+            fixture.fresh = true
+            fixture.sending = false
+        }
+    }
+
     private fun progress(slider: SemanticsNodeInteraction) =
         slider.fetchSemanticsNode().config[SemanticsProperties.ProgressBarRangeInfo].current
 
