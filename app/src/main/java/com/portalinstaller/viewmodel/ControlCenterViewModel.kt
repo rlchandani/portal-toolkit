@@ -24,6 +24,7 @@ import org.json.JSONObject
 class ControlCenterViewModel(private val repository: CompanionRepository) : ViewModel() {
     constructor(context: Context) : this(CompanionRepository.create(context))
     val state = repository.state
+    val music = CompanionMusicController(viewModelScope, repository::readMusic, repository::sendMusic)
     val remoteText = RemoteTextController(viewModelScope) { deviceKey, text ->
         val selected = state.value
         if (deviceKey != "${selected.activeDeviceId}:${selected.sessionGeneration}" || !selected.connected) false
@@ -33,6 +34,7 @@ class ControlCenterViewModel(private val repository: CompanionRepository) : View
         viewModelScope.launch {
             state.collect { selected ->
                 remoteText.updateSession("${selected.activeDeviceId}:${selected.sessionGeneration}", selected.connected)
+                music.updateSession("${selected.activeDeviceId}:${selected.sessionGeneration}", selected.connected)
             }
         }
         viewModelScope.launch {

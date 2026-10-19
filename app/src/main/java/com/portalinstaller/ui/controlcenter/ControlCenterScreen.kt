@@ -162,6 +162,8 @@ fun ControlCenterScreen() {
     val operationsVisible = detail == CenterDetail.OPERATIONS
     val controlCenterVisible = !advancedTools
     val pairingVisible = pairDialog && controlCenterVisible
+    val musicVisible = controlCenterVisible && detail == CenterDetail.NONE &&
+        tab in setOf(CenterTab.HOME, CenterTab.REMOTE)
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) {
         if (it.isNotEmpty()) {
@@ -223,6 +225,24 @@ fun ControlCenterScreen() {
                 val request = vm.refreshPage(pageRefreshes)
                 try { request.join() } finally { request.cancel() }
             }
+        }
+    }
+    LaunchedEffect(vm, lifecycleOwner, selectedDeviceId, selectedGeneration, connected, musicVisible) {
+        if (!connected || !musicVisible) {
+            vm.music.stopObserving()
+            return@LaunchedEffect
+        }
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            try {
+                while (isActive) {
+                    if (!vm.music.state.value.unsupported) {
+                        val request = vm.music.refresh()
+                        try { request.join() } finally { request.cancel() }
+                    }
+                    // One bounded metadata read at a time, only while music is visible.
+                    delay(1_000)
+                }
+            } finally { vm.music.stopObserving() }
         }
     }
     // Work stops when the activity is backgrounded; metadata is not polled at frame rate.
@@ -663,6 +683,25 @@ private fun RemotePanel(state: ControlCenterState, vm: ControlCenterViewModel) {
 
 @Composable
 private fun MediaPanel(state: ControlCenterState, vm: ControlCenterViewModel) {
+    val music by vm.music.state.collectAsStateWithLifecycle()
+    val key = "${state.activeDeviceId}:${state.sessionGeneration}"
+    val ownsMusic = music.deviceKey == key
+    if (!ownsMusic || !music.unsupported) {
+        MusicPanel(
+            music = music.music.takeIf { ownsMusic },
+            deviceKey = key,
+            connected = state.connected && music.connected && ownsMusic,
+            fresh = music.fresh && ownsMusic,
+            sending = music.sending && ownsMusic,
+            feedback = music.feedback.takeIf { ownsMusic },
+            onAction = { observed, action ->
+                vm.music.command(key, observed, action)
+            },
+            onRefresh = { vm.music.refresh() },
+        )
+        return
+    }
+    // Older Portal builds retain their existing local MediaSession controls.
     val playback = remember(state.nowPlaying) { CompanionPlayback.fromJson(state.nowPlaying) }
     PlaybackPanel(
         playback = playback,

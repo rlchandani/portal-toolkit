@@ -234,6 +234,32 @@ class CompanionRepository(
     }
 
     fun clearError() { mutableState.update { it.copy(error = null, lastResult = null) } }
+    /** Music targets only the viewed Portal, never the separate multi-Portal write selection. */
+    suspend fun readMusic(deviceKey: String): JSONObject? = musicRequest(deviceKey)
+    suspend fun sendMusic(deviceKey: String, body: JSONObject): JSONObject? = musicRequest(deviceKey, body)
+
+    private suspend fun musicRequest(deviceKey: String, body: JSONObject? = null): JSONObject? {
+        val selected = ticket() ?: return null
+        fun valid() = owns(selected) && state.value.connected &&
+            "${selected.session.device.id}:${selected.generation}" == deviceKey
+        if (!valid()) return null
+        try {
+            val result = if (body == null) withContext(io) { client.get(selected.session, "music") }
+            else writeMutex.withLock {
+                if (!valid()) return@withLock null
+                withContext(io) { client.post(selected.session, "music/command", body) }
+            }
+            return result?.takeIf { valid() }
+        } catch (cancelled: CancellationException) { throw cancelled }
+        catch (error: Exception) {
+            if (!valid()) return null
+            if (error is CompanionException && error.error.status in setOf(401, 403)) {
+                update(selected) { it.copy(connection = CompanionConnection.UNAUTHORIZED, error = error.error) }
+            }
+            throw error
+        }
+    }
+
     fun refresh(): Job = request(showBusy = false) { refreshTicket(it) }
     fun refreshStatus(): Job = request(showBusy = false) { selected ->
         val info = withContext(io) { optionalGet(selected.session, "companion") }

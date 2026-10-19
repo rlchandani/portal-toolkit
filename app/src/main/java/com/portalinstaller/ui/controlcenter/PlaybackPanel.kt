@@ -188,7 +188,7 @@ internal fun PlaybackPanel(
 }
 
 @Composable
-private fun PlaybackGlyph(name: String, tint: Color, modifier: Modifier = Modifier.size(28.dp)) {
+internal fun PlaybackGlyph(name: String, tint: Color, modifier: Modifier = Modifier.size(28.dp)) {
     Canvas(modifier) {
         val u = size.minDimension / 24
         fun triangle(left: Float, right: Float) = Path().apply {
