@@ -43,3 +43,12 @@ Private receipts and APK rollback copies reside under `/private/tmp/toolkit-musi
 Installed preview APK SHA-256: `cbcc3b8df774e0890e4f7659fd587f975ac39e30e4abb0c1724db21b98bf9585`.
 
 Additional private receipts: `/private/tmp/toolkit-music-capability-red.log`, `/private/tmp/toolkit-music-capability-green-build.log`, `/private/tmp/toolkit-music-capability-green-ui.log`, `/private/tmp/toolkit-music-valid-volume-phone.log`.
+
+
+## Synchronous player selection and latest Pixel preview — October 19, 11:08 UTC
+
+Immortal source selection applies synchronously and intentionally returns a new Connecting snapshot without a pending playback operation. The companion previously treated that valid response as a missing-correlated-admission error. It now publishes the matching selected source and says Player selected, without claiming playback confirmation. A missing pending response for transport/volume or the wrong selected player still fails. Two meaningful regression cases were added; scoped independent review found no remaining defect in this change.
+
+Complete companion gate: **540 JVM tests / 72 suites / zero failures, errors or skips**; debug and Android-test APK assemblies succeeded. Candidate SHA-256 `c2933b966edad3f1793641bf105e1a33292543132774beeaacc79318d8fcbbd3` installed in place on the paired Pixel and the pulled installed APK hash/signer verified. Both saved pairings and target selection remain byte-for-byte unchanged; the actual prior APK is retained. No companion data was cleared.
+
+The narrow OS foreground check identified the installed companion. A later screenshot attempt did not establish current window focus, so no new phone visual acceptance is claimed. The earlier physical Compose fixture remains parked; these JVM/build/install checks do not prove that fixture, audible playback, source login or music latency. Deployment/readback receipts and rollback APKs are private under `/private/tmp/portal-music-recovery/integrated-rollout/`.

@@ -76,6 +76,97 @@ class CompanionMusicControllerTest {
         assertEquals("Latest state loaded; the previous change was not confirmed.", controller.state.value.feedback)
     }
 
+    @Test fun playerSelectionPublishesTheAdmittedSourceWithoutAPendingPlaybackCommand() = runTest {
+        val initial = music().apply {
+            getJSONObject("music").getJSONArray("rooms").put(JSONObject("""
+                {"id":"ma:kitchen","name":"Kitchen","available":true,"volume":30,"muted":false,
+                "groupId":null,"inCurrentGroup":false,"canSelect":true,"canJoin":false,
+                "canRemove":false,"canSetVolume":true}
+            """.trimIndent()))
+        }
+        // Immortal selects the source synchronously, clearing playback state before reconnecting.
+        val selected = music().apply {
+            getJSONObject("music").apply {
+                put("sourceRevision", 4L).put("sourceId", "ma:kitchen")
+                put("connection", "connecting").put("playback", "idle")
+                for (field in listOf("track", "positionMs", "controlPlayerId", "queueId"))
+                    put(field, JSONObject.NULL)
+                for (field in listOf("queue", "rooms", "lyrics")) put(field, org.json.JSONArray())
+                getJSONObject("capabilities").apply {
+                    keys().asSequence().toList().forEach { put(it, false) }
+                }
+            }
+        }
+        val nextRead = CompletableDeferred<JSONObject?>()
+        var reads = 0
+        val sent = mutableListOf<JSONObject>()
+        val controller = CompanionMusicController(backgroundScope,
+            read = { if (++reads == 1) initial else nextRead.await() },
+            send = { _, body ->
+                sent += body
+                JSONObject().put("ok", true).put("admitted", true).put("status", "admitted")
+                    .put("confirmed", false).put("refreshRequired", false)
+                    .put("music", selected.getJSONObject("music"))
+            })
+        controller.updateSession("a:1", true)
+        controller.refresh().join()
+        controller.command("a:1", controller.state.value.music!!,
+            CompanionMusicAction.SelectPlayer("ma:kitchen"))
+        runCurrent()
+        assertEquals(1, sent.size)
+        assertEquals("select-player", sent.single().getString("command"))
+        assertEquals("ma:kitchen", sent.single().getString("roomId"))
+        assertEquals("ma:kitchen", controller.state.value.music?.sourceId)
+        assertEquals(4L, controller.state.value.music?.sourceRevision)
+        assertEquals("connecting", controller.state.value.music?.connection)
+        assertNull(controller.state.value.music?.track)
+        assertNull(controller.state.value.music?.pending)
+        assertFalse(controller.state.value.sending)
+        assertFalse(controller.state.value.feedback.orEmpty().contains("Could not"))
+        assertFalse(controller.state.value.feedback.orEmpty().contains("confirmed", ignoreCase = true))
+        nextRead.complete(selected)
+        runCurrent()
+        advanceTimeBy(13_000)
+        runCurrent()
+        assertEquals(1, sent.size)
+        assertEquals(2, reads)
+    }
+
+    @Test fun missingPendingAdmissionCannotConfirmTransportOrTheWrongSelectedPlayer() = runTest {
+        for (action in listOf(CompanionMusicAction.Transport("pause"),
+            CompanionMusicAction.Volume("ma:family", 30),
+            CompanionMusicAction.SelectPlayer("ma:family"))) {
+            val initial = music()
+            val admitted = music().apply {
+                // Family was selected, so a Kitchen observation cannot confirm that selection.
+                if (action is CompanionMusicAction.SelectPlayer)
+                    getJSONObject("music").put("sourceId", "ma:kitchen").put("sourceRevision", 4L)
+            }
+            val nextRead = CompletableDeferred<JSONObject?>()
+            var reads = 0
+            var writes = 0
+            val controller = CompanionMusicController(backgroundScope,
+                read = { if (++reads == 1) initial else nextRead.await() },
+                send = { _, _ ->
+                    writes++
+                    JSONObject().put("ok", true).put("admitted", true).put("status", "admitted")
+                        .put("confirmed", false).put("refreshRequired", false)
+                        .put("music", admitted.getJSONObject("music"))
+                })
+            controller.updateSession("a:1", true)
+            controller.refresh().join()
+            controller.command("a:1", controller.state.value.music!!, action)
+            runCurrent()
+            assertEquals(action.toString(), "ma:family", controller.state.value.music?.sourceId)
+            assertFalse(action.toString(), controller.state.value.fresh)
+            assertTrue(action.toString(), controller.state.value.feedback.orEmpty().contains("Could not"))
+            nextRead.complete(initial)
+            runCurrent()
+            assertEquals(action.toString(), 1, writes)
+            controller.stopObserving()
+        }
+    }
+
     @Test fun oldRowAndOldPortalCannotDispatchToReplacementQueueOrDevice() = runTest {
         var latest = music()
         val sent = mutableListOf<JSONObject>()

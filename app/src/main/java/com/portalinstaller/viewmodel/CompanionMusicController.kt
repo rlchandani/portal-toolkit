@@ -167,11 +167,20 @@ class CompanionMusicController(
                             response.opt("admitted") == true && response.opt("status") == "admitted" -> {
                                 val admitted = CompanionMusic.fromResponse(response)
                                 val pending = admitted.pending
-                                    ?: throw IllegalArgumentException("Missing correlated admission")
-                                awaited = Awaited(pending.requestId, pending.command,
-                                    observed.sourceRevision, observed.sourceId)
-                                mutableState.value = mutableState.value.copy(
-                                    feedback = "Accepted. Waiting for the player…")
+                                if (action is CompanionMusicAction.SelectPlayer && pending == null &&
+                                    admitted.sourceId == action.roomId) {
+                                    // Source selection applies synchronously and clears the old
+                                    // playback observation; it never creates a pending music command.
+                                    mutableState.value = mutableState.value.copy(
+                                        music = admitted, fresh = true, unsupported = false,
+                                        feedback = "Player selected.")
+                                } else {
+                                    require(pending != null) { "Missing correlated admission" }
+                                    awaited = Awaited(pending.requestId, pending.command,
+                                        observed.sourceRevision, observed.sourceId)
+                                    mutableState.value = mutableState.value.copy(
+                                        feedback = "Accepted. Waiting for the player…")
+                                }
                             }
                             response.opt("status") == "already_applied" ->
                                 mutableState.value = mutableState.value.copy(
