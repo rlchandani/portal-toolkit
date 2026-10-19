@@ -158,6 +158,51 @@ class CompanionMusicControllerTest {
         assertEquals(stoppedAt, reads)
     }
 
+    @Test fun interruptionRechecksCapturedIntentAndAllowsOnlyExplicitPause() = runTest {
+        var latest = music()
+        val sent = mutableListOf<JSONObject>()
+        val controller = CompanionMusicController(backgroundScope, { latest }, { _, body ->
+            sent += body
+            JSONObject("""{"ok":true,"admitted":false,"status":"already_applied"}""")
+        })
+        controller.updateSession("a:1", true)
+        controller.refresh().join()
+        val beforeInterruption = controller.state.value.music!!
+        latest = music().apply { getJSONObject("music").put("audioOwnedByOther", true) }
+        controller.refresh().join()
+        controller.command("a:1", beforeInterruption, CompanionMusicAction.Transport("play"))
+        runCurrent()
+        assertTrue(sent.isEmpty())
+        controller.refresh().join()
+        val interrupted = controller.state.value.music!!
+        controller.command("a:1", interrupted, CompanionMusicAction.Transport("pause"))
+        runCurrent()
+        assertEquals(1, sent.size)
+        assertEquals("pause", sent.single().getString("command"))
+        assertEquals(3L, sent.single().getLong("sourceRevision"))
+        assertEquals("ma:family", sent.single().getString("sourceId"))
+        assertEquals("item", sent.single().getString("trackId"))
+    }
+
+    @Test fun interruptedPauseCannotUseAReplacedSourceRevision() = runTest {
+        var latest = music().apply { getJSONObject("music").put("audioOwnedByOther", true) }
+        val sent = mutableListOf<JSONObject>()
+        val controller = CompanionMusicController(backgroundScope, { latest }, { _, body ->
+            sent += body
+            JSONObject("""{"ok":true,"admitted":false,"status":"already_applied"}""")
+        })
+        controller.updateSession("a:1", true)
+        controller.refresh().join()
+        val captured = controller.state.value.music!!
+        latest = music().apply {
+            getJSONObject("music").put("audioOwnedByOther", true).put("sourceRevision", 4L)
+        }
+        controller.refresh().join()
+        controller.command("a:1", captured, CompanionMusicAction.Transport("pause"))
+        runCurrent()
+        assertTrue(sent.isEmpty())
+    }
+
     private fun music(
         title: String = "Song",
         queueId: String = "queue",

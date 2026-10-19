@@ -99,7 +99,7 @@ internal fun MusicPanel(
         val outcome = music?.lastCommand?.outcome
         val ready = connection == "ready"
         val enabled = connected && fresh && ready && !sending && music?.pending == null
-        val track = if (music?.audioOwnedByOther == true) null else music?.track
+        val track = music?.track
         fun allowed(action: CompanionMusicAction): Boolean =
             enabled && music?.commandBody(action) != null
         fun dispatch(action: CompanionMusicAction) {
@@ -142,7 +142,6 @@ internal fun MusicPanel(
                             when {
                                 !connected -> "Music is offline"
                                 music == null -> "Loading music…"
-                                music.audioOwnedByOther -> "Audio in another app"
                                 !ready -> when (connection) {
                                     "not_configured" -> "Music isn’t configured"
                                     "connecting" -> "Connecting to music…"
@@ -165,7 +164,8 @@ internal fun MusicPanel(
                         } else MusicDetail(when {
                             !connected -> "Connect to your Portal to control music."
                             music == null -> "Waiting for your Portal."
-                            music.audioOwnedByOther -> "Music controls are paused while another app plays audio."
+                            music.audioOwnedByOther ->
+                                "Pause, volume, player selection and browsing remain available where supported."
                             connection == "not_configured" ->
                                 "Set up your music source on the Portal, then refresh."
                             connection == "auth_required" ->
@@ -221,7 +221,7 @@ internal fun MusicPanel(
                         }
                     }
                 }
-                if (music != null && ready && !music.audioOwnedByOther) {
+                if (music != null && ready) {
                     val transport = buildList {
                         if (music.capabilities.previous) add(musicTransport("Previous", "previous",
                             allowed(CompanionMusicAction.Transport("previous")), ::dispatch))
@@ -242,6 +242,8 @@ internal fun MusicPanel(
                     outcome == "failed" ->
                         "The music change failed. Refresh to check the player."
                     connected && music != null && !fresh -> "Music status is out of date. Refresh to update it."
+                    connected && ready && music != null && music.audioOwnedByOther ->
+                        "Starting or repositioning music is unavailable during this interruption."
                     connected && ready && music != null && track == null && !music.audioOwnedByOther ->
                         "Choose a player or start music on your Portal."
                     else -> null

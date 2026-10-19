@@ -343,17 +343,81 @@ class CompanionMusicTest {
             .commandBody(CompanionMusicAction.Transport("pause")))
     }
 
-    @Test fun allCommandsAreBlockedWhileNotReadyPendingOrAudioOwnedElsewhere() {
+    @Test fun allCommandsAreBlockedWhileNotReadyOrPending() {
         for (connection in listOf("not_configured", "connecting", "offline", "auth_required", "incompatible")) {
             val music = parse(state().put("connection", connection))
             for (action in actions) assertNull("$connection $action", music.commandBody(action))
         }
-        for (music in listOf(parse(stateWithResults()), parse(state().put("audioOwnedByOther", true)))) {
+        for (music in listOf(parse(stateWithResults()))) {
             for (action in actions) {
                 assertNull(action.toString(), music.commandBody(action))
                 assertFalse(music.can(action))
             }
         }
+    }
+
+    @Test fun interruptedMetadataAndSafeCommandsKeepTheirObservedBindings() {
+        val music = parse(state().put("audioOwnedByOther", true))
+        assertEquals(parse().track, music.track)
+        assertEquals(parse().queue, music.queue)
+        assertEquals(parse().lyrics, music.lyrics)
+        assertTrue(music.capabilities.queue)
+        assertTrue(music.capabilities.lyrics)
+        assertBody(music.commandBody(CompanionMusicAction.Transport("pause")), """{
+            "command":"pause","sourceRevision":42,"sourceId":"ma:leader","trackId":"track-a"
+        }""")
+        assertBody(music.commandBody(CompanionMusicAction.Volume("ma:join", 35)), """{
+            "command":"volume","sourceRevision":42,"sourceId":"ma:leader","roomId":"ma:join","percent":35
+        }""")
+        assertBody(music.commandBody(CompanionMusicAction.SelectPlayer("ma:join")), """{
+            "command":"select-player","sourceRevision":42,"sourceId":"ma:leader","roomId":"ma:join"
+        }""")
+        assertBody(music.commandBody(CompanionMusicAction.ToggleRoom("ma:member")), """{
+            "command":"toggle-room","sourceRevision":42,"sourceId":"ma:leader",
+            "roomId":"ma:member","leaderId":"ma:leader","wasInGroup":true
+        }""")
+    }
+
+    @Test fun interruptionRejectsStartingRepositioningAndJoiningEvenWithAdvertisedCapabilities() {
+        val music = parse(state().put("audioOwnedByOther", true))
+        val blocked = listOf(
+            CompanionMusicAction.Transport("play"), CompanionMusicAction.Transport("next"),
+            CompanionMusicAction.Transport("previous"), CompanionMusicAction.Seek(1_000),
+            CompanionMusicAction.QueueItem("item-a"), CompanionMusicAction.ToggleRoom("ma:join"),
+        )
+        for (action in blocked) {
+            assertNull(action.toString(), music.commandBody(action))
+            assertFalse(action.toString(), music.can(action))
+        }
+    }
+
+    @Test fun interruptedSafeCommandsStillRequireCapabilitiesPendingAndRoomEligibility() {
+        val safe = listOf(
+            "pause" to CompanionMusicAction.Transport("pause"),
+            "volume" to CompanionMusicAction.Volume("ma:join", 35),
+            "selectPlayer" to CompanionMusicAction.SelectPlayer("ma:join"),
+            "rooms" to CompanionMusicAction.ToggleRoom("ma:member"),
+        )
+        for ((capability, action) in safe) {
+            val unsupported = state().put("audioOwnedByOther", true)
+            unsupported.getJSONObject("capabilities").put(capability, false)
+            assertNull(capability, parse(unsupported).commandBody(action))
+            assertNull(action.toString(), parse(stateWithResults().put("audioOwnedByOther", true))
+                .commandBody(action))
+            assertNull(action.toString(), parse(state().put("audioOwnedByOther", true).put("sourceId", ""))
+                .commandBody(action))
+        }
+        for ((field, action) in listOf(
+            "canSetVolume" to CompanionMusicAction.Volume("ma:join", 35),
+            "canSelect" to CompanionMusicAction.SelectPlayer("ma:join"),
+        )) {
+            val disabled = state().put("audioOwnedByOther", true)
+            disabled.getJSONArray("rooms").getJSONObject(1).put(field, false)
+            assertNull(field, parse(disabled).commandBody(action))
+        }
+        val member = state().put("audioOwnedByOther", true)
+        member.getJSONArray("rooms").getJSONObject(2).put("canRemove", false)
+        assertNull(parse(member).commandBody(CompanionMusicAction.ToggleRoom("ma:member")))
     }
 
     @Test fun blankSourceIsReadableButCannotAuthorizeAnyCommand() {

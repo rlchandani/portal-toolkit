@@ -233,7 +233,13 @@ sealed interface CompanionMusicAction {
  */
 fun CompanionMusic.commandBody(action: CompanionMusicAction): JSONObject? {
     if (schemaVersion != 1 || sourceRevision < 0 || connection != "ready" ||
-        pending != null || audioOwnedByOther || !companionMusicValidId(sourceId)) return null
+        pending != null || !companionMusicValidId(sourceId)) return null
+    // Interruption blocks starting/repositioning output, not every supported control.
+    if (audioOwnedByOther && when (action) {
+        is CompanionMusicAction.Transport -> action.command != "pause"
+        is CompanionMusicAction.Seek, is CompanionMusicAction.QueueItem -> true
+        else -> false
+    }) return null
 
     fun base(command: String) = JSONObject().put("command", command)
         .put("sourceRevision", sourceRevision).put("sourceId", sourceId)
@@ -272,7 +278,7 @@ fun CompanionMusic.commandBody(action: CompanionMusicAction): JSONObject? {
         is CompanionMusicAction.ToggleRoom -> {
             val room = observedRoom(action.roomId) ?: return null
             val leader = controlPlayerId?.takeIf(::companionMusicValidId) ?: return null
-            if (!capabilities.rooms || room.id == leader ||
+            if (!capabilities.rooms || room.id == leader || (audioOwnedByOther && !room.inCurrentGroup) ||
                 !(if (room.inCurrentGroup) room.canRemove else room.canJoin)) null
             else base("toggle-room").put("roomId", room.id).put("leaderId", leader)
                 .put("wasInGroup", room.inCurrentGroup)

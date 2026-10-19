@@ -78,6 +78,31 @@ class MusicPanelUiTest {
         compose.runOnIdle { assertTrue(fixture.sent.isEmpty()) }
     }
 
+    @Test fun interruptionPreservesMetadataPauseAndPassiveQueueAndLyrics() {
+        val json = state().put("audioOwnedByOther", true)
+        json.getJSONObject("capabilities").apply {
+            for (capability in listOf("play", "next", "previous", "seek")) put(capability, false)
+        }
+        json.getJSONArray("queue").getJSONObject(0).put("canSelect", false)
+        json.getJSONArray("rooms").getJSONObject(1).put("canJoin", false)
+        val fixture = showPanel(Fixture(parse(json)))
+        compose.onNodeWithText("Night Train").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Pause").performScrollTo().assertIsEnabled().performClick()
+        compose.onNodeWithContentDescription("Play").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Next").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Previous").assertDoesNotExist()
+        open("Queue")
+        compose.onNodeWithText("Next Track").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Close queue").performClick()
+        open("Lyrics")
+        compose.onNodeWithText("First line").assertIsDisplayed()
+        compose.runOnIdle {
+            assertEquals(1, fixture.sent.size)
+            assertEquals("pause", fixture.body().getString("command"))
+            assertSame(fixture.music, fixture.sent.single().first)
+        }
+    }
+
     @Test fun transportUsesCurrentSnapshotBindingsAndNeverResumesOnRecomposition() {
         val fixture = showPanel()
         for (command in listOf("previous", "pause", "next")) {

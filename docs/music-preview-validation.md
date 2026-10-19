@@ -1,5 +1,13 @@
 # Family Area music companion preview — October 19, 2026
 
+## Latest interruption-policy checkpoint — October 19
+
+Selective guards keep supported Pause/Volume/player selection/group removal and passive Queue/Lyrics available during local interruption, preserving reported metadata. Play/Next/Previous/Seek/queue selection/group joining remain denied. Pending, stale-observation, source/revision and membership guards remain in effect. Added five JVM cases and one Compose UI regression.
+
+Full JVM gate: **538 tests / 72 suites / zero failures, errors or skips**. Debug and instrumentation APKs build successfully. The new physical Pixel UI regression failed before any Compose hierarchy was available, including one awake-device repeat; there is **no physical UI verdict**. This harness issue is parked within the bounded work window. Main/test APKs were automatically restored; pairing/data were never cleared. Phone retains prior preview `cbcc3b8df774e0890e4f7659fd587f975ac39e30e4abb0c1724db21b98bf9585`; candidate `4ce7199200bec393ec35d1fb4117c608d6fdebac72c059b14e0e6f1a2bba6187` is built only. Earlier accepted tests below belong to their recorded version and do not pass this new case.
+
+Filtered receipts/logs and APK rollback copies: `/private/tmp/portal-ma-receiver-binding-source/`. Live receiver interruption propagation remains inactive; no new audible handoff or performance acceptance is claimed. No YouTube credentials or account cookies were copied.
+
 Branch `codex/toolkit-music-20261019`, based on preserved companion checkpoint `8d18051`. The primary checkout and frozen companion branch were not changed. Preview version 12 / `1.7.0-music-preview`.
 
 ## Implemented
