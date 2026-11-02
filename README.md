@@ -6,7 +6,7 @@ The Immortal control center pairs over local Wi-Fi for everyday controls, photo
 uploads, settings, home layouts, routines, catalog apps, and Jarvis management.
 Advanced device tools retain Wi-Fi ADB and USB OTG for provisioning and maintenance.
 
-The current development build is **1.7.2-music-preview** (`versionCode 14`). See
+The current development build is **1.7.3-music-preview** (`versionCode 15`). See
 [Companion setup and capabilities](docs/companion-control-center.md) and the
 [music preview validation record](docs/music-preview-validation.md).
 The [earlier physical-device validation record](docs/companion-extended-validation-2026-10-08.md)

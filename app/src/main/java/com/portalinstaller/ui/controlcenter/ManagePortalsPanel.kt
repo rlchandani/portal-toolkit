@@ -50,16 +50,18 @@ internal fun GroupProgressPanel(operations: List<GroupOperation>, onRetry: (Long
     onCancel: (Long) -> Unit, onDismiss: (Long) -> Unit) {
     for (op in operations) GroupCard(Modifier.testTag("group-operation-${op.id}")) {
         Text(op.title, style = MaterialTheme.typography.titleSmall)
-        Text("${op.items.count { it.status == GroupWorkStatus.SUCCEEDED }} confirmed · ${op.items.count { it.status == GroupWorkStatus.FAILED }} failed · ${op.items.count { it.status == GroupWorkStatus.CANCELLED }} cancelled",
+        val unconfirmed = op.items.count { it.status == GroupWorkStatus.UNCONFIRMED }
+        Text("${op.items.count { it.status == GroupWorkStatus.SUCCEEDED }} confirmed · ${op.items.count { it.status == GroupWorkStatus.FAILED }} failed · ${op.items.count { it.status == GroupWorkStatus.CANCELLED }} cancelled${if (unconfirmed > 0) " · $unconfirmed unconfirmed" else ""}",
             style = MaterialTheme.typography.bodySmall)
         for ((targetId, targetItems) in op.items.groupBy { it.targetId }) {
-            if (targetItems.size > 1) Text("${targetItems.first().targetName}: ${targetItems.count { it.status == GroupWorkStatus.SUCCEEDED }}/${targetItems.size} confirmed, ${targetItems.count { it.status == GroupWorkStatus.FAILED }} failed, ${targetItems.count { it.status == GroupWorkStatus.QUEUED }} queued",
+            val roomUnconfirmed = targetItems.count { it.status == GroupWorkStatus.UNCONFIRMED }
+            if (targetItems.size > 1) Text("${targetItems.first().targetName}: ${targetItems.count { it.status == GroupWorkStatus.SUCCEEDED }}/${targetItems.size} confirmed, ${targetItems.count { it.status == GroupWorkStatus.FAILED }} failed, ${targetItems.count { it.status == GroupWorkStatus.QUEUED }} queued${if (roomUnconfirmed > 0) ", $roomUnconfirmed unconfirmed" else ""}",
                 style = MaterialTheme.typography.labelLarge)
-            // Eight metadata rows per room; failure-first paging retains all outcomes without
+            // Eight metadata rows per room; review-first paging retains all outcomes without
             // composing an entire imported collection inside a single LazyColumn item.
             var page by remember(op.id, targetId) { mutableIntStateOf(0) }
             val ordered = targetItems.sortedBy { when (it.status) {
-                GroupWorkStatus.FAILED -> 0
+                GroupWorkStatus.FAILED, GroupWorkStatus.UNCONFIRMED -> 0
                 GroupWorkStatus.SENDING, GroupWorkStatus.CHECKING -> 1
                 else -> 2
             } }
@@ -72,15 +74,16 @@ internal fun GroupProgressPanel(operations: List<GroupOperation>, onRetry: (Long
                 GroupWorkStatus.SENDING -> "Sending"
                 GroupWorkStatus.SUCCEEDED -> "Confirmed"
                 GroupWorkStatus.FAILED -> "Failed"
+                GroupWorkStatus.UNCONFIRMED -> "Unconfirmed"
                 GroupWorkStatus.CANCELLED -> "Cancelled"
             }}${if (item.bytesSent > 0) " · ${item.bytesSent / 1024} KB" else ""}",
                 style = MaterialTheme.typography.bodyMedium)
             item.folder?.let { Text("Destination: $it", style = MaterialTheme.typography.bodySmall) }
             item.detail?.let { Text(it, style = MaterialTheme.typography.bodySmall,
-                color = if (item.status == GroupWorkStatus.FAILED) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant) }
+                color = if (item.status == GroupWorkStatus.FAILED || item.status == GroupWorkStatus.UNCONFIRMED) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant) }
             }
             if (pages > 1) {
-                Text("Image results ${shownPage + 1} of $pages · failures shown first", style = MaterialTheme.typography.bodySmall)
+                Text("Image results ${shownPage + 1} of $pages · ${if (roomUnconfirmed > 0) "results needing review" else "failures"} shown first", style = MaterialTheme.typography.bodySmall)
                 Row {
                     TextButton(onClick = { page = shownPage - 1 }, enabled = shownPage > 0) { Text("Previous results") }
                     TextButton(onClick = { page = shownPage + 1 }, enabled = shownPage + 1 < pages) { Text("Next results") }

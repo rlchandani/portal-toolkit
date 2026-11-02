@@ -543,6 +543,7 @@ class CompanionRepository(
                         currentCoroutineContext().ensureActive()
                         if (!owns(selected)) break
                         var upload: CompanionUpload? = null
+                        var itemFailed = false
                         try {
                             upload = withContext(io) { source.prepare() }
                             if (!owns(selected)) break
@@ -561,23 +562,49 @@ class CompanionRepository(
                             invalidatePhotoImages(selected.session)
                             update(selected) { old -> old.copy(photoTransfer = old.photoTransfer?.let { it.copy(completed = it.completed + 1) }) }
                         } catch (cancelled: CancellationException) {
+                            itemFailed = true
                             update(selected) { old -> old.copy(photoTransfer = old.photoTransfer?.let {
                                 it.copy(failures = it.failures + PhotoTransferFailure(upload?.name ?: source.name,
                                     CompanionError("interrupted", "Transfer was interrupted. Refresh the folder before retrying.")))
                             }) }
                             throw cancelled
                         } catch (error: Exception) {
+                            itemFailed = true
                             update(selected) { old -> old.copy(photoTransfer = old.photoTransfer?.let {
                                 it.copy(failures = it.failures + PhotoTransferFailure(upload?.name ?: source.name, errorOf(error)))
                             }) }
-                        } finally { withContext(io + NonCancellable) { upload?.dispose?.invoke() } }
+                        } finally {
+                            val cleanupFailed = withContext(io + NonCancellable) {
+                                try { upload?.dispose?.invoke(); false } catch (_: Exception) { true }
+                            }
+                            if (cleanupFailed) update(selected) { old ->
+                                old.copy(photoTransfer = old.photoTransfer?.let { transfer ->
+                                    val failures = if (itemFailed && transfer.failures.isNotEmpty()) {
+                                        val last = transfer.failures.last()
+                                        transfer.failures.dropLast(1) + last.copy(error = last.error.copy(
+                                            message = last.error.message + " Local import cleanup also needs attention."))
+                                    } else transfer.failures + PhotoTransferFailure(upload?.name ?: source.name,
+                                        CompanionError("photo_cleanup_failed",
+                                            "Local import cleanup needs attention. The upload result is retained."))
+                                    transfer.copy(failures = failures)
+                                })
+                            }
+                        }
                     }
                     if (owns(selected)) {
-                        refreshCurrentPhotos(selected)
+                        try { refreshCurrentPhotos(selected) }
+                        catch (cancelled: CancellationException) { throw cancelled }
+                        catch (error: Exception) {
+                            if (state.value.photoTransfer?.failures.isNullOrEmpty()) throw error
+                            update(selected) { it.copy(connection = failureConnection(error, it.connection)) }
+                        }
                         update(selected) { old ->
                             val failures = old.photoTransfer?.failures.orEmpty()
+                            val guidance = if (failures.any { it.error.code == "upload_unconfirmed" })
+                                "Upload completion is unconfirmed; refresh this Portal's photos before retrying."
+                            else "Check individual outcomes and refresh before retrying."
                             old.copy(error = if (failures.isEmpty()) null else CompanionError("photo_transfer_failed",
-                                "${failures.size} image(s) could not be sent. Review the individual failures before retrying."))
+                                "${failures.size} image(s) need review. $guidance"))
                         }
                     }
                 } finally { update(selected) { it.copy(photoTransfer = it.photoTransfer?.copy(running = false)) } }

@@ -334,7 +334,7 @@ class CompanionGroupTest {
                     delay(10)
                     request.onUploadProgress!!.invoke((chunk + 1) * 32L * 1024)
                 }
-                CompanionResponse(200, """{"ok":true,"bytes":$length}""")
+                confirmedUpload(request, length)
             } else response(request)
         }
         val coordinator = CompanionGroupController(CompanionClient(http), backgroundScope,
@@ -362,7 +362,7 @@ class CompanionGroupTest {
                 delay(10); request.onUploadProgress!!.invoke(32768)
                 delay(10); request.onUploadProgress!!.invoke(65536)
                 if (request.url.contains("//b:")) CompanionResponse(503, """{"ok":false,"error":"unavailable"}""")
-                else CompanionResponse(200, """{"ok":true,"bytes":$length}""")
+                else confirmedUpload(request, length)
             } else response(request)
         }
         val coordinator = CompanionGroupController(CompanionClient(http), backgroundScope,
@@ -394,7 +394,7 @@ class CompanionGroupTest {
                 if (attempt == 1) oldProgress = request.onUploadProgress else oldProgress!!.invoke(900000)
                 request.onUploadProgress!!.invoke(if (attempt == 1) 30000 else 1000)
                 if (attempt == 1) CompanionResponse(503, """{"ok":false,"error":"unavailable"}""")
-                else CompanionResponse(200, """{"ok":true,"bytes":$length}""")
+                else confirmedUpload(request, length)
             } else response(request)
         }
         var operation: GroupOperation? = null
@@ -454,8 +454,11 @@ class CompanionGroupTest {
     }
 
     private companion object {
+        fun confirmedUpload(request: CompanionRequest, length: Long = request.upload!!.length) =
+            CompanionResponse(200, JSONObject().put("ok", true).put("bytes", length)
+                .put("path", request.url.toHttpUrl().queryParameter("path") + "/" + request.upload!!.name).toString())
         fun response(request: CompanionRequest): CompanionResponse = CompanionResponse(200, when {
-            request.upload != null -> """{"ok":true,"bytes":3}"""
+            request.upload != null -> confirmedUpload(request).body
             request.method == "POST" && request.url.endsWith("/sources") -> """{"ok":true,"applied":["source"]}"""
             request.method == "POST" -> """{"ok":true,"applied":["shuffle","intervalSec"]}"""
             else -> """{"ok":true,"settings":{"domains":[{"id":"screensaver","controls":[{"key":"shuffle","type":"bool","value":false},{"key":"intervalSec","type":"int","min":1,"max":120,"value":15}]}]},"np":{},"files":[],"capabilities":{}}"""

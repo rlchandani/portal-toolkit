@@ -158,12 +158,31 @@ class CompanionClient(private val transport: CompanionTransport = OkHttpCompanio
     suspend fun uploadPhoto(session: CompanionSession, folder: String, upload: CompanionUpload, progress: (Long) -> Unit): JSONObject {
         CompanionPhotos.safeName(upload.name)
         require(upload.length in 1..CompanionPhotos.MAX_IMAGE_BYTES) { "Images must be nonempty and at most 20 MiB. Choose a smaller image." }
-        val response = executeJson(CompanionRequest("POST", photoUrl(session, "photo-upload",
-            mapOf("path" to CompanionPhotos.exactFolder(folder), "name" to upload.name)), session.token,
-            upload = upload, onUploadProgress = progress))
-        if (response.optLong("bytes", -1) != upload.length) throw CompanionException(CompanionError("incomplete_upload", "Portal could not verify the complete image.", details = sanitized(response)))
-        return response
+        val destination = CompanionPhotos.exactFolder(folder)
+        val response = try {
+            transport.execute(CompanionRequest("POST", photoUrl(session, "photo-upload",
+                mapOf("path" to destination, "name" to upload.name)), session.token,
+                upload = upload, onUploadProgress = progress))
+        } catch (error: IOException) {
+            if (error is CompanionException) throw error
+            throw uploadUnconfirmed()
+        }
+        if (response.status in 200..299) {
+            val json = runCatching { JSONObject(response.body) }.getOrNull()
+            val success = json?.opt("ok")
+            val bytes = json?.opt("bytes")
+            if (json == null || success != true && success != false ||
+                success == true && (json.opt("path") != "$destination/${upload.name}" ||
+                    bytes !is Number || bytes.toDouble() != upload.length.toDouble())) {
+                throw uploadUnconfirmed(response.status)
+            }
+        }
+        return executeResponse(response)
     }
+
+    private fun uploadUnconfirmed(status: Int? = null) = CompanionException(
+        CompanionError("upload_unconfirmed",
+            "Upload completion is unconfirmed. Refresh this Portal's photos before retrying.", status))
 
     suspend fun photoThumbnail(session: CompanionSession, path: String): ByteArray = photoBytes(session, path)
 

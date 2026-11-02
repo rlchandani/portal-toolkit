@@ -23,7 +23,7 @@ import org.json.JSONObject
 class CompanionTargets internal constructor(internal val sessions: List<CompanionSession>) {
     override fun toString() = "CompanionTargets(count=${sessions.size}, credentials=redacted)"
 }
-enum class GroupWorkStatus { QUEUED, CHECKING, SENDING, SUCCEEDED, FAILED, CANCELLED }
+enum class GroupWorkStatus { QUEUED, CHECKING, SENDING, SUCCEEDED, UNCONFIRMED, FAILED, CANCELLED }
 enum class GroupWorkKind { SETTINGS, PHOTOS }
 data class GroupWorkItem(
     val targetId: String,
@@ -232,6 +232,7 @@ internal class CompanionGroupController(
         var posted = false
         var uploadProgress: ItemProgress? = null
         var confirmedUploadBytes: Long? = null
+        var cleanupFailed = false
         try {
             change(id, index) { it.copy(status = GroupWorkStatus.CHECKING) }
             require(isPaired(session)) { "Pairing changed or was removed. Pair this Portal again." }
@@ -279,10 +280,16 @@ internal class CompanionGroupController(
                     uploadProgress = itemProgress
                     withContext(io) { client.uploadPhoto(session, folder, upload, itemProgress::update) }
                     confirmedUploadBytes = upload.length
-                } finally { withContext(io + NonCancellable) { upload?.dispose?.invoke() } }
+                } finally {
+                    withContext(io + NonCancellable) {
+                        try { upload?.dispose?.invoke() }
+                        catch (_: Exception) { cleanupFailed = true }
+                    }
+                }
             }
             val finalBytes = uploadProgress?.finish(confirmedUploadBytes)
-            change(id, index) { it.copy(status = GroupWorkStatus.SUCCEEDED, detail = "Confirmed by Portal.",
+            change(id, index) { it.copy(status = GroupWorkStatus.SUCCEEDED,
+                detail = "Confirmed by Portal." + if (cleanupFailed) " Local import cleanup needs attention." else "",
                 bytesSent = finalBytes ?: it.bytesSent) }
         } catch (cancelled: CancellationException) {
             val finalBytes = uploadProgress?.finish(confirmedUploadBytes)
@@ -291,8 +298,11 @@ internal class CompanionGroupController(
             throw cancelled
         } catch (error: Exception) {
             val finalBytes = uploadProgress?.finish(confirmedUploadBytes)
+            val unconfirmed = plan.domain == null && error is CompanionException &&
+                error.error.code == "upload_unconfirmed"
             val detail = when (error) {
                 is CompanionException -> when {
+                    unconfirmed -> error.error.message
                     error.error.status == 401 || error.error.status == 403 -> "Pairing or permission rejected. Reconnect this Portal."
                     error.error.status == 404 -> "Unsupported on this Portal. Update Immortal and retry."
                     else -> "Portal rejected the request (${error.error.code})."
@@ -301,7 +311,9 @@ internal class CompanionGroupController(
                 else -> if (posted && plan.domain == null) "Connection lost. Upload completion is unconfirmed; refresh before retrying."
                     else "Offline or unreachable. Check this Portal and retry."
             }
-            change(id, index) { it.copy(status = GroupWorkStatus.FAILED, detail = detail, bytesSent = finalBytes ?: it.bytesSent) }
+            change(id, index) { it.copy(status = if (unconfirmed) GroupWorkStatus.UNCONFIRMED else GroupWorkStatus.FAILED,
+                detail = detail + if (cleanupFailed) " Local import cleanup needs attention." else "",
+                bytesSent = finalBytes ?: it.bytesSent) }
         }
     }
     private val retriedIds = mutableSetOf<Long>()
