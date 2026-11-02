@@ -336,45 +336,94 @@ class PortalBackupManager {
         )
     }
 
-    fun inspectBackup(context: Context, source: Uri): PortalBackupPreview {
+    fun inspectBackup(
+        context: Context,
+        source: Uri,
+        checkCancelled: () -> Unit = {}
+    ): PortalBackupPreview {
+        checkCancelled()
         val input = requireNotNull(context.contentResolver.openInputStream(source)) {
             "Could not open the selected backup"
         }
-        return inspectBackup(input)
+        return inspectBackup(input, checkCancelled)
     }
 
-    internal fun inspectBackup(input: InputStream): PortalBackupPreview {
+    internal fun inspectBackup(
+        input: InputStream,
+        checkCancelled: () -> Unit = {},
+        maxArchiveBytes: Long = MAX_EXTRACTED_BYTES
+    ): PortalBackupPreview {
         var preview: PortalBackupPreview? = null
         input.use { stream ->
+            require(maxArchiveBytes in 0..MAX_EXTRACTED_BYTES) {
+                "Invalid backup inspection byte limit"
+            }
             ZipInputStream(stream.buffered()).use { zip ->
                 var entryCount = 0
+                var archiveBytes = 0L
                 var manifestFound = false
-                var entry = zip.nextEntry
-                while (entry != null) {
+                val seenEntries = mutableSetOf<String>()
+                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                while (true) {
+                    checkCancelled()
+                    val entry = zip.nextEntry ?: break
+                    checkCancelled()
                     entryCount++
                     require(entryCount <= MAX_ARCHIVE_ENTRIES) {
                         "Backup contains too many files"
                     }
-                    if (!entry.isDirectory && entry.name == MANIFEST_ENTRY) {
-                        val bytes = ByteArrayOutputStream()
-                        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                        var manifestBytes = 0
-                        while (true) {
-                            val read = zip.read(buffer)
-                            if (read < 0) break
+                    val isManifest = !entry.isDirectory && entry.name == MANIFEST_ENTRY
+                    if (isManifest) {
+                        require(!manifestFound) { "Backup contains multiple manifests" }
+                        manifestFound = true
+                    }
+                    require(seenEntries.add(entry.name)) { "Duplicate file path in backup" }
+                    require(entry.size < 0 || entry.size <= maxArchiveBytes - archiveBytes) {
+                        "Backup is larger than the supported limit"
+                    }
+                    if (isManifest) {
+                        require(entry.size < 0 || entry.size <= MAX_MANIFEST_BYTES) {
+                            "Backup manifest is too large"
+                        }
+                    }
+                    val bytes = if (isManifest) ByteArrayOutputStream() else null
+                    var manifestBytes = 0L
+                    // Read every entry, including directory payloads, to EOF here.
+                    // closeEntry() would otherwise inflate skipped bytes without
+                    // enforcing either the budget or cancellation checkpoints.
+                    while (true) {
+                        val archiveReadLimit = maxArchiveBytes - archiveBytes + 1
+                        val manifestReadLimit = if (isManifest) {
+                            MAX_MANIFEST_BYTES - manifestBytes + 1
+                        } else {
+                            archiveReadLimit
+                        }
+                        // The validated limits keep remaining + 1 within Long;
+                        // probing one extra byte distinguishes EOF at the limit.
+                        val readLimit = minOf(
+                            buffer.size.toLong(), archiveReadLimit, manifestReadLimit
+                        ).toInt()
+                        checkCancelled()
+                        val read = zip.read(buffer, 0, readLimit)
+                        checkCancelled()
+                        if (read < 0) break
+                        archiveBytes += read
+                        require(archiveBytes <= maxArchiveBytes) {
+                            "Backup is larger than the supported limit"
+                        }
+                        if (isManifest) {
                             manifestBytes += read
                             require(manifestBytes <= MAX_MANIFEST_BYTES) {
                                 "Backup manifest is too large"
                             }
-                            bytes.write(buffer, 0, read)
+                            bytes!!.write(buffer, 0, read)
                         }
-
-                        val manifest = JSONObject(bytes.toString(Charsets.UTF_8.name()))
+                    }
+                    if (isManifest) {
+                        val manifest = JSONObject(bytes!!.toString(Charsets.UTF_8.name()))
                         require(isSupportedFormat(manifest.optInt("formatVersion"))) {
                             "Unsupported backup format"
                         }
-                        require(!manifestFound) { "Backup contains multiple manifests" }
-                        manifestFound = true
                         val apps = manifest.optJSONArray("apps")
                             ?: error("Backup manifest has no apps section")
                         require(apps.length() <= MAX_ARCHIVE_ENTRIES) {
@@ -391,11 +440,10 @@ class PortalBackupManager {
                             settingCount = settings.length()
                         )
                     }
-                    zip.closeEntry()
-                    entry = zip.nextEntry
                 }
             }
         }
+        checkCancelled()
         return preview ?: error("The backup manifest is missing")
     }
 

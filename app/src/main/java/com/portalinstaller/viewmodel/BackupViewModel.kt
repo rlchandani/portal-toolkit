@@ -70,6 +70,43 @@ internal suspend fun completeBackupRestore(
     }
 }
 
+/** Preview ownership is independent of ADB; a cancelled file read may return late. */
+internal class BackupPreviewLifecycle(
+    private val scope: CoroutineScope,
+    private val state: MutableStateFlow<BackupState>,
+) {
+    private class Operation { var job: Job? = null }
+    @Volatile private var active: Operation? = null
+
+    fun launch(block: suspend (() -> Unit) -> Unit): Job {
+        val operation = Operation()
+        active = operation
+        state.value = BackupState.Previewing
+        val job = scope.launch {
+            block {
+                coroutineContext.ensureActive()
+                if (active !== operation) throw CancellationException("Backup preview changed")
+            }
+        }
+        operation.job = job
+        job.invokeOnCompletion { error ->
+            if (active === operation) {
+                active = null
+                if (error is CancellationException && state.value is BackupState.Previewing)
+                    state.value = BackupState.Idle
+            }
+        }
+        return job
+    }
+
+    fun cancel() {
+        val operation = active ?: return
+        active = null
+        operation.job?.cancel()
+        if (state.value is BackupState.Previewing) state.value = BackupState.Idle
+    }
+}
+
 /** Main-thread restore ownership; cancelled IO may finish after a newer operation starts. */
 internal class BackupRestoreLifecycle(
     private val holder: ConnectionHolder,
@@ -141,6 +178,7 @@ class BackupViewModel(app: Application) : AndroidViewModel(app) {
     private val _backupState = MutableStateFlow<BackupState>(BackupState.Idle)
     val backupState: StateFlow<BackupState> = _backupState.asStateFlow()
     private val restoreLifecycle = BackupRestoreLifecycle(holder, viewModelScope, _backupState)
+    private val previewLifecycle = BackupPreviewLifecycle(viewModelScope, _backupState)
 
     // Job-ul backup/restore in curs, ca sa poata fi anulat din UI.
     private var backupJob: Job? = null
@@ -150,13 +188,15 @@ class BackupViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun createBackup(context: Context, destination: Uri, selectedPackages: Set<String>? = null) {
+        if (_backupState.value is BackupState.Creating ||
+            _backupState.value is BackupState.Restoring ||
+            _backupState.value is BackupState.Previewing
+        ) return
         val connection = holder.dadb.value
         if (connection == null) {
             _backupState.value = BackupState.Failed(context.getString(R.string.backup_error_connect_first))
             return
         }
-        if (_backupState.value is BackupState.Creating || _backupState.value is BackupState.Restoring) return
-
         backupJob = viewModelScope.launch {
             _backupState.value = BackupState.Creating(0, 0, "")
             runCatching {
@@ -186,21 +226,27 @@ class BackupViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun inspectBackup(context: Context, source: Uri) {
+    /** The UI may ignore this job; inspection owners can await cancellation settlement. */
+    fun inspectBackup(context: Context, source: Uri): Job? {
         if (_backupState.value is BackupState.Creating ||
             _backupState.value is BackupState.Restoring ||
             _backupState.value is BackupState.Previewing
         ) {
-            return
+            return null
         }
 
-        viewModelScope.launch {
-            _backupState.value = BackupState.Previewing
+        return previewLifecycle.launch { ensureCurrent ->
             runCatching {
-                withContext(Dispatchers.IO) { backupManager.inspectBackup(context, source) }
+                withContext(Dispatchers.IO) {
+                    ensureCurrent()
+                    backupManager.inspectBackup(context, source, checkCancelled = ensureCurrent)
+                }
             }.onSuccess { preview ->
+                ensureCurrent()
                 _backupState.value = BackupState.ReadyToRestore(source, preview)
             }.onFailure { error ->
+                if (error is CancellationException) throw error
+                ensureCurrent()
                 _backupState.value = BackupState.Failed(
                     context.getString(
                         R.string.backup_preview_failed,
@@ -284,6 +330,7 @@ class BackupViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Anuleaza backup-ul/restaurarea in curs (daca exista). */
     fun cancelBackup() {
+        previewLifecycle.cancel()
         restoreLifecycle.cancel()
         backupJob?.cancel()
         backupJob = null
@@ -291,11 +338,13 @@ class BackupViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun clearBackupState() {
+        previewLifecycle.cancel()
         _backupState.value = BackupState.Idle
     }
 
     /** Resetează la deconectare, anulând orice backup/restore în curs. */
     fun onDisconnected() {
+        previewLifecycle.cancel()
         restoreLifecycle.cancel()
         backupJob?.cancel()
         backupJob = null
