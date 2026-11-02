@@ -14,6 +14,7 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.runCurrent
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -236,6 +237,8 @@ class CompanionPhotosTest {
         val client = CompanionClient(CompanionTransport {
             calls += it
             if (it.binary) CompanionResponse(200, "", byteArrayOf(1))
+            else if (it.method == "DELETE") CompanionResponse(200,
+                JSONObject().put("ok", true).put("path", it.url.toHttpUrl().queryParameter("path")).toString())
             else CompanionResponse(200, """{"ok":true,"files":[]}""")
         })
         val session = Store().saved.single()
@@ -250,6 +253,8 @@ class CompanionPhotosTest {
         val client = CompanionClient(CompanionTransport {
             calls += it
             if (it.binary) CompanionResponse(200, "", byteArrayOf(1))
+            else if (it.method == "DELETE") CompanionResponse(200,
+                JSONObject().put("ok", true).put("path", it.url.toHttpUrl().queryParameter("path")).toString())
             else CompanionResponse(200, """{"ok":true,"files":[]}""")
         })
         val session = Store().saved.single()
@@ -331,6 +336,8 @@ class CompanionPhotosTest {
         val http = CompanionTransport { request ->
             calls += request
             if (request.url.contains("/photos?")) CompanionResponse(200, """{"ok":true,"path":"/sdcard/Pictures/Family","files":[]}""")
+            else if (request.method == "DELETE") CompanionResponse(200,
+                JSONObject().put("ok", true).put("path", request.url.toHttpUrl().queryParameter("path")).toString())
             else CompanionResponse(200, """{"ok":true,"deviceId":"a","capabilities":{},"settings":{"domains":[]},"apps":[],"sources":{},"np":{}}""")
         }
         val repo = CompanionRepository(CompanionClient(http), store, backgroundScope, UnconfinedTestDispatcher(testScheduler))
@@ -341,6 +348,7 @@ class CompanionPhotosTest {
         val deletion = calls.single { it.method == "DELETE" }
         assertTrue(deletion.url.contains("photo%20%26%201.jpg"))
         assertFalse(deletion.url.contains("private"))
+        assertNull(repo.state.value.error)
     }
 
     @Test fun switchingDeviceDuringUploadPreventsFollowingItemsAndLateProgress() = runTest {

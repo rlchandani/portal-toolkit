@@ -3,7 +3,7 @@
 The Android app opens a native control center. Home, Remote, Photos, Apps, and
 Settings share one activity and use the Portal's approved neutral light/dark palette.
 
-The current development build is **1.7.0-music-preview** (`versionCode 12`).
+The current development build is **1.7.2-music-preview** (`versionCode 14`).
 The [music preview validation record](music-preview-validation.md) distinguishes
 the latest preview checks from earlier physical and UI acceptance.
 The [older-Portal compatibility record](companion-compatibility-validation-2026-11-02.md)

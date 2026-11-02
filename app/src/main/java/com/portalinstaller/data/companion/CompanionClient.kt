@@ -138,8 +138,22 @@ class CompanionClient(private val transport: CompanionTransport = OkHttpCompanio
             if (recursive) put("recursive", "1")
         }), session.token))
 
-    suspend fun deletePhoto(session: CompanionSession, path: String): JSONObject =
-        executeJson(CompanionRequest("DELETE", photoUrl(session, "photo", mapOf("path" to CompanionPhotos.photoPath(path))), session.token))
+    suspend fun deletePhoto(session: CompanionSession, path: String): JSONObject {
+        val selectedPath = CompanionPhotos.photoPath(path)
+        val response = transport.execute(CompanionRequest("DELETE",
+            photoUrl(session, "photo", mapOf("path" to selectedPath)), session.token))
+        if (response.status in 200..299) {
+            val json = runCatching { JSONObject(response.body) }.getOrNull()
+            val success = json?.opt("ok")
+            if (json == null || success != true && success != false ||
+                success == true && json.opt("path") != selectedPath) {
+                throw CompanionException(CompanionError("delete_unconfirmed",
+                    "The Portal did not confirm this deletion. Refresh and review your photos before retrying.",
+                    response.status))
+            }
+        }
+        return executeResponse(response)
+    }
 
     suspend fun uploadPhoto(session: CompanionSession, folder: String, upload: CompanionUpload, progress: (Long) -> Unit): JSONObject {
         CompanionPhotos.safeName(upload.name)
