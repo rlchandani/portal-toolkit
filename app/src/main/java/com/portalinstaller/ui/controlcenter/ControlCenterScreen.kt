@@ -733,7 +733,7 @@ private fun AppIcon(deviceId: String, packageName: String, vm: ControlCenterView
     val bitmap by produceState<ImageBitmap?>(null, deviceId, packageName) {
         value = withContext(Dispatchers.IO) {
             vm.appIconBytes(packageName)?.let {
-                android.graphics.BitmapFactory.decodeByteArray(it, 0, it.size)?.asImageBitmap()
+                decodeCompanionDisplayBitmap(it, APP_ICON_IMAGE_EDGE)?.asImageBitmap()
             }
         }
     }

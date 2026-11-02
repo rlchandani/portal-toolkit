@@ -6,7 +6,6 @@
  */
 package com.portalinstaller.ui.controlcenter
 
-import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -71,10 +70,11 @@ private sealed interface PhotoPreviewState {
 private suspend fun loadPhotoThumbnail(
     path: String,
     loadThumbnail: suspend (String) -> ByteArray?,
+    maxEdge: Int = PHOTO_GRID_IMAGE_EDGE,
 ): ImageBitmap? = withContext(Dispatchers.IO) {
     try {
         loadThumbnail(path)?.let { bytes ->
-            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+            decodeCompanionDisplayBitmap(bytes, maxEdge)?.asImageBitmap()
         }
     } catch (cancelled: CancellationException) {
         throw cancelled
@@ -190,16 +190,18 @@ internal fun PhotoLibraryPanel(
             // Keep the observed state stable across retries; restart only its producer.
             val preview by produceState<PhotoPreviewState>(PhotoPreviewState.Loading, requestGeneration) {
                 value = PhotoPreviewState.Loading
-                val bitmap = loadPhotoThumbnail(path, loadThumbnail)
+                val bitmap = loadPhotoThumbnail(path, loadThumbnail, PHOTO_PREVIEW_IMAGE_EDGE)
                 value = bitmap?.let { PhotoPreviewState.Loaded(it) } ?: PhotoPreviewState.Failed
             }
+            // Observe in the owning composition before crossing the dialog's composition boundary.
+            val previewState = preview
             AlertDialog(
                 onDismissRequest = { previewTarget = null },
                 title = { Text(target.optString("name", "Photo"),
                     maxLines = 2, overflow = TextOverflow.Ellipsis) },
                 text = {
                     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
-                        when (val state = preview) {
+                        when (val state = previewState) {
                             PhotoPreviewState.Loading -> Box(Modifier.fillMaxWidth().height(260.dp),
                                 contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                             is PhotoPreviewState.Loaded -> Image(state.bitmap,

@@ -7,6 +7,8 @@
 package com.portalinstaller.ui.controlcenter
 
 import android.graphics.Bitmap
+import android.view.WindowManager
+import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.MaterialTheme
@@ -15,26 +17,36 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.isRoot
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
+import androidx.compose.ui.graphics.asAndroidBitmap
 import java.io.ByteArrayOutputStream
+import java.io.File
+import java.io.FileOutputStream
 import java.io.IOException
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.ConcurrentLinkedQueue
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.job
 import org.json.JSONArray
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertEquals
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -43,7 +55,50 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class PhotoPreviewUiTest {
     @get:Rule
-    val compose = createComposeRule()
+    val compose = createAndroidComposeRule<ComponentActivity>()
+    private lateinit var renderedActivity: ComponentActivity
+
+    @Before fun awakeAndCheckRenderedFont() {
+        val expectedScale = InstrumentationRegistry.getArguments()
+            .getString("QA_FONT_SCALE")?.toFloat() ?: 1f
+        // Android applies settings asynchronously; wait on the actual rendered resources.
+        compose.waitUntil(5_000) {
+            kotlin.math.abs(compose.activity.resources.configuration.fontScale - expectedScale) < 0.01f
+        }
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+        renderedActivity = compose.activity
+        compose.activityRule.scenario.onActivity {
+            it.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+        assertEquals("Use the actual rendered activity system font", expectedScale,
+            renderedActivity.resources.configuration.fontScale, 0.01f)
+    }
+
+    @Test
+    fun largeEncodedThumbnailOpensPreviewAndClosesCleanly() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val actualScale = renderedActivity.resources.configuration.fontScale
+        val bytes = instrumentation.context.assets.open("qa-display-4096x3072.jpg")
+            .use { it.readBytes() }
+        val fixture = showLibrary(bytes)
+        openPreview()
+        compose.waitUntil(5_000) { fixture.previewCompleted.count == 0L }
+        assertLoadedPreview(FIRST_NAME) { fixture.trace.joinToString("\n") }
+        val image = compose.onNode(hasAnyAncestor(isDialog()) and hasContentDescription(FIRST_NAME))
+            .captureToImage().asAndroidBitmap()
+        try {
+            val directory = requireNotNull(instrumentation.targetContext.getExternalFilesDir("qa"))
+            check(directory.isDirectory || directory.mkdirs())
+            val scale = kotlin.math.round(actualScale * 100).toInt()
+            FileOutputStream(File(directory, "display-photo-preview-$scale.png")).use {
+                check(image.compress(Bitmap.CompressFormat.PNG, 100, it))
+            }
+        } finally { image.recycle() }
+        compose.onNodeWithText("Done").performClick()
+        compose.onNodeWithText("Done").assertDoesNotExist()
+        compose.onNodeWithText(ERROR).assertDoesNotExist()
+        waitForThumbnails()
+    }
 
     @Test
     fun nullPreviewEndsLoadingWithRetry() {
@@ -150,8 +205,9 @@ class PhotoPreviewUiTest {
         assertLoadedPreview(SECOND_NAME)
     }
 
-    private fun showLibrary(): ThumbnailFixture {
+    private fun showLibrary(thumbnailBytes: ByteArray? = null): ThumbnailFixture {
         val fixture = ThumbnailFixture()
+        if (thumbnailBytes != null) fixture.response = { thumbnailBytes }
         compose.setContent {
             MaterialTheme {
                 Column(Modifier.fillMaxWidth()) {
@@ -219,11 +275,28 @@ class PhotoPreviewUiTest {
         compose.onNodeWithText("Retry").assertDoesNotExist()
     }
 
-    private fun assertLoadedPreview(name: String) {
+    private fun assertLoadedPreview(name: String, diagnostics: () -> String = { "" }) {
         val image = hasAnyAncestor(isDialog()) and hasContentDescription(name)
-        compose.waitUntil(5_000) {
-            compose.onAllNodes(image).fetchSemanticsNodes().isNotEmpty()
+        try {
+            compose.waitUntil(5_000) {
+                compose.onAllNodes(image).fetchSemanticsNodes().isNotEmpty()
+            }
+        } catch (failure: Throwable) {
+            fun tree(node: androidx.compose.ui.semantics.SemanticsNode, depth: Int = 0): String =
+                "${" ".repeat(depth)}${node.config}, bounds=${node.boundsInRoot}\n" +
+                    node.children.joinToString("") { tree(it, depth + 1) }
+            val roots = compose.onAllNodes(isRoot(), useUnmergedTree = true).fetchSemanticsNodes()
+            val directory = requireNotNull(InstrumentationRegistry.getInstrumentation()
+                .targetContext.getExternalFilesDir("qa"))
+            check(directory.isDirectory || directory.mkdirs())
+            File(directory, "photo-preview-failure-tree.txt").writeText(
+                "activityDestroyed=${renderedActivity.isDestroyed}, " +
+                    "activityReplaced=${compose.activity !== renderedActivity}\n" +
+                    diagnostics() + "\n" +
+                    roots.joinToString("\n") { tree(it) })
+            throw failure
         }
+        assertTrue("Fixture activity changed during preview", compose.activity === renderedActivity)
         compose.onNode(image).assertIsDisplayed()
         compose.onNode(progress).assertDoesNotExist()
         compose.onNodeWithText(ERROR).assertDoesNotExist()
@@ -255,10 +328,19 @@ class PhotoPreviewUiTest {
         // Keep callback identities stable when the device or test response changes.
         val loadThumbnail: suspend (String) -> ByteArray? = { path ->
             check(path == FIRST_PATH || path == SECOND_PATH)
+            val request = requestCount.incrementAndGet()
+            trace.add("request=$request path=$path")
+            currentCoroutineContext().job.invokeOnCompletion { cause ->
+                trace.add("request=$request completed=${cause?.javaClass?.simpleName ?: "normally"}")
+                if (request >= 3) previewCompleted.countDown()
+            }
             response(path)
         }
         val noOp: () -> Unit = {}
         val ignorePath: (String) -> Unit = {}
+        val previewCompleted = CountDownLatch(1)
+        val trace = ConcurrentLinkedQueue<String>()
+        private val requestCount = AtomicInteger()
     }
 
     private companion object {
