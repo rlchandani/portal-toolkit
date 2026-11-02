@@ -91,3 +91,31 @@ Owned Ctrl+C cleanup again exited130 with source unchanged, clone removed,
 owned emulator absent and both original Family transports retained. Current
 private instrumentation, artifact and cleanup receipts are in
 `/private/tmp/portal-companion-compact-tools-20261102/`.
+
+## Remaining reviewed callback workflows
+
+The **12:24:57–12:54:57 UTC** unit ran the remaining existing callback UI
+methods on the same exact app/test APKs above, in an owned API34 clone:
+
+| Group | Result | Scope |
+| --- | --- | --- |
+| A | **56/56 passed, 84.387 seconds** | Photo collections/pagination/preview, music/playback and mirror gestures |
+| B | **64/64 passed, 107.5 seconds** | App confirmations, activity rows, draft restoration, portal management, workflow actions, remote acknowledgements and scene revisions |
+
+Independent instrumentation-log parsing found **168 unique class/method pairs
+across five separate runs**, matching all **22 reviewed fixture classes** in
+the current source inventory. `CompanionNativeUiTest` (three methods) and
+`CompanionPhotoLibraryUiTest` (one method) are excluded because they use live
+Portal sessions/actions. This is not one full-suite run.
+
+These fixtures use synthetic photos, metadata, responses and captured callbacks.
+The time-picker check sends one emulator-local shell tap; no Portal command is
+sent. No real provider, pairing, imported owner photo, uninstall, audible output,
+physical Pixel, cold reconnect or hardware-performance acceptance is claimed.
+The existing app was not rebuilt or changed.
+
+Owned Ctrl+C cleanup exited130. Its receipt reports `ready=true`,
+`sourceUnchanged=true`, `ownedResourcesRemoved=true`; a subsequent ADB inventory
+confirmed the owned emulator absent and both original Family transports retained.
+Private artifact, instrumentation, source-inventory and cleanup evidence:
+`/private/tmp/portal-companion-workflow-ui-20261102/`.
