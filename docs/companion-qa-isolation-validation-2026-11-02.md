@@ -69,3 +69,25 @@ ADB inventory found the owned emulator absent and the original Family USB/Wi-Fi
 transports retained. No APK source/version or real room configuration changed.
 Private logs and receipts are in
 `/private/tmp/portal-companion-current-layout-20261102/`.
+
+## Subsequent compact Tools acceptance
+
+The same unchanged candidate passed **eight additional rendered methods in
+11.157 seconds** on a fresh owned API34 clone. `AdvancedPanelLayoutUiTest`
+checks two mirror/app-action layouts at 280 × 440dp and 1.3× text.
+`ShortToolLayoutUiTest` checks six cases at 360 × 170dp: keyboard Send and
+confirmation/running guards at 1.3×, plus four reachability/list/callback cases
+at 1.3× and 2×. Tool actions retain measured 48dp targets; the shared layout
+fixture keeps its 200-item lazy list bounded and scrollable.
+
+Callbacks are fixtures, including the destructive-command confirmation case:
+no shell command, Portal uninstall, file operation or real room request runs.
+The shared Files/Logcat layout fixture is not their complete workflow acceptance.
+Neither class appeared in the earlier 33- or seven-test logs. All three runs use
+the exact app hash above, totaling **48 unique methods across separate runs**.
+This is not a single full-suite result, physical Pixel or performance evidence.
+
+Owned Ctrl+C cleanup again exited130 with source unchanged, clone removed,
+owned emulator absent and both original Family transports retained. Current
+private instrumentation, artifact and cleanup receipts are in
+`/private/tmp/portal-companion-compact-tools-20261102/`.
