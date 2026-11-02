@@ -122,7 +122,31 @@ class CompanionClient(private val transport: CompanionTransport = OkHttpCompanio
     suspend fun get(session: CompanionSession, route: String): JSONObject = request(session.device.endpoint, session.token, route)
     suspend fun post(session: CompanionSession, route: String, body: JSONObject): JSONObject =
         if (route == "settings") postSettings(session, body)
+        else if (route == "text") postText(session, body)
         else request(session.device.endpoint, session.token, route, body)
+
+    private suspend fun postText(session: CompanionSession, body: JSONObject): JSONObject {
+        val response = try {
+            transport.execute(CompanionRequest("POST", "${session.device.endpoint}/remote/text",
+                session.token, body.toString()))
+        } catch (error: IOException) {
+            if (error is CompanionException) throw error
+            throw textUnconfirmed()
+        }
+        if (response.status in 200..299) {
+            val json = runCatching { JSONObject(response.body) }.getOrNull()
+            val success = json?.opt("ok")
+            if (json == null || success != true && success != false ||
+                success == true && json.opt("applied") !is Boolean) {
+                throw textUnconfirmed(response.status)
+            }
+        }
+        return executeResponse(response)
+    }
+
+    private fun textUnconfirmed(status: Int? = null) = CompanionException(
+        CompanionError("text_unconfirmed",
+            "Text sending is unconfirmed. Review the Portal before sending again.", status))
 
     private suspend fun postSettings(session: CompanionSession, body: JSONObject): JSONObject {
         val domain = body.opt("domain") as? String

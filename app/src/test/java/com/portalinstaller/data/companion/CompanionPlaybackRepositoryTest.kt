@@ -201,18 +201,18 @@ class CompanionPlaybackRepositoryTest {
         val body = JSONObject(request.body!!)
         assertEquals(text, body.getString("text"))
         assertEquals("set", body.getString("mode"))
-        pending.complete(CompanionResponse(200, """{"ok":true,"dispatched":true,"receipt":"text-applied"}"""))
+        pending.complete(CompanionResponse(200, """{"ok":true,"applied":true,"receipt":"text-applied"}"""))
         assertTrue(confirmation.await())
         assertEquals("text-applied", repo.state.value.lastResult!!.getString("receipt"))
         assertFalse(repo.state.value.busy)
         assertNull(repo.state.value.error)
     }
 
-    @Test fun rejectedOrUndispatchedTextReturnsFalseWithTheActionError() = runTest {
+    @Test fun rejectedOrUnappliedTextReturnsFalseWithTheActionError() = runTest {
         data class Case(val response: CompanionResponse, val code: String, val connection: CompanionConnection)
         for (case in listOf(
             Case(CompanionResponse(400, """{"ok":false,"error":"no_accessibility"}"""), "no_accessibility", CompanionConnection.CONNECTED),
-            Case(CompanionResponse(200, """{"ok":true,"dispatched":false}"""), "not_applied", CompanionConnection.CONNECTED),
+            Case(CompanionResponse(200, """{"ok":true,"applied":false}"""), "not_applied", CompanionConnection.CONNECTED),
             Case(CompanionResponse(401, """{"ok":false,"error":"unauthorized"}"""), "unauthorized", CompanionConnection.UNAUTHORIZED),
         )) {
             val http = Http()
@@ -239,7 +239,7 @@ class CompanionPlaybackRepositoryTest {
 
     @Test fun lateTextSuccessOrFailureCannotConfirmAfterSwitchAwayAndBack() = runTest {
         for (response in listOf(
-            CompanionResponse(200, """{"ok":true,"dispatched":true,"receipt":"old-selection"}"""),
+            CompanionResponse(200, """{"ok":true,"applied":true,"receipt":"old-selection"}"""),
             CompanionResponse(401, """{"ok":false,"error":"unauthorized"}"""),
         )) {
             val http = Http()
