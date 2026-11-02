@@ -44,7 +44,9 @@ Hard termination of the Python process or host shutdown cannot run its cleanup.
 
 Real macOS/API 34 verification on 2 November 2026 passed native unpaired app
 readiness and exact installed-APK readback, with zero changes in the original
-AVD directory. Custom internal image preservation is an offline regression
-check; actual interrupted/timeout shutdown, other hosts, fresh pairing,
-cold reconnect and physical Pixel behavior remain unverified.
+AVD directory. A subsequent current-companion layout run passed seven additional
+rendered tests, then exercised Ctrl+C cleanup of the owned runner: exit 130,
+source unchanged, clone removed and owned emulator absent. Custom internal image
+preservation is an offline regression check; actual timeout shutdown, other
+hosts, fresh pairing, cold reconnect and physical Pixel behavior remain unverified.
 See [the scoped receipt](../docs/companion-qa-isolation-validation-2026-11-02.md).

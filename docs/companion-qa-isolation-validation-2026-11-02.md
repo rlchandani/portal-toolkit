@@ -46,3 +46,26 @@ scope. No new Android build was needed for this Python-only QA change.
 Slot: **11:40:49–12:10:49 UTC**, including cleanup.
 Private evidence: `/private/tmp/portal-companion-qa-isolation-20261102/`.
 Usage and the offline command are in [qa/README.md](../qa/README.md).
+## Subsequent current-layout acceptance
+
+An independent owned clone ran the unchanged **1.7.1-music-preview / code13**
+candidate. Installed readback matched **14,722,589 bytes** and SHA-256
+`b5a0feb0b0486c53553e3b8126417afa0fd45eae340efd116ab539283ddc10f4`.
+The existing test APK was **1,669,619 bytes**, SHA-256
+`117a084a9f77fb638896cc69bf9de20678081bdaed716a1e9ffe3121119471d8`.
+
+**Seven additional rendered tests passed in 11.174 seconds**, using
+`SelectorPanelLayoutUiTest` (four methods, 360 × 640dp, 1.3× text) and
+`ManagementPanelLayoutUiTest` (three methods, 360dp width, 1.3× and 2× text).
+They cover selector alignment, equal theme segments, saved draft payloads,
+management-action label fit and pagination callbacks. Neither class was in the
+earlier 33-test receipt. These are callback fixtures, not live Portal transport,
+provider login, photo import, physical Pixel or performance acceptance.
+
+After instrumentation exited successfully, Ctrl+C interrupted the still-live
+owned runner. It exited **130** after cleanup; its receipt reports
+`ready=true`, `sourceUnchanged=true`, `ownedResourcesRemoved=true`. A subsequent
+ADB inventory found the owned emulator absent and the original Family USB/Wi-Fi
+transports retained. No APK source/version or real room configuration changed.
+Private logs and receipts are in
+`/private/tmp/portal-companion-current-layout-20261102/`.
