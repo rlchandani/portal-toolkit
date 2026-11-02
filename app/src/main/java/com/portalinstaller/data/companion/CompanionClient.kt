@@ -120,7 +120,35 @@ class CompanionClient(private val transport: CompanionTransport = OkHttpCompanio
     }
 
     suspend fun get(session: CompanionSession, route: String): JSONObject = request(session.device.endpoint, session.token, route)
-    suspend fun post(session: CompanionSession, route: String, body: JSONObject): JSONObject = request(session.device.endpoint, session.token, route, body)
+    suspend fun post(session: CompanionSession, route: String, body: JSONObject): JSONObject =
+        if (route == "settings") postSettings(session, body)
+        else request(session.device.endpoint, session.token, route, body)
+
+    private suspend fun postSettings(session: CompanionSession, body: JSONObject): JSONObject {
+        val domain = body.opt("domain") as? String
+        val response = try {
+            transport.execute(CompanionRequest("POST", "${session.device.endpoint}/remote/settings",
+                session.token, body.toString()))
+        } catch (error: IOException) {
+            if (error is CompanionException) throw error
+            throw settingsUnconfirmed()
+        }
+        if (response.status in 200..299) {
+            val json = runCatching { JSONObject(response.body) }.getOrNull()
+            val success = json?.opt("ok")
+            val applied = json?.optJSONArray("applied")
+            if (json == null || success != true && success != false ||
+                success == true && (domain.isNullOrBlank() || json.optJSONObject("domain")?.opt("id") != domain ||
+                    applied == null || (0 until applied.length()).any { applied.opt(it) !is String })) {
+                throw settingsUnconfirmed(response.status)
+            }
+        }
+        return executeResponse(response)
+    }
+
+    private fun settingsUnconfirmed(status: Int? = null) = CompanionException(
+        CompanionError("settings_unconfirmed",
+            "Settings completion is unconfirmed. Review this Portal's settings before applying again.", status))
 
     /** Validation needs hidden controls; ordinary settings reads remain visibility-filtered. */
     suspend fun settingsForValidation(session: CompanionSession, domain: String): JSONObject {

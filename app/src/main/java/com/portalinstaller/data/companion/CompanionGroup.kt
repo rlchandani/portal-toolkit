@@ -258,7 +258,6 @@ internal class CompanionGroupController(
                 change(id, index) { it.copy(status = GroupWorkStatus.SENDING) }
                 posted = true
                 val response = withContext(io) { client.post(session, "settings", JSONObject().put("domain", plan.domain).put("values", patch)) }
-                require((response.optJSONObject("domain")?.optString("id", plan.domain) ?: plan.domain) == plan.domain) { "Portal returned a different settings domain." }
                 val applied = response.optJSONArray("applied")
                 val missing = patch.keys().asSequence().filter { key -> applied == null || (0 until applied.length()).none { applied.optString(it) == key } }.toList()
                 val remaining = JSONObject().apply { missing.forEach { key -> put(key, patch.get(key)) } }
@@ -298,8 +297,9 @@ internal class CompanionGroupController(
             throw cancelled
         } catch (error: Exception) {
             val finalBytes = uploadProgress?.finish(confirmedUploadBytes)
-            val unconfirmed = plan.domain == null && error is CompanionException &&
-                error.error.code == "upload_unconfirmed"
+            val unconfirmed = error is CompanionException &&
+                (plan.domain == null && error.error.code == "upload_unconfirmed" ||
+                    plan.domain != null && error.error.code == "settings_unconfirmed")
             val detail = when (error) {
                 is CompanionException -> when {
                     unconfirmed -> error.error.message

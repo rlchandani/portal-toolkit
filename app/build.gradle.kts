@@ -12,8 +12,8 @@ android {
         applicationId = "com.portalinstaller"
         minSdk = 26
         targetSdk = 35
-        versionCode = 15
-        versionName = "1.7.3-music-preview"
+        versionCode = 16
+        versionName = "1.7.4-music-preview"
         testInstrumentationRunner = "com.portalinstaller.AwakeTestRunner"
     }
 

@@ -122,7 +122,7 @@ class CompanionGroupTest {
         val repo = CompanionRepository(CompanionClient(http), Store(), backgroundScope, UnconfinedTestDispatcher(testScheduler))
         repo.ready.join()
         http.handler = { request -> if (request.method == "POST" && request.url.contains("//b:"))
-            CompanionResponse(200, """{"ok":true,"applied":["shuffle"]}""") else response(request) }
+            CompanionResponse(200, """{"ok":true,"domain":{"id":"screensaver"},"applied":["shuffle"]}""") else response(request) }
         repo.writeSelectedSettings("screensaver", patch(true).put("intervalSec", 30)).join()
         val op = repo.state.value.groupOperations.single()
         assertEquals(listOf(GroupWorkStatus.SUCCEEDED, GroupWorkStatus.FAILED), op.items.map { it.status })
@@ -263,7 +263,7 @@ class CompanionGroupTest {
         val http = Http()
         val repo = CompanionRepository(CompanionClient(http), Store(listOf("a")), backgroundScope, UnconfinedTestDispatcher(testScheduler))
         repo.ready.join()
-        http.handler = { request -> if (request.method == "POST") CompanionResponse(200, """{"ok":true,"applied":[]}""") else response(request) }
+        http.handler = { request -> if (request.method == "POST") CompanionResponse(200, """{"ok":true,"domain":{"id":"screensaver"},"applied":[]}""") else response(request) }
         repo.writeSelectedSettings("screensaver", patch(true)).join()
         val old = repo.state.value.groupOperations.single().id
         http.handler = { response(it) }
@@ -425,7 +425,9 @@ class CompanionGroupTest {
     @Test fun groupLedgerUsesReferenceControlAndDomainTitlesInsteadOfRegistryKeys() = runTest {
         val http = Http()
         http.handler = { request -> when {
-            request.method == "POST" -> CompanionResponse(200, """{"ok":true,"applied":["weatherUnit","shuffle"]}""")
+            request.method == "POST" -> CompanionResponse(200, JSONObject().put("ok", true)
+                .put("domain", JSONObject().put("id", JSONObject(request.body!!).getString("domain")))
+                .put("applied", org.json.JSONArray(listOf("weatherUnit", "shuffle"))).toString())
             request.url.toHttpUrl().encodedPath.endsWith("/settings") -> CompanionResponse(200, """{"ok":true,"settings":{"domains":[
                 {"id":"immortal","title":"Immortal settings","controls":[{"key":"weatherUnit","title":"Temperature unit","type":"enum","value":"c","options":[{"value":"c"},{"value":"f"}]}]},
                 {"id":"screensaver","title":"Photos & screensaver","controls":[{"key":"shuffle","title":"Shuffle photos","type":"bool","value":false}]}]}}""")
@@ -460,7 +462,9 @@ class CompanionGroupTest {
         fun response(request: CompanionRequest): CompanionResponse = CompanionResponse(200, when {
             request.upload != null -> confirmedUpload(request).body
             request.method == "POST" && request.url.endsWith("/sources") -> """{"ok":true,"applied":["source"]}"""
-            request.method == "POST" -> """{"ok":true,"applied":["shuffle","intervalSec"]}"""
+            request.method == "POST" -> JSONObject().put("ok", true)
+                .put("domain", JSONObject().put("id", JSONObject(request.body!!).getString("domain")))
+                .put("applied", org.json.JSONArray(listOf("shuffle", "intervalSec"))).toString()
             else -> """{"ok":true,"settings":{"domains":[{"id":"screensaver","controls":[{"key":"shuffle","type":"bool","value":false},{"key":"intervalSec","type":"int","min":1,"max":120,"value":15}]}]},"np":{},"files":[],"capabilities":{}}"""
         })
     }
