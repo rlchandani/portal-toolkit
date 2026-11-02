@@ -16,6 +16,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.Response
 import okhttp3.ResponseBody.Companion.toResponseBody
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okio.Buffer
 import org.json.JSONObject
 import org.junit.Assert.*
@@ -23,6 +24,35 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class CompanionClientTest {
+    @Test fun inactiveSchemaReaderEncodesDomainAndPreservesAuthenticatedJsonChecks() = runTest {
+        val calls = mutableListOf<CompanionRequest>()
+        val client = CompanionClient(CompanionTransport {
+            calls += it
+            CompanionResponse(401, """{"ok":false,"error":"unauthorized"}""")
+        })
+        val session = CompanionSession(CompanionDevice("a", "A", "http://a:8723"), "fixture-token")
+        val error = runCatching {
+            client.settingsForValidation(session, "screensaver&includeInactive=0")
+        }.exceptionOrNull() as CompanionException
+        assertEquals(401, error.error.status)
+        val request = calls.single()
+        val url = request.url.toHttpUrl()
+        assertEquals("/remote/settings", url.encodedPath)
+        assertEquals("screensaver&includeInactive=0", url.queryParameter("domain"))
+        assertEquals(listOf("1"), url.queryParameterValues("includeInactive"))
+        assertEquals("GET", request.method)
+        assertEquals("fixture-token", request.sessionToken)
+        assertNull(request.body)
+        assertFalse(request.url.contains("fixture-token"))
+    }
+
+    @Test fun inactiveSchemaReaderRejectsBlankDomainBeforeTransport() = runTest {
+        val client = CompanionClient(CompanionTransport { throw AssertionError("No request expected") })
+        val session = CompanionSession(CompanionDevice("a", "A", "http://a:8723"), "fixture-token")
+        assertTrue(runCatching { client.settingsForValidation(session, " ") }
+            .exceptionOrNull() is IllegalArgumentException)
+    }
+
     @Test fun preservesServerValidationDetailsAndRedactsCredentials() = runTest {
         val client = CompanionClient(CompanionTransport {
             CompanionResponse(400, """{"ok":false,"error":"validation_failed","errors":{"intervalSec":"range"},"token":"secret","password":"secret","nested":{"apiKey":"secret","code":"bad"}}""")

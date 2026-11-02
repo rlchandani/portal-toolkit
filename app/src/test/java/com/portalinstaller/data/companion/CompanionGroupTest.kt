@@ -426,7 +426,7 @@ class CompanionGroupTest {
         val http = Http()
         http.handler = { request -> when {
             request.method == "POST" -> CompanionResponse(200, """{"ok":true,"applied":["weatherUnit","shuffle"]}""")
-            request.url.endsWith("/settings") -> CompanionResponse(200, """{"ok":true,"settings":{"domains":[
+            request.url.toHttpUrl().encodedPath.endsWith("/settings") -> CompanionResponse(200, """{"ok":true,"settings":{"domains":[
                 {"id":"immortal","title":"Immortal settings","controls":[{"key":"weatherUnit","title":"Temperature unit","type":"enum","value":"c","options":[{"value":"c"},{"value":"f"}]}]},
                 {"id":"screensaver","title":"Photos & screensaver","controls":[{"key":"shuffle","title":"Shuffle photos","type":"bool","value":false}]}]}}""")
             else -> response(request)

@@ -250,7 +250,7 @@ internal class CompanionGroupController(
                 // Only retries of an old edit are stale; queued original edits retain their FIFO order.
                 if (superseded && synchronized(lock) { retriedIds.contains(id) })
                     throw IllegalArgumentException("A newer edit replaces this setting. Apply the desired value again.")
-                val schema = withContext(io) { client.get(session, "settings") }
+                val schema = withContext(io) { client.settingsForValidation(session, plan.domain) }
                 CompanionGroupSettings.validate(plan.domain, patch, schema)
                 if (cancelled(id)) { change(id, index) { it.copy(status = GroupWorkStatus.CANCELLED, detail = "Cancelled before sending.") }; return }
                 require(isPaired(session)) { "Pairing changed or was removed. Pair this Portal again." }

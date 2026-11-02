@@ -122,6 +122,13 @@ class CompanionClient(private val transport: CompanionTransport = OkHttpCompanio
     suspend fun get(session: CompanionSession, route: String): JSONObject = request(session.device.endpoint, session.token, route)
     suspend fun post(session: CompanionSession, route: String, body: JSONObject): JSONObject = request(session.device.endpoint, session.token, route, body)
 
+    /** Validation needs hidden controls; ordinary settings reads remain visibility-filtered. */
+    suspend fun settingsForValidation(session: CompanionSession, domain: String): JSONObject {
+        require(domain.isNotBlank()) { "Choose a settings domain." }
+        return executeJson(CompanionRequest("GET", photoUrl(session, "settings",
+            mapOf("domain" to domain, "includeInactive" to "1")), session.token))
+    }
+
     suspend fun photos(session: CompanionSession, folder: String, recursive: Boolean = false): JSONObject =
         photosExact(session, CompanionPhotos.folder(folder), recursive)
 
