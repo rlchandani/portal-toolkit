@@ -746,11 +746,11 @@ private fun AppIcon(deviceId: String, packageName: String, vm: ControlCenterView
 @Composable
 private fun SettingsDomainPicker(domains: List<SettingsDomain>, selected: String, onSelect: (String) -> Unit) {
     ChoiceDropdown(
-        value = selected,
+        value = if (domains.isEmpty()) "" else selected,
         options = domains.map { ChoiceOption(it.id, it.title) },
         onSelect = onSelect,
         modifier = Modifier.fillMaxWidth(),
-        placeholder = "Choose a category",
+        placeholder = if (domains.isEmpty()) "Connect to load categories" else "Choose a category",
         accessibilityLabel = "Settings category",
         matchAnchorWidth = true,
     )
