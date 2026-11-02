@@ -686,7 +686,7 @@ private fun MediaPanel(state: ControlCenterState, vm: ControlCenterViewModel) {
     val music by vm.music.state.collectAsStateWithLifecycle()
     val key = "${state.activeDeviceId}:${state.sessionGeneration}"
     val ownsMusic = music.deviceKey == key
-    if (!ownsMusic || !music.unsupported) {
+    if (!usesLegacyPlayback(key, music)) {
         MusicPanel(
             music = music.music.takeIf { ownsMusic },
             deviceKey = key,
