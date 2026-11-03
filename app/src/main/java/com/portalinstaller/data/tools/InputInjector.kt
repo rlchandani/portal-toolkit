@@ -47,8 +47,8 @@ object InputInjector {
         val contentH = devH * scale
         val barX = (viewW - contentW) / 2f
         val barY = (viewH - contentH) / 2f
-        val devX = ((viewX - barX) / scale).toInt().coerceIn(0, devW)
-        val devY = ((viewY - barY) / scale).toInt().coerceIn(0, devH)
+        val devX = ((viewX - barX) / scale).toInt().coerceIn(0, devW - 1)
+        val devY = ((viewY - barY) / scale).toInt().coerceIn(0, devH - 1)
         return devX to devY
     }
 

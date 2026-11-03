@@ -34,22 +34,22 @@ class InputInjectorTest {
         assertEquals(0, y)
     }
 
-    // Taps inside a letterbox bar clamp to device bounds (never negative, never > dev).
+    // Taps inside a letterbox bar clamp to valid pixels (0 through dev-1).
     @Test
     fun `mapPoint clamps points inside letterbox bars`() {
         // Same horizontal-letterbox geometry; viewX=0 is inside the left bar -> clamps to 0.
         val (x, _) = InputInjector.mapPoint(0f, 200f, 800, 400, 1280, 800)
         assertEquals(0, x)
-        // viewX=800 (right edge, inside right bar) -> clamps to devW-... but bounded to 1280.
+        // viewX=800 (right edge, inside right bar) -> clamps to the last valid pixel.
         val (x2, _) = InputInjector.mapPoint(800f, 200f, 800, 400, 1280, 800)
-        assertEquals(1280, x2)
+        assertEquals(1279, x2)
     }
 
     @Test
     fun `mapPoint maps exact bottom-right corner of content`() {
         val (x, y) = InputInjector.mapPoint(640f, 400f, 640, 400, 1280, 800)
-        assertEquals(1280, x)
-        assertEquals(800, y)
+        assertEquals(1279, x)
+        assertEquals(799, y)
     }
 
     @Test
