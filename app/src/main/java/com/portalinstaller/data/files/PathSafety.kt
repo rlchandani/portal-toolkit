@@ -6,6 +6,7 @@ object PathSafety {
 
     fun isWithinSdcard(path: String): Boolean {
         val normalized = path.trimEnd('/')
+        if (normalized.split('/').any { it == ".." }) return false
         return normalized == SDCARD_ROOT || normalized.startsWith("$SDCARD_ROOT/")
     }
 

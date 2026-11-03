@@ -31,6 +31,7 @@ class PortalFileManager {
     suspend fun rename(dadb: Dadb, file: RemoteFile, newName: String, advancedMode: Boolean) = withContext(Dispatchers.IO) {
         PathSafety.requireAllowed(file.path, advancedMode)
         val dest = RemotePaths.renameDest(file.path, newName)
+        PathSafety.requireAllowed(dest, advancedMode)
         val resp = dadb.shell("mv ${shellQuote(file.path)} ${shellQuote(dest)}")
         require(resp.exitCode == 0) { resp.allOutput }
     }
