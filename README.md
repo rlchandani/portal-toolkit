@@ -53,3 +53,15 @@ This release adds backup and restore, app profiles, OTA update controls, Wireles
 ## Disclaimer
 
 Use it at your own risk. This is an independent community tool and is not affiliated with Meta.
+
+## Development checks
+
+Use JDK 21 and an Android SDK with platform 35 and build tools 35.0.0 installed, then run:
+
+```bash
+./gradlew :app:testDebugUnitTest :app:assembleDebug --no-daemon --rerun-tasks
+```
+
+The GitHub Actions workflow is configured for pushes, pull requests and manual runs.
+It uploads any available JVM test reports, including after failures, and the debug APK after successful checks.
+These checks cover host tests and debug assembly; device and USB/Wi-Fi connection testing is separate.
