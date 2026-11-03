@@ -215,15 +215,17 @@ class PortalBackupManager {
                 require(files.length() in 1..MAX_ARCHIVE_ENTRIES) {
                     "Invalid APK list for $packageName"
                 }
-                val apks = buildList {
-                    for (fileIndex in 0 until files.length()) {
-                        val fileName = files.getString(fileIndex)
-                        val apk = safeArchiveFile(workDir, "apps/$packageName/$fileName")
-                        if (apk.isFile && apk.length() > 0) add(apk)
-                    }
-                }
-
                 val installResult = runCatching {
+                    val apks = buildList {
+                        for (fileIndex in 0 until files.length()) {
+                            val fileName = files.getString(fileIndex)
+                            val apk = safeArchiveFile(workDir, "apps/$packageName/$fileName")
+                            require(apk.isFile && apk.length() > 0) {
+                                "Missing or empty APK $fileName for $packageName"
+                            }
+                            add(apk)
+                        }
+                    }
                     require(apks.isNotEmpty()) { "No APK files for $packageName" }
                     apks.forEach { apk ->
                         val archivePackage = readArchivePackageName(context, apk)
