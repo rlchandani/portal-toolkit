@@ -80,6 +80,7 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
+    testImplementation("org.mockito:mockito-core:5.11.0")
     // Real org.json impl so store serialize/parse runs on the JVM instead of
     // hitting the android.jar stub that throws "not mocked".
     testImplementation("org.json:json:20240303")
