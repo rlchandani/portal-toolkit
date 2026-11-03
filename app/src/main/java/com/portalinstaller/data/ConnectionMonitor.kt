@@ -1,9 +1,11 @@
 package com.portalinstaller.data
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -81,7 +83,7 @@ class ConnectionMonitor(
                 delay(if (consecutiveFailures == 0) heartbeatIntervalMs else failureRetryMs)
                 if (!isActive) break
 
-                val alive = runCatching { ping() }.getOrDefault(false)
+                val alive = runProbe(ping)
                 if (alive) {
                     consecutiveFailures = 0
                     continue
@@ -100,13 +102,22 @@ class ConnectionMonitor(
         }
     }
 
+    private suspend fun runProbe(probe: suspend () -> Boolean): Boolean {
+        val result = runCatching { probe() }.getOrElse { failure ->
+            if (failure is CancellationException) throw failure
+            false
+        }
+        currentCoroutineContext().ensureActive()
+        return result
+    }
+
     private suspend fun runReconnectLoop(
         reconnect: suspend () -> Boolean,
         onSignal: (MonitorSignal) -> Unit
     ) {
         var attempt = 1
         while (currentCoroutineContext().isActive) {
-            val recovered = runCatching { reconnect() }.getOrDefault(false)
+            val recovered = runProbe(reconnect)
             if (recovered) {
                 append(ConnectionEventKind.RECONNECTED)
                 onSignal(MonitorSignal.Reconnected)
