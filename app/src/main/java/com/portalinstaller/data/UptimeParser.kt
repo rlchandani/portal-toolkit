@@ -9,5 +9,7 @@ fun parseUptimeSeconds(procUptime: String): Long? {
     val firstToken = procUptime.trim().takeIf { it.isNotEmpty() }
         ?.substringBefore(' ')
         ?: return null
-    return firstToken.toDoubleOrNull()?.toLong()
+    return firstToken.toDoubleOrNull()
+        ?.takeIf { it.isFinite() && it >= 0.0 }
+        ?.toLong()
 }
