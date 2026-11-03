@@ -6,6 +6,8 @@
  */
 package com.portalinstaller.ui.controlcenter
 
+import android.graphics.Bitmap
+import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.rememberScrollState
@@ -13,28 +15,43 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import com.portalinstaller.data.companion.CompanionPhotoFolder
 import org.json.JSONArray
 import org.junit.Assert.assertEquals
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.util.concurrent.atomic.AtomicInteger
+import java.io.File
 
 /** Generated metadata only; these tests never connect to a Portal or access personal photos. */
 @RunWith(AndroidJUnit4::class)
 class PhotoCollectionsUiTest {
-    @get:Rule val compose = createComposeRule()
+    @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
+
+    @Before fun checkRenderedFontScale() {
+        val expected = InstrumentationRegistry.getArguments().getString("QA_FONT_SCALE")?.toFloat() ?: 1f
+        compose.waitUntil(5_000) {
+            kotlin.math.abs(compose.activity.resources.configuration.fontScale - expected) < 0.01f
+        }
+        assertEquals(expected, compose.activity.resources.configuration.fontScale, 0.01f)
+    }
 
     @Test fun discoveredFolderAndAllPhotosChoicesChangeBrowsingWithoutActivatingSlideshow() {
         val all = mutableStateOf(true)
@@ -104,6 +121,108 @@ class PhotoCollectionsUiTest {
         }
         compose.waitUntil(5_000) { loads.get() == 2 }
         assertEquals(2, loads.get())
+    }
+
+    @Test fun cachedPhotosWithListingErrorCannotActivateFolderOrAllPhotos() {
+        val all = mutableStateOf(false)
+        val error = "Public listing failed. Refresh to retry."
+        var activations = 0
+        compose.setContent {
+            MaterialTheme {
+                Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                    PhotoLibraryPanel("fixture", cachedPhoto(), "/sdcard/Pictures/Immortal", false,
+                        null, {}, {}, {}, { activations++ }, {}, { null },
+                        allPhotos = all.value, canBrowseAll = true,
+                        listingLoaded = true, listingError = error)
+                }
+            }
+        }
+        compose.onNodeWithText("1 photo").assertExists()
+        compose.onNodeWithText(error).assertExists()
+        captureFixture("photo-activation-error")
+        compose.onNodeWithText("Use for slideshow").performScrollTo().assertIsNotEnabled()
+        compose.runOnIdle { all.value = true }
+        compose.onNodeWithText("Use all photos for slideshow").performScrollTo().assertIsNotEnabled()
+        compose.runOnIdle { assertEquals(0, activations) }
+    }
+
+    @Test fun cachedPhotosWithoutCompletedListingCannotActivateFolderOrAllPhotos() {
+        val all = mutableStateOf(false)
+        var activations = 0
+        compose.setContent {
+            MaterialTheme {
+                Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                    PhotoLibraryPanel("fixture", cachedPhoto(), "/sdcard/Pictures/Immortal", false,
+                        null, {}, {}, {}, { activations++ }, {}, { null },
+                        allPhotos = all.value, canBrowseAll = true,
+                        listingLoaded = false, listingError = null)
+                }
+            }
+        }
+        compose.onNodeWithText("Finding photos…").assertExists()
+        compose.onNodeWithText("Use for slideshow").performScrollTo().assertIsNotEnabled()
+        compose.runOnIdle { all.value = true }
+        compose.onNodeWithText("Use all photos for slideshow").performScrollTo().assertIsNotEnabled()
+        compose.runOnIdle { assertEquals(0, activations) }
+    }
+
+    @Test fun successfulRefreshClearsErrorAndEnablesExactlyOneActivationClick() {
+        val files = mutableStateOf(cachedPhoto())
+        val loaded = mutableStateOf(true)
+        val message = "Public listing failed. Refresh to retry."
+        val error = mutableStateOf<String?>(message)
+        var refreshes = 0
+        var activations = 0
+        compose.setContent {
+            MaterialTheme {
+                Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                    PhotoLibraryPanel("fixture", files.value, "/sdcard/Pictures/Immortal", false,
+                        null, onImport = {},
+                        onRefresh = { refreshes++; loaded.value = false },
+                        onChangeFolder = {}, onActivateFolder = { activations++ },
+                        onDelete = {}, loadThumbnail = { null },
+                        allPhotos = true, canBrowseAll = true,
+                        listingLoaded = loaded.value, listingError = error.value)
+                }
+            }
+        }
+        compose.onNodeWithText(message).assertExists()
+        compose.onNodeWithText("Use all photos for slideshow").performScrollTo().assertIsNotEnabled()
+        click("Refresh")
+        compose.onNodeWithText("Use all photos for slideshow").performScrollTo().assertIsNotEnabled()
+        compose.runOnIdle {
+            assertEquals(1, refreshes)
+            assertEquals(0, activations)
+            files.value = JSONArray("""[{"name":"refreshed.jpg","path":"/sdcard/Pictures/Immortal/refreshed.jpg","size":20,"modified":2}]""")
+            loaded.value = true
+            error.value = null
+        }
+        compose.onNodeWithText(message).assertDoesNotExist()
+        compose.onNodeWithText("Finding photos…").assertDoesNotExist()
+        compose.onNodeWithText("1 photo").assertExists()
+        compose.onNodeWithText("Use all photos for slideshow").performScrollTo()
+            .assertIsEnabled().performClick()
+        captureFixture("photo-activation-recovered")
+        compose.runOnIdle {
+            assertEquals(1, refreshes)
+            assertEquals(1, activations)
+        }
+    }
+
+    private fun cachedPhoto() =
+        JSONArray("""[{"name":"cached.jpg","path":"/sdcard/Pictures/Immortal/cached.jpg","size":10,"modified":1}]""")
+
+    private fun captureFixture(name: String) {
+        val image = compose.onRoot().captureToImage().asAndroidBitmap()
+        try {
+            val directory = requireNotNull(InstrumentationRegistry.getInstrumentation()
+                .targetContext.getExternalFilesDir("qa"))
+            check(directory.isDirectory || directory.mkdirs())
+            val scale = kotlin.math.round(compose.activity.resources.configuration.fontScale * 100).toInt()
+            File(directory, "$name-$scale.png").outputStream().use {
+                check(image.compress(Bitmap.CompressFormat.PNG, 100, it))
+            }
+        } finally { image.recycle() }
     }
 
     private fun showLibrary(loaded: Boolean, truncated: Boolean) {

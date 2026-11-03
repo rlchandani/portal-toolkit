@@ -140,7 +140,8 @@ internal fun PhotoLibraryPanel(
         }
         if (truncated) Text("This is a partial collection. Choose a folder to browse it directly.",
             style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        OutlinedButton(onClick = onActivateFolder, enabled = !working && photos.isNotEmpty() && !truncated) {
+        OutlinedButton(onClick = onActivateFolder,
+            enabled = !working && listingLoaded && listingError == null && photos.isNotEmpty() && !truncated) {
             Text(if (allPhotos) "Use all photos for slideshow" else "Use for slideshow")
         }
         if (listingError != null) Text(listingError, style = MaterialTheme.typography.bodyMedium,
