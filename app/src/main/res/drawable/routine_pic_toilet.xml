@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Copyright (c) 2026 Starbright Lab.
+
+  This source code is licensed under the MIT license found in the
+  LICENSE file in the root directory of this source tree.
+
+  Picture routines: bundled picture "toilet" (generated from the approved prototype, 120x120).
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="120dp"
+    android:height="120dp"
+    android:viewportWidth="120"
+    android:viewportHeight="120">
+    <path
+        android:pathData="M74,14 h18 a8,8 0 0 1 8,8 v32 a8,8 0 0 1 -8,8 h-18 a8,8 0 0 1 -8,-8 v-32 a8,8 0 0 1 8,-8 z"
+        android:fillColor="#FFFFFF"
+        android:strokeColor="#1F2A3C"
+        android:strokeWidth="5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M14 58 H96 Q96 84 70 88 L74 106 H40 L44 88 Q14 84 14 58Z"
+        android:fillColor="#FFFFFF"
+        android:strokeColor="#1F2A3C"
+        android:strokeWidth="5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M20 58 Q20 72 52 72 Q84 72 90 58"
+        android:strokeColor="#7CC0F5"
+        android:strokeWidth="5" />
+    <path
+        android:pathData="M78,24 h10 a4,4 0 0 1 4,4 v0 a4,4 0 0 1 -4,4 h-10 a4,4 0 0 1 -4,-4 v-0 a4,4 0 0 1 4,-4 z"
+        android:fillColor="#CFD6DF"
+        android:strokeColor="#1F2A3C"
+        android:strokeWidth="5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+</vector>

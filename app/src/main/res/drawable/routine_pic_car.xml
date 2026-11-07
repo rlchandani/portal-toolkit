@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Copyright (c) 2026 Starbright Lab.
+
+  This source code is licensed under the MIT license found in the
+  LICENSE file in the root directory of this source tree.
+
+  Picture routines: bundled picture "car" (generated from the approved prototype, 120x120).
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="120dp"
+    android:height="120dp"
+    android:viewportWidth="120"
+    android:viewportHeight="120">
+    <path
+        android:pathData="M10 80 V66 Q10 58 20 56 L32 54 L44 34 Q46 30 52 30 H76 Q82 30 86 34 L100 54 Q110 56 110 66 V80Z"
+        android:fillColor="#FF7A6B"
+        android:strokeColor="#1F2A3C"
+        android:strokeWidth="5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M46 52 L54 38 H64 V52Z M70 52 V38 H78 L88 52Z"
+        android:fillColor="#7CC0F5"
+        android:strokeColor="#1F2A3C"
+        android:strokeWidth="5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M22,84 a12,12 0 1 0 24,0 a12,12 0 1 0 -24,0 z"
+        android:fillColor="#CFD6DF"
+        android:strokeColor="#1F2A3C"
+        android:strokeWidth="5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M74,84 a12,12 0 1 0 24,0 a12,12 0 1 0 -24,0 z"
+        android:fillColor="#CFD6DF"
+        android:strokeColor="#1F2A3C"
+        android:strokeWidth="5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M100,62 h4 a2,2 0 0 1 2,2 v2 a2,2 0 0 1 -2,2 h-4 a2,2 0 0 1 -2,-2 v-2 a2,2 0 0 1 2,-2 z"
+        android:fillColor="#FFCB47" />
+</vector>

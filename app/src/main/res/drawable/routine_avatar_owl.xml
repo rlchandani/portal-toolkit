@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Copyright (c) 2026 Starbright Lab.
+
+  This source code is licensed under the MIT license found in the
+  LICENSE file in the root directory of this source tree.
+
+  Picture routines: bundled picture "avatar owl" (generated from the approved prototype, 120x120).
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="120dp"
+    android:height="120dp"
+    android:viewportWidth="120"
+    android:viewportHeight="120">
+    <path
+        android:pathData="M4,60 a56,56 0 1 0 112,0 a56,56 0 1 0 -112,0 z"
+        android:fillColor="#E3DAFC" />
+    <path
+        android:pathData="M26 30 L40 42 Q60 34 80 42 L94 30 L96 76 Q92 104 60 106 Q28 104 24 76Z"
+        android:fillColor="#A184E8"
+        android:strokeColor="#1F2A3C"
+        android:strokeWidth="5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M30,58 a14,14 0 1 0 28,0 a14,14 0 1 0 -28,0 z"
+        android:fillColor="#FFFFFF"
+        android:strokeColor="#1F2A3C"
+        android:strokeWidth="5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M62,58 a14,14 0 1 0 28,0 a14,14 0 1 0 -28,0 z"
+        android:fillColor="#FFFFFF"
+        android:strokeColor="#1F2A3C"
+        android:strokeWidth="5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M38,58 a6,6 0 1 0 12,0 a6,6 0 1 0 -12,0 z"
+        android:fillColor="#1F2A3C" />
+    <path
+        android:pathData="M70,58 a6,6 0 1 0 12,0 a6,6 0 1 0 -12,0 z"
+        android:fillColor="#1F2A3C" />
+    <path
+        android:pathData="M54 72 H66 L60 84Z"
+        android:fillColor="#FFCB47"
+        android:strokeColor="#1F2A3C"
+        android:strokeWidth="5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+</vector>

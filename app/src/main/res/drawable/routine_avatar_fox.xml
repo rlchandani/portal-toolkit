@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Copyright (c) 2026 Starbright Lab.
+
+  This source code is licensed under the MIT license found in the
+  LICENSE file in the root directory of this source tree.
+
+  Picture routines: bundled picture "avatar fox" (generated from the approved prototype, 120x120).
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="120dp"
+    android:height="120dp"
+    android:viewportWidth="120"
+    android:viewportHeight="120">
+    <path
+        android:pathData="M4,60 a56,56 0 1 0 112,0 a56,56 0 1 0 -112,0 z"
+        android:fillColor="#FFE1C7" />
+    <path
+        android:pathData="M24 26 L44 48 L76 48 L96 26 L98 70 Q92 98 60 104 Q28 98 22 70Z"
+        android:fillColor="#FF8A4C"
+        android:strokeColor="#1F2A3C"
+        android:strokeWidth="5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M24 66 Q40 64 60 84 Q80 64 96 66 Q90 96 60 102 Q30 96 24 66Z"
+        android:fillColor="#FFFFFF"
+        android:strokeColor="#1F2A3C"
+        android:strokeWidth="5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M41,64 a5,5 0 1 0 10,0 a5,5 0 1 0 -10,0 z"
+        android:fillColor="#1F2A3C" />
+    <path
+        android:pathData="M69,64 a5,5 0 1 0 10,0 a5,5 0 1 0 -10,0 z"
+        android:fillColor="#1F2A3C" />
+    <path
+        android:pathData="M54,84 a6,6 0 1 0 12,0 a6,6 0 1 0 -12,0 z"
+        android:fillColor="#1F2A3C" />
+</vector>

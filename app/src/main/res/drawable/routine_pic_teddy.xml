@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Copyright (c) 2026 Starbright Lab.
+
+  This source code is licensed under the MIT license found in the
+  LICENSE file in the root directory of this source tree.
+
+  Picture routines: bundled picture "teddy" (generated from the approved prototype, 120x120).
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="120dp"
+    android:height="120dp"
+    android:viewportWidth="120"
+    android:viewportHeight="120">
+    <path
+        android:pathData="M16,34 a14,14 0 1 0 28,0 a14,14 0 1 0 -28,0 z"
+        android:fillColor="#C0814F"
+        android:strokeColor="#1F2A3C"
+        android:strokeWidth="5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M76,34 a14,14 0 1 0 28,0 a14,14 0 1 0 -28,0 z"
+        android:fillColor="#C0814F"
+        android:strokeColor="#1F2A3C"
+        android:strokeWidth="5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M24,34 a6,6 0 1 0 12,0 a6,6 0 1 0 -12,0 z"
+        android:fillColor="#FFF4DC" />
+    <path
+        android:pathData="M84,34 a6,6 0 1 0 12,0 a6,6 0 1 0 -12,0 z"
+        android:fillColor="#FFF4DC" />
+    <path
+        android:pathData="M20,64 a40,40 0 1 0 80,0 a40,40 0 1 0 -80,0 z"
+        android:fillColor="#C0814F"
+        android:strokeColor="#1F2A3C"
+        android:strokeWidth="5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M40,80 a20,15 0 1 0 40,0 a20,15 0 1 0 -40,0 z"
+        android:fillColor="#FFF4DC"
+        android:strokeColor="#1F2A3C"
+        android:strokeWidth="5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M39,58 a5,5 0 1 0 10,0 a5,5 0 1 0 -10,0 z"
+        android:fillColor="#1F2A3C" />
+    <path
+        android:pathData="M71,58 a5,5 0 1 0 10,0 a5,5 0 1 0 -10,0 z"
+        android:fillColor="#1F2A3C" />
+    <path
+        android:pathData="M54 74 h12 l-6 7z"
+        android:fillColor="#1F2A3C"
+        android:strokeColor="#1F2A3C"
+        android:strokeWidth="5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+</vector>

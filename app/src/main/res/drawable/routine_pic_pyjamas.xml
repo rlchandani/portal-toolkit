@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Copyright (c) 2026 Starbright Lab.
+
+  This source code is licensed under the MIT license found in the
+  LICENSE file in the root directory of this source tree.
+
+  Picture routines: bundled picture "pyjamas" (generated from the approved prototype, 120x120).
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="120dp"
+    android:height="120dp"
+    android:viewportWidth="120"
+    android:viewportHeight="120">
+    <path
+        android:pathData="M40 20 L24 26 L12 78 L28 82 L34 52 V100 H86 V52 L92 82 L108 78 L96 26 L80 20 Q72 30 60 30 Q48 30 40 20Z"
+        android:fillColor="#3F7FD9"
+        android:strokeColor="#1F2A3C"
+        android:strokeWidth="5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M50 52 a9 9 0 1 0 8 12 a7 7 0 1 1 -8 -12z"
+        android:fillColor="#FFCB47"
+        android:strokeColor="#1F2A3C"
+        android:strokeWidth="5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M70.5,48 a3.5,3.5 0 1 0 7,0 a3.5,3.5 0 1 0 -7,0 z"
+        android:fillColor="#FFFFFF" />
+    <path
+        android:pathData="M68.5,80 a3.5,3.5 0 1 0 7,0 a3.5,3.5 0 1 0 -7,0 z"
+        android:fillColor="#FFFFFF" />
+    <path
+        android:pathData="M43,86 a3,3 0 1 0 6,0 a3,3 0 1 0 -6,0 z"
+        android:fillColor="#FFFFFF" />
+    <path
+        android:pathData="M60 30 V100"
+        android:strokeColor="#1F2A3C"
+        android:strokeWidth="3"
+        android:strokeAlpha=".4" />
+</vector>
