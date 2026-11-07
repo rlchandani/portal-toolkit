@@ -354,8 +354,12 @@ fun ControlCenterScreen() {
                 transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "control-center") {
                 val shown = it
                 key(state.activeDeviceId, state.sessionGeneration) {
-                // The list has its own scrolling column; it cannot nest inside the page LazyColumn.
-                if (shown == CenterTab.LIST.name) HouseholdListScreen(Modifier.fillMaxSize()) else
+                // These screens scroll themselves; nesting them in the page LazyColumn crashes
+                // (infinite max height), so they render in place of it.
+                if (shown == CenterTab.LIST.name) HouseholdListScreen(Modifier.fillMaxSize())
+                else if (shown == CenterDetail.ROUTINES.name)
+                    com.portalinstaller.ui.routines.RoutinesScreen(vm.routines, state.deviceName) { detail = CenterDetail.NONE }
+                else
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 26.dp),
@@ -418,7 +422,7 @@ fun ControlCenterScreen() {
                                         val dinner = remember { com.portalinstaller.data.dinner.DinnerRepository.create(context) }
                                         com.portalinstaller.ui.dinner.DinnerScreen(dinner)
                                     }
-                                    CenterDetail.ROUTINES -> com.portalinstaller.ui.routines.RoutinesScreen(vm.routines, state.deviceName) { detail = CenterDetail.NONE }
+                                    CenterDetail.ROUTINES -> Unit // rendered above, outside this column
                                     CenterDetail.NONE -> Unit
                                 }
                             }
