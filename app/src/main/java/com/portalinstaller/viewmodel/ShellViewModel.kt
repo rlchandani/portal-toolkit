@@ -73,10 +73,12 @@ class ShellViewModel(app: Application) : AndroidViewModel(app) {
         runningJob = viewModelScope.launch {
             _isRunning.value = true
             val result = withContext(Dispatchers.IO) {
-                runCatching { d.shell(trimmed).allOutput }
+                runCatching { d.shell(trimmed) }
             }
             val entry = result.fold(
-                onSuccess = { output -> ShellEntry(trimmed, output.trimEnd(), isError = false) },
+                onSuccess = { response ->
+                    ShellEntry(trimmed, response.allOutput.trimEnd(), isError = response.exitCode != 0)
+                },
                 onFailure = { e ->
                     ShellEntry(
                         command = trimmed,

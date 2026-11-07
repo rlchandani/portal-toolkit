@@ -5,6 +5,8 @@ object PathSafety {
     const val SDCARD_ROOT = "/sdcard"
 
     fun isWithinSdcard(path: String): Boolean {
+        // Both guards: refuse parent traversal outright, then compare the normalized path.
+        if (path.split('/').any { it == ".." }) return false
         val normalized = normalize(path)
         return normalized == SDCARD_ROOT || normalized.startsWith("$SDCARD_ROOT/")
     }

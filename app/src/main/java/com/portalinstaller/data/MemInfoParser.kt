@@ -39,6 +39,8 @@ object MemInfoParser {
     private fun readKb(output: String, key: String): Long? {
         val line = output.lineSequence().firstOrNull { it.trimStart().startsWith("$key:") }
             ?: return null
-        return Regex("""\d+""").find(line)?.value?.toLongOrNull()
+        val value = line.substringAfter(':').trimStart().takeWhile { !it.isWhitespace() }
+        // Preserve the sign and reject values whose byte conversion would overflow.
+        return value.toLongOrNull()?.takeIf { it in 0..Long.MAX_VALUE / 1024 }
     }
 }
