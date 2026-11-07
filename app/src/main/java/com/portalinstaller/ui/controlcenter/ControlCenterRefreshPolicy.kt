@@ -8,8 +8,11 @@ package com.portalinstaller.ui.controlcenter
 
 internal enum class CenterTab(val label: String, val glyph: String) {
     HOME("Home", "home"), REMOTE("Remote", "remote"), PHOTOS("Photos", "photos"),
-    APPS("Apps", "apps"), SETTINGS("Settings", "settings")
+    LIST("List", "list"), APPS("Apps", "apps"), SETTINGS("Settings", "settings")
 }
+
+/** Bottom-bar tabs. Apps is reached from the Manage apps card on Home, not the bar. */
+internal val navigationTabs: List<CenterTab> = CenterTab.entries.filter { it != CenterTab.APPS }
 
 internal enum class CenterDetail { NONE, LAYOUT, SCENES, JARVIS, SNAPSHOTS, OPERATIONS, DINNER, ROUTINES }
 
@@ -27,6 +30,7 @@ internal fun visiblePageRefreshes(tab: CenterTab, detail: CenterDetail, showCata
             CenterTab.SETTINGS -> listOf(CenterRefresh.SETTINGS)
             CenterTab.APPS -> listOf(if (showCatalog) CenterRefresh.CATALOG else CenterRefresh.APPS)
             CenterTab.HOME, CenterTab.REMOTE -> emptyList()
+            CenterTab.LIST -> emptyList() // the list screen owns its sync
         }
     }
 

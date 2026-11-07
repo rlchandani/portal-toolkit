@@ -146,6 +146,9 @@ internal fun ControlGlyph(
                 }
                 drawPath(mountain,tint,style=stroke)
             }
+            "list" -> listOf(6f, 12f, 18f).forEach { y ->
+                drawCircle(tint, 1.3f * u, point(4f, y)); line(9f, y, 21f, y)
+            }
             "apps", "layout" -> {
                 rect(3f,3f,7f,7f);rect(14f,3f,7f,7f)
                 rect(3f,14f,7f,7f);rect(14f,14f,7f,7f)

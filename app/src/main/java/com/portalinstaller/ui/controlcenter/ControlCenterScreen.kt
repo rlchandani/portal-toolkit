@@ -35,6 +35,8 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import com.portalinstaller.ui.list.HouseholdListScreen
+import com.portalinstaller.ui.list.ManageAppsCard
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -333,7 +335,7 @@ fun ControlCenterScreen() {
         },
         bottomBar = {
             NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
-                CenterTab.entries.forEach { item ->
+                navigationTabs.forEach { item ->
                     NavigationBarItem(selected = tab == item,
                         onClick = { tab = item; detail = CenterDetail.NONE },
                         icon = { ControlGlyph(item.glyph, modifier = Modifier.size(23.dp)) },
@@ -352,6 +354,8 @@ fun ControlCenterScreen() {
                 transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "control-center") {
                 val shown = it
                 key(state.activeDeviceId, state.sessionGeneration) {
+                // The list has its own scrolling column; it cannot nest inside the page LazyColumn.
+                if (shown == CenterTab.LIST.name) HouseholdListScreen(Modifier.fillMaxSize()) else
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 26.dp),
@@ -420,9 +424,11 @@ fun ControlCenterScreen() {
                             }
                         }
                     } else when (CenterTab.valueOf(shown)) {
+                        CenterTab.LIST -> Unit // rendered above, outside this column
                         CenterTab.HOME -> item {
                             PageSections {
                                 PageTitle("Your Portal", "Everything you need, within reach.")
+                                ManageAppsCard(onOpenApps = { tab = CenterTab.APPS; detail = CenterDetail.NONE })
                                 if (state.connection == CompanionConnection.CONNECTING) {
                                     GroupCard {
                                         Text("Connecting to ${state.activeDevice?.name ?: "your Portal"}",
