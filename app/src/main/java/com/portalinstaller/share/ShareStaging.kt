@@ -73,7 +73,8 @@ object ShareStaging {
     /** Opens the staged copy for one upload attempt. Disposing does not delete it (Retry needs it). */
     fun upload(store: ShareJobStore, job: ShareJob, item: ShareItem): CompanionUpload {
         val file: File = store.itemFile(job.id, item.id)
-        if (!file.isFile) throw IOException("${item.name} is no longer on this phone. Share it again.")
+        // Not a transport failure: name the real cause instead of "Couldn't reach".
+        require(file.isFile) { "${item.name} is no longer on this phone. Share it again." }
         return CompanionUpload(item.name, contentType(item.name), file.length()) { file.inputStream() }
     }
 }

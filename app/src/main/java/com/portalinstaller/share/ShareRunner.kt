@@ -105,9 +105,15 @@ class ShareRunner(
                 val current = job(id) ?: return
                 if (current.cancelled || current.state(room.id, item.id).status != ItemStatus.WAITING) continue
                 change(id) { it.with(room.id, item.id, ItemState(ItemStatus.SENDING)) }
+                var shownPercent = -1L
                 val result = if (current.kind == ShareKind.PHOTOS) transport.photo(room.id, current, item) { bytes ->
-                    val status = if (bytes >= item.bytes) ItemStatus.CONFIRMING else ItemStatus.SENDING
-                    change(id) { it.with(room.id, item.id, ItemState(status, bytes)) }
+                    // Publish whole-percent steps only; transports report every buffer.
+                    val percent = if (item.bytes <= 0) 100 else bytes * 100 / item.bytes
+                    if (percent != shownPercent) {
+                        shownPercent = percent
+                        val status = if (bytes >= item.bytes) ItemStatus.CONFIRMING else ItemStatus.SENDING
+                        change(id) { it.with(room.id, item.id, ItemState(status, bytes)) }
+                    }
                 } else transport.message(room.id, current)
                 change(id) { it.with(room.id, item.id, result) }
                 save()

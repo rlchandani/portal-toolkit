@@ -78,6 +78,13 @@ class ShareSenderTest {
         assertEquals("The connection to Family Area dropped at 50%.", state.reason)
     }
 
+    @Test fun aStagedCopyThatVanishedIsNamedNotBlamedOnTheNetwork() = runTest {
+        val gone = ShareSender(CompanionClient(CompanionTransport { throw AssertionError("nothing is sent") }),
+            sessionFor = { session }, uploads = { _, _ -> throw IllegalArgumentException("a.jpg is no longer on this phone. Share it again.") },
+            network = { PhoneNetwork.WIFI })
+        assertEquals(ItemState(ItemStatus.FAILED, 0, "a.jpg is no longer on this phone. Share it again."), gone.photo("f", job, item) {})
+    }
+
     @Test fun losingTheReplyAfterEveryByteIsUnconfirmed() = runTest {
         val state = sender { it.onUploadProgress?.invoke(10); throw IOException("timeout") }.photo("f", job, item) {}
         assertEquals(ItemStatus.UNCONFIRMED, state.status)
