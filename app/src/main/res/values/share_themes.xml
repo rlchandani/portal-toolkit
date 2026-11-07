@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) 2026 Starbright Lab. MIT license. -->
+<resources>
+    <!-- The share sheet floats over the sending app: translucent window, no title, no animation flash. -->
+    <style name="Theme.PortalInstaller.Share" parent="Theme.PortalInstaller">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:backgroundDimEnabled">false</item>
+    </style>
+</resources>
