@@ -11,7 +11,7 @@ internal enum class CenterTab(val label: String, val glyph: String) {
     APPS("Apps", "apps"), SETTINGS("Settings", "settings")
 }
 
-internal enum class CenterDetail { NONE, LAYOUT, SCENES, JARVIS, SNAPSHOTS, OPERATIONS }
+internal enum class CenterDetail { NONE, LAYOUT, SCENES, JARVIS, SNAPSHOTS, OPERATIONS, DINNER }
 
 internal enum class CenterRefresh { STATUS, LAYOUT, SCENES, JARVIS, OPERATIONS, SOURCES, PHOTOS, SETTINGS, APPS, CATALOG }
 
@@ -21,7 +21,7 @@ internal fun visiblePageRefreshes(tab: CenterTab, detail: CenterDetail, showCata
         CenterDetail.SCENES -> listOf(CenterRefresh.SCENES)
         CenterDetail.JARVIS -> listOf(CenterRefresh.JARVIS)
         CenterDetail.OPERATIONS -> listOf(CenterRefresh.OPERATIONS)
-        CenterDetail.SNAPSHOTS -> emptyList()
+        CenterDetail.SNAPSHOTS, CenterDetail.DINNER -> emptyList() // DinnerScreen owns its own refresh
         CenterDetail.NONE -> when (tab) {
             CenterTab.PHOTOS -> listOf(CenterRefresh.SOURCES, CenterRefresh.PHOTOS, CenterRefresh.SETTINGS)
             CenterTab.SETTINGS -> listOf(CenterRefresh.SETTINGS)

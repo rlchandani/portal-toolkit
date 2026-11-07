@@ -409,6 +409,11 @@ fun ControlCenterScreen() {
                                         }
                                     }
                                     CenterDetail.OPERATIONS -> Unit
+                                    CenterDetail.DINNER -> {
+                                        val context = androidx.compose.ui.platform.LocalContext.current
+                                        val dinner = remember { com.portalinstaller.data.dinner.DinnerRepository.create(context) }
+                                        com.portalinstaller.ui.dinner.DinnerScreen(dinner)
+                                    }
                                     CenterDetail.NONE -> Unit
                                 }
                             }
@@ -464,6 +469,7 @@ fun ControlCenterScreen() {
                                         ActionRow("Jarvis", "Model and wake settings.", "jarvis", state.supports("jarvis")) { detail = CenterDetail.JARVIS }
                                         ActionRow("Snapshots", "Save and restore your setup.", "backup", state.supports("snapshot")) { detail = CenterDetail.SNAPSHOTS }
                                         ActionRow("Activity", "Progress and results.", "refresh", state.supports("operations")) { detail = CenterDetail.OPERATIONS }
+                                        ActionRow("Call everyone", "Chime and say a message in every room.", "scenes") { detail = CenterDetail.DINNER }
                                     }
                                     MediaPanel(state, vm)
                                 }
