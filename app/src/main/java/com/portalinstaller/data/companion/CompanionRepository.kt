@@ -961,16 +961,26 @@ class CompanionRepository(
     private fun provisionHousehold(targets: List<CompanionSession>) {
         val source = household ?: return
         scope.launch(io) {
-            val key = runCatching { source.key() }.getOrNull() ?: return@launch
+            val key = try { source.key() } catch (e: Exception) {
+                android.util.Log.w(HOUSEHOLD_TAG, "household key unavailable", e); return@launch
+            }
+            android.util.Log.i(HOUSEHOLD_TAG, "provisioning ${targets.size} portal(s) fp=${CompanionHousehold.fingerprint(key)}")
             targets.forEach { session ->
-                try { CompanionHousehold.provision(client, session, key) }
+                try {
+                    val held = CompanionHousehold.provision(client, session, key)
+                    android.util.Log.i(HOUSEHOLD_TAG, "portal ${session.device.id.take(6)} holds key=$held")
+                }
                 catch (cancelled: CancellationException) { throw cancelled }
-                catch (_: Exception) {}
+                catch (e: Exception) {
+                    android.util.Log.w(HOUSEHOLD_TAG, "provision failed for ${session.device.id.take(6)}: ${e.javaClass.simpleName} ${e.message?.take(120)}")
+                }
             }
         }
     }
 
     companion object {
+        private const val HOUSEHOLD_TAG = "PortalHousehold"
+
         fun create(context: Context): CompanionRepository = CompanionRepository(CompanionClient(), FileCompanionSessionStore.create(context),
             discovery = NsdCompanionDiscovery(context.applicationContext), preloadManagement = false,
             household = PrefsHouseholdKeySource(context))
