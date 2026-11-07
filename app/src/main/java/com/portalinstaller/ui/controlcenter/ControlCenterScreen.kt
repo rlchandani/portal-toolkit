@@ -414,6 +414,7 @@ fun ControlCenterScreen() {
                                         val dinner = remember { com.portalinstaller.data.dinner.DinnerRepository.create(context) }
                                         com.portalinstaller.ui.dinner.DinnerScreen(dinner)
                                     }
+                                    CenterDetail.ROUTINES -> com.portalinstaller.ui.routines.RoutinesScreen(vm.routines, state.deviceName) { detail = CenterDetail.NONE }
                                     CenterDetail.NONE -> Unit
                                 }
                             }
@@ -470,8 +471,11 @@ fun ControlCenterScreen() {
                                         ActionRow("Snapshots", "Save and restore your setup.", "backup", state.supports("snapshot")) { detail = CenterDetail.SNAPSHOTS }
                                         ActionRow("Activity", "Progress and results.", "refresh", state.supports("operations")) { detail = CenterDetail.OPERATIONS }
                                         ActionRow("Call everyone", "Chime and say a message in every room.", "scenes") { detail = CenterDetail.DINNER }
+                                        ActionRow("Routines", "Picture checklists for mornings and bedtime.", "scenes") { detail = CenterDetail.ROUTINES }
                                     }
                                     MediaPanel(state, vm)
+                                    com.portalinstaller.ui.routines.RoutinesHomeCards(vm.routines, state.deviceName) { detail = CenterDetail.ROUTINES }
+                                    com.portalinstaller.share.RecentSharesCard()
                                 }
                             }
                         }
@@ -591,6 +595,7 @@ fun ControlCenterScreen() {
                                     SettingsDomainPicker(visibleSettingsDomains, shownSettingsDomain) { settingsDomain = it }
                                 },
                                 portalSettings = {
+                                    com.portalinstaller.share.ShareSenderNameSetting()
                                     GroupProgressPanel(state.groupOperations, { vm.retryGroupOperation(it) }, { vm.cancelGroupOperation(it) }, { vm.dismissGroupOperation(it) })
                                     state.schema?.let { RegistrySettingsPanel(it, state.busy || state.selectedTargets.isEmpty(), query, showAdvanced,
                                         onlyDomain = if (query.isBlank()) shownSettingsDomain else null,

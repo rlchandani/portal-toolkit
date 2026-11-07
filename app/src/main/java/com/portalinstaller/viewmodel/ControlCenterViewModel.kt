@@ -25,6 +25,11 @@ class ControlCenterViewModel(private val repository: CompanionRepository) : View
     constructor(context: Context) : this(CompanionRepository.create(context))
     val state = repository.state
     val music = CompanionMusicController(viewModelScope, repository::readMusic, repository::sendMusic)
+    /** Picture routines on the active Portal (/remote/routines). */
+    val routines = RoutinesController(viewModelScope,
+        { key -> repository.featureRequest(key, "routines") },
+        { key, body -> repository.featureRequest(key, "routines", body) },
+        room = { state.value.deviceName })
     val remoteText = RemoteTextController(viewModelScope) { deviceKey, text ->
         val selected = state.value
         if (deviceKey != "${selected.activeDeviceId}:${selected.sessionGeneration}" || !selected.connected) false
@@ -35,6 +40,7 @@ class ControlCenterViewModel(private val repository: CompanionRepository) : View
             state.collect { selected ->
                 remoteText.updateSession("${selected.activeDeviceId}:${selected.sessionGeneration}", selected.connected)
                 music.updateSession("${selected.activeDeviceId}:${selected.sessionGeneration}", selected.connected)
+                routines.updateSession("${selected.activeDeviceId}:${selected.sessionGeneration}", selected.connected)
             }
         }
         viewModelScope.launch {

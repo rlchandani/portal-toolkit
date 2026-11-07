@@ -24,6 +24,8 @@
         android:name="android.permission.QUERY_ALL_PACKAGES"
         tools:ignore="QueryAllPackagesPermission" />
 
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <application
         android:name=".PortalApplication"
         android:allowBackup="true"
@@ -43,6 +45,26 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+            <!-- Share to Portal: Android share sheet entry, background retry job and actions. -->
+        <activity android:name=".share.ShareActivity" android:exported="true"
+            android:theme="@style/Theme.PortalInstaller.Share" android:excludeFromRecents="true">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
+        </activity>
+        <activity android:name=".share.ShareJobActivity" android:exported="false"
+            android:theme="@style/Theme.PortalInstaller.Share" />
+        <service android:name=".share.ShareRetryJobService"
+            android:permission="android.permission.BIND_JOB_SERVICE" android:exported="false" />
+        <receiver android:name=".share.ShareActionReceiver" android:exported="false" />
     </application>
 
 </manifest>
