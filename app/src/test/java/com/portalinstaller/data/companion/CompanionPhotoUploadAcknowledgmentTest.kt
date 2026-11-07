@@ -8,6 +8,7 @@ package com.portalinstaller.data.companion
 
 import java.io.ByteArrayInputStream
 import java.io.IOException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -114,6 +115,135 @@ class CompanionPhotoUploadAcknowledgmentTest {
         assertEquals("upload_unconfirmed", (failure as CompanionException).error.code)
         assertEquals(1, sends)
         assertTrue(closed)
+    }
+
+    @Test fun unexpectedTransportExceptionsAfterSendingAreUnconfirmedWithoutReplay() = runTest {
+        for (unexpected in listOf(IllegalStateException("Fixture reply handling failed"),
+            IllegalArgumentException("Fixture response decoding failed"), Exception("Fixture unexpected failure"))) {
+            var sends = 0
+            val client = CompanionClient(CompanionTransport {
+                sends++
+                it.upload!!.open().use { input -> assertEquals(77, input.readBytes().size) }
+                throw unexpected
+            })
+            val failure = runCatching { client.uploadPhoto(session, folder, upload()) {} }.exceptionOrNull()
+            assertTrue("Unexpected transport failure must require review", failure is CompanionException)
+            assertEquals("upload_unconfirmed", (failure as CompanionException).error.code)
+            assertEquals(1, sends)
+        }
+    }
+
+    @Test fun cancellationAndExplicitTransportRejectionArePreserved() = runTest {
+        val rejection = CompanionException(CompanionError("collision", "Fixture server rejection", 409,
+            JSONObject().put("existing", path)))
+        for (original in listOf(CancellationException("Fixture cancelled"), rejection)) {
+            val client = CompanionClient(CompanionTransport { throw original })
+            val failure = runCatching { client.uploadPhoto(session, folder, upload()) {} }.exceptionOrNull()
+            assertSame(original, failure)
+        }
+    }
+
+    @Test fun localPreSendValidationNeverBecomesUnconfirmedOrCallsTransport() = runTest {
+        var sends = 0
+        val client = CompanionClient(CompanionTransport { sends++; CompanionResponse(200, ack().toString()) })
+        val invalidInputs = listOf(
+            Triple(session, folder, CompanionUpload("../image.png", "image/png", 77, open = { ByteArrayInputStream(ByteArray(77)) })),
+            Triple(session, folder, CompanionUpload(name, "image/png", 0, open = { ByteArrayInputStream(ByteArray(0)) })),
+            Triple(session, "/private/Album", upload()),
+            Triple(CompanionSession(session.device.copy(endpoint = "invalid endpoint"), session.token), folder, upload()),
+        )
+        for ((target, destination, image) in invalidInputs) {
+            val failure = runCatching { client.uploadPhoto(target, destination, image) {} }.exceptionOrNull()
+            assertTrue("Local validation must remain a local rejection", failure is IllegalArgumentException)
+        }
+        assertEquals(0, sends)
+    }
+
+    @Test fun singleRoomUnexpectedTransportFailureRequiresReviewWithoutCompletion() = runTest {
+        val store = object : CompanionSessionStore {
+            override suspend fun load() = listOf(session)
+            override suspend fun save(sessions: List<CompanionSession>) = Unit
+        }
+        var sends = 0
+        var disposed = 0
+        val client = CompanionClient(CompanionTransport {
+            when {
+                it.upload != null -> {
+                    sends++
+                    it.upload.open().use { input -> assertEquals(77, input.readBytes().size) }
+                    throw IllegalStateException("Fixture lost acknowledgment after sending")
+                }
+                it.url.toHttpUrl().encodedPath == "/remote/photos" -> CompanionResponse(200, """{"ok":true,"files":[]}""")
+                else -> CompanionResponse(200, """{"ok":true,"deviceId":"a","np":{},"capabilities":{}}""")
+            }
+        })
+        val repository = CompanionRepository(client, store, backgroundScope,
+            UnconfinedTestDispatcher(testScheduler), preloadManagement = false)
+        try {
+            repository.ready.join()
+            repository.selectDevice("a").join()
+            repository.uploadPhotos(listOf(PhotoUploadSource(name) {
+                CompanionUpload(name, "image/png", 77, dispose = { disposed++ },
+                    open = { ByteArrayInputStream(ByteArray(77)) })
+            }), folder).join()
+            val result = repository.state.value.photoTransfer!!
+            assertEquals(0, result.completed)
+            assertFalse(result.running)
+            assertEquals("upload_unconfirmed", result.failures.single().error.code)
+            assertTrue(repository.state.value.error!!.message.contains("unconfirmed"))
+            assertEquals(1, sends)
+            assertEquals(1, disposed)
+        } finally { repository.close() }
+    }
+
+    @Test fun mixedUnexpectedTransportFailureRetriesOnlyTheExplicitlyRejectedRoom() = runTest {
+        val sessions = listOf("a", "b", "c").map {
+            CompanionSession(CompanionDevice(it, it, "http://$it:8723", photoFolder = "/sdcard/$it"), "token-$it")
+        }
+        val store = object : CompanionSessionStore {
+            override suspend fun load() = sessions
+            override suspend fun save(sessions: List<CompanionSession>) = Unit
+        }
+        val sends = mutableListOf<String>()
+        var rejectC = true
+        var disposed = 0
+        val client = CompanionClient(CompanionTransport {
+            val url = it.url.toHttpUrl()
+            if (it.upload == null) CompanionResponse(200, JSONObject().put("ok", true).put("deviceId", url.host).toString())
+            else {
+                sends += url.host
+                it.upload.open().use { input -> assertEquals(77, input.readBytes().size) }
+                when {
+                    url.host == "b" -> throw IllegalStateException("Fixture reply handling failed after sending")
+                    url.host == "c" && rejectC -> CompanionResponse(409, """{"ok":false,"error":"collision"}""")
+                    else -> CompanionResponse(200, JSONObject().put("ok", true).put("bytes", 77)
+                        .put("path", "/sdcard/${url.host}/$name").toString())
+                }
+            }
+        })
+        val repository = CompanionRepository(client, store, backgroundScope,
+            UnconfinedTestDispatcher(testScheduler), preloadManagement = false)
+        try {
+            repository.ready.join()
+            repository.uploadSelectedPhotos(listOf(PhotoUploadSource(name) {
+                CompanionUpload(name, "image/png", 77, dispose = { disposed++ },
+                    open = { ByteArrayInputStream(ByteArray(77)) })
+            })).join()
+            val operation = repository.state.value.groupOperations.single()
+            assertEquals(listOf("SUCCEEDED", "UNCONFIRMED", "FAILED"), operation.items.map { it.status.name })
+            assertFalse(operation.running)
+            assertTrue(operation.retryable)
+            assertTrue(operation.items[1].detail!!.contains("unconfirmed"))
+            assertEquals(3, disposed)
+            rejectC = false
+            repository.retryGroupOperation(operation.id).join()
+            val retried = repository.state.value.groupOperations.single()
+            assertEquals(listOf("a", "b", "c", "c"), sends)
+            assertEquals(listOf("SUCCEEDED", "UNCONFIRMED", "SUCCEEDED"), retried.items.map { it.status.name })
+            assertFalse(retried.retryable)
+            assertEquals(operation.items[1], retried.items[1])
+            assertEquals(4, disposed)
+        } finally { repository.close() }
     }
 
     @Test fun groupedUnconfirmedImageIsTerminalAndExcludedFromExplicitFailureRetry() = runTest {

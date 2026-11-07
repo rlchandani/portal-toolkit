@@ -8,6 +8,7 @@ package com.portalinstaller.data.companion
 
 import java.io.IOException
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -211,12 +212,16 @@ class CompanionClient(private val transport: CompanionTransport = OkHttpCompanio
         CompanionPhotos.safeName(upload.name)
         require(upload.length in 1..CompanionPhotos.MAX_IMAGE_BYTES) { "Images must be nonempty and at most 20 MiB. Choose a smaller image." }
         val destination = CompanionPhotos.exactFolder(folder)
+        val request = CompanionRequest("POST", photoUrl(session, "photo-upload",
+            mapOf("path" to destination, "name" to upload.name)), session.token,
+            upload = upload, onUploadProgress = progress)
         val response = try {
-            transport.execute(CompanionRequest("POST", photoUrl(session, "photo-upload",
-                mapOf("path" to destination, "name" to upload.name)), session.token,
-                upload = upload, onUploadProgress = progress))
-        } catch (error: IOException) {
-            if (error is CompanionException) throw error
+            transport.execute(request)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: CompanionException) {
+            throw error
+        } catch (_: Exception) {
             throw uploadUnconfirmed()
         }
         if (response.status in 200..299) {
