@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Copyright (c) 2026 Starbright Lab.
+
+  This source code is licensed under the MIT license found in the
+  LICENSE file in the root directory of this source tree.
+
+  Picture routines: bundled picture "bath" (generated from the approved prototype, 120x120).
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="120dp"
+    android:height="120dp"
+    android:viewportWidth="120"
+    android:viewportHeight="120">
+    <path
+        android:pathData="M24,46 a10,10 0 1 0 20,0 a10,10 0 1 0 -20,0 z"
+        android:fillColor="#FFFFFF"
+        android:strokeColor="#1F2A3C"
+        android:strokeWidth="5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M43,38 a9,9 0 1 0 18,0 a9,9 0 1 0 -18,0 z"
+        android:fillColor="#7CC0F5"
+        android:strokeColor="#1F2A3C"
+        android:strokeWidth="5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M59,46 a11,11 0 1 0 22,0 a11,11 0 1 0 -22,0 z"
+        android:fillColor="#FFFFFF"
+        android:strokeColor="#1F2A3C"
+        android:strokeWidth="5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M82 44 q0 -12 12 -12 q12 0 12 12 q6 0 6 4 h-8 q2 10 -10 12 q-14 0 -14 -10z"
+        android:fillColor="#FFCB47"
+        android:strokeColor="#1F2A3C"
+        android:strokeWidth="5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M93.5,40 a2.5,2.5 0 1 0 5,0 a2.5,2.5 0 1 0 -5,0 z"
+        android:fillColor="#1F2A3C" />
+    <path
+        android:pathData="M8 56 H112 V66 Q110 96 82 98 H38 Q10 96 8 66Z"
+        android:fillColor="#FFFFFF"
+        android:strokeColor="#1F2A3C"
+        android:strokeWidth="5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M30 98 l-6 10 M90 98 l6 10"
+        android:strokeColor="#1F2A3C"
+        android:strokeWidth="6"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M20 70 H100"
+        android:strokeColor="#7CC0F5"
+        android:strokeWidth="5"
+        android:strokeLineCap="round" />
+</vector>

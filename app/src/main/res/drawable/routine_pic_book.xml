@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Copyright (c) 2026 Starbright Lab.
+
+  This source code is licensed under the MIT license found in the
+  LICENSE file in the root directory of this source tree.
+
+  Picture routines: bundled picture "book" (generated from the approved prototype, 120x120).
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="120dp"
+    android:height="120dp"
+    android:viewportWidth="120"
+    android:viewportHeight="120">
+    <path
+        android:pathData="M8 34 Q34 24 60 36 Q86 24 112 34 V100 Q86 90 60 102 Q34 90 8 100Z"
+        android:fillColor="#3F7FD9"
+        android:strokeColor="#1F2A3C"
+        android:strokeWidth="5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M14 30 Q36 22 60 34 V96 Q36 84 14 92Z"
+        android:fillColor="#FFFFFF"
+        android:strokeColor="#1F2A3C"
+        android:strokeWidth="5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M106 30 Q84 22 60 34 V96 Q84 84 106 92Z"
+        android:fillColor="#FFF4DC"
+        android:strokeColor="#1F2A3C"
+        android:strokeWidth="5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M24 46 Q36 42 50 48 M24 58 Q36 54 50 60 M70 48 Q84 42 96 46 M70 60 Q84 54 96 58"
+        android:strokeColor="#1F2A3C"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:strokeAlpha=".55" />
+</vector>

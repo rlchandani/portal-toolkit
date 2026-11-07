@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Copyright (c) 2026 Starbright Lab.
+
+  This source code is licensed under the MIT license found in the
+  LICENSE file in the root directory of this source tree.
+
+  Picture routines: bundled picture "hair" (generated from the approved prototype, 120x120).
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="120dp"
+    android:height="120dp"
+    android:viewportWidth="120"
+    android:viewportHeight="120">
+    <path
+        android:pathData="M62,62 h0 a8,8 0 0 1 8,8 v32 a8,8 0 0 1 -8,8 h-0 a8,8 0 0 1 -8,-8 v-32 a8,8 0 0 1 8,-8 z"
+        android:fillColor="#C0814F"
+        android:strokeColor="#1F2A3C"
+        android:strokeWidth="5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M32,40 a30,32 0 1 0 60,0 a30,32 0 1 0 -60,0 z"
+        android:fillColor="#FF9FBF"
+        android:strokeColor="#1F2A3C"
+        android:strokeWidth="5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M46.8,28 a3.2,3.2 0 1 0 6.4,0 a3.2,3.2 0 1 0 -6.4,0 z"
+        android:fillColor="#1F2A3C" />
+    <path
+        android:pathData="M58.8,24 a3.2,3.2 0 1 0 6.4,0 a3.2,3.2 0 1 0 -6.4,0 z"
+        android:fillColor="#1F2A3C" />
+    <path
+        android:pathData="M70.8,28 a3.2,3.2 0 1 0 6.4,0 a3.2,3.2 0 1 0 -6.4,0 z"
+        android:fillColor="#1F2A3C" />
+    <path
+        android:pathData="M42.8,42 a3.2,3.2 0 1 0 6.4,0 a3.2,3.2 0 1 0 -6.4,0 z"
+        android:fillColor="#1F2A3C" />
+    <path
+        android:pathData="M54.8,38 a3.2,3.2 0 1 0 6.4,0 a3.2,3.2 0 1 0 -6.4,0 z"
+        android:fillColor="#1F2A3C" />
+    <path
+        android:pathData="M66.8,38 a3.2,3.2 0 1 0 6.4,0 a3.2,3.2 0 1 0 -6.4,0 z"
+        android:fillColor="#1F2A3C" />
+    <path
+        android:pathData="M76.8,44 a3.2,3.2 0 1 0 6.4,0 a3.2,3.2 0 1 0 -6.4,0 z"
+        android:fillColor="#1F2A3C" />
+    <path
+        android:pathData="M48.8,54 a3.2,3.2 0 1 0 6.4,0 a3.2,3.2 0 1 0 -6.4,0 z"
+        android:fillColor="#1F2A3C" />
+    <path
+        android:pathData="M62.8,52 a3.2,3.2 0 1 0 6.4,0 a3.2,3.2 0 1 0 -6.4,0 z"
+        android:fillColor="#1F2A3C" />
+</vector>
