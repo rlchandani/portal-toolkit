@@ -46,6 +46,8 @@ class CompanionRepository(
     private val discovery: CompanionDiscovery? = null,
     private val clock: () -> Long = System::currentTimeMillis,
     private val preloadManagement: Boolean = true,
+    /** Household key source; null disables provisioning (tests, previews). */
+    private val household: HouseholdKeySource? = null,
 ) {
     private val mutableState = MutableStateFlow(ControlCenterState())
     val state: StateFlow<ControlCenterState> = mutableState.asStateFlow()
@@ -80,6 +82,7 @@ class CompanionRepository(
         try {
             val saved = withContext(io) { store.load() }
             synchronized(lock) { sessions = saved }
+            provisionHousehold(saved)
             mutableState.update { it.copy(devices = saved.map { session -> session.device }) }
             try {
                 val selectedIds = withContext(io) { store.loadSelectedIds() }
@@ -162,6 +165,7 @@ class CompanionRepository(
                         return@withLock
                     }
                     synchronized(lock) { sessions = candidate; current = session }
+                    provisionHousehold(listOf(session))
                     mutableState.update { it.copy(devices = candidate.map { saved -> saved.device }, activeDeviceId = session.device.id,
                         photoFolder = session.device.photoFolder, photoBrowseAll = session.device.photoBrowseAll, busy = false,
                         selectedTargetIds = if (explicitTargetSelection) it.selectedTargetIds else candidate.map { saved -> saved.device.id }.toSet()) }
@@ -922,8 +926,26 @@ class CompanionRepository(
     }
     fun close() { stopDiscovery(); disconnect(); scope.cancel() }
 
+    /**
+     * Best effort: makes each Portal in [targets] hold this phone's household key so Portals can
+     * sign messages to each other. Failures (offline, older Portal without the route) are ignored
+     * and retried on the next load or pairing.
+     */
+    private fun provisionHousehold(targets: List<CompanionSession>) {
+        val source = household ?: return
+        scope.launch(io) {
+            val key = runCatching { source.key() }.getOrNull() ?: return@launch
+            targets.forEach { session ->
+                try { CompanionHousehold.provision(client, session, key) }
+                catch (cancelled: CancellationException) { throw cancelled }
+                catch (_: Exception) {}
+            }
+        }
+    }
+
     companion object {
         fun create(context: Context): CompanionRepository = CompanionRepository(CompanionClient(), FileCompanionSessionStore.create(context),
-            discovery = NsdCompanionDiscovery(context.applicationContext), preloadManagement = false)
+            discovery = NsdCompanionDiscovery(context.applicationContext), preloadManagement = false,
+            household = PrefsHouseholdKeySource(context))
     }
 }
