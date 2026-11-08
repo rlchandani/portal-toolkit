@@ -44,18 +44,33 @@ sealed interface RoomOta {
 }
 
 object PortalOtaParser {
-    /** Null when the answer has no `ota` object. Tolerates nulls and states this phone doesn't know yet. */
+    /**
+     * Null when the answer has no `ota` object. Reads Hearthpane's wire shape (`status`,
+     * `installed{versionCode,versionName}`, `lastCheckAt`, `error{code,message}`, `devMode`) and
+     * tolerates the flat field names too, nulls, and states this phone doesn't know yet.
+     */
     fun parse(response: JSONObject): PortalOta? {
         val o = response.optJSONObject("ota") ?: return null
-        val installedCode = o.optInt("installedVersionCode", 0)
+        val installed = o.optJSONObject("installed")
+        val installedCode = installed?.optInt("versionCode", 0) ?: o.optInt("installedVersionCode", 0)
+        val installedName = installed?.optString("versionName") ?: o.optString("installedVersionName")
         val release = o.optJSONObject("available")?.let { a ->
             val code = a.optInt("versionCode", 0)
             PortalOtaRelease(a.optString("versionName").ifBlank { code.toString() }, code, text(a, "notes").orEmpty())
                 .takeIf { code > installedCode }
         }
-        return PortalOta(PortalOtaPhase.from(o.optString("state")), o.optString("installedVersionName"), installedCode,
-            release, if (o.isNull("lastCheckedAtMs")) null else o.optLong("lastCheckedAtMs"), text(o, "error"),
-            o.optBoolean("autoInstall", false))
+        val phase = PortalOtaPhase.from(o.optString("status").ifBlank { o.optString("state") })
+        val checkedKey = if (o.has("lastCheckAt")) "lastCheckAt" else "lastCheckedAtMs"
+        val checkedAt = if (o.isNull(checkedKey)) null else o.optLong(checkedKey)
+        val autoInstall = if (o.has("devMode")) !o.optBoolean("devMode") else o.optBoolean("autoInstall", false)
+        return PortalOta(phase, installedName.orEmpty(), installedCode, release, checkedAt, error(o), autoInstall)
+    }
+
+    /** `error` is `{code, message}` from Hearthpane; a plain string is accepted too. */
+    private fun error(o: JSONObject): String? {
+        if (o.isNull("error")) return null
+        o.optJSONObject("error")?.let { e -> return text(e, "message") ?: text(e, "code") }
+        return text(o, "error")
     }
 
     private fun text(o: JSONObject, key: String): String? = if (o.isNull(key)) null else o.optString(key).takeIf { it.isNotBlank() }

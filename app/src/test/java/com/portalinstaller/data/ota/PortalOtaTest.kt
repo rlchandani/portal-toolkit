@@ -83,4 +83,30 @@ class PortalOtaTest {
         assertNull(PortalOtaCopy.line("Den", PortalOtaParser.parse(response(state = "idle", available = false))!!, pending = false))
         assertNull(PortalOtaCopy.line("Den", PortalOtaParser.parse(response(state = "failed", available = false, error = "x"))!!, pending = false))
     }
+
+    /** The exact shape Hearthpane's OtaRoutes sends (see the Portal's OtaState wire format). */
+    @Test fun parsesHearthpaneWireShape() {
+        val json = JSONObject("""{"ok":true,"ota":{"installed":{"versionCode":223,"versionName":"1.229"},
+            "status":"available","available":{"versionCode":224,"versionName":"1.230","notes":"Fixes","size":10},
+            "lastCheckAt":1700000000000,"error":null,"waitingFor":"music","devMode":false}}""")
+        val ota = PortalOtaParser.parse(json)!!
+        assertEquals(PortalOtaPhase.AVAILABLE, ota.phase)
+        assertEquals("1.229", ota.installedVersionName)
+        assertEquals(223, ota.installedVersionCode)
+        assertEquals(PortalOtaRelease("1.230", 224, "Fixes"), ota.available)
+        assertEquals(1700000000000L, ota.lastCheckedAtMs)
+        assertNull(ota.error)
+        assertTrue(ota.autoInstall)
+    }
+
+    @Test fun readsHearthpaneErrorObjectAndDevMode() {
+        val json = JSONObject("""{"ok":true,"ota":{"installed":{"versionCode":223,"versionName":"1.229"},
+            "status":"failed","available":null,"lastCheckAt":null,
+            "error":{"code":"sha_mismatch","message":"The download didn't match."},"devMode":true}}""")
+        val ota = PortalOtaParser.parse(json)!!
+        assertEquals(PortalOtaPhase.FAILED, ota.phase)
+        assertEquals("The download didn't match.", ota.error)
+        assertNull(ota.lastCheckedAtMs)
+        assertFalse(ota.autoInstall)
+    }
 }
