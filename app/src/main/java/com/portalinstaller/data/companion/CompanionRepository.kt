@@ -987,14 +987,12 @@ class CompanionRepository(
     private fun provisionHousehold(targets: List<CompanionSession>) {
         val source = household ?: return
         scope.launch(io) {
-            val key = try { source.key() } catch (e: Exception) {
-                android.util.Log.w(HOUSEHOLD_TAG, "household key unavailable", e); return@launch
-            }
-            android.util.Log.i(HOUSEHOLD_TAG, "provisioning ${targets.size} portal(s) fp=${CompanionHousehold.fingerprint(key)}")
+            android.util.Log.i(HOUSEHOLD_TAG, "syncing household key with ${targets.size} portal(s)")
             targets.forEach { session ->
                 try {
-                    val held = CompanionHousehold.provision(client, session, key)
-                    android.util.Log.i(HOUSEHOLD_TAG, "portal ${session.device.id.take(6)} holds key=$held")
+                    val held = CompanionHousehold.provision(client, session, source)
+                    val fp = source.peek()?.let(CompanionHousehold::fingerprint) ?: "none"
+                    android.util.Log.i(HOUSEHOLD_TAG, "portal ${session.device.id.take(6)} holds key=$held fp=$fp")
                 }
                 catch (cancelled: CancellationException) { throw cancelled }
                 catch (e: Exception) {

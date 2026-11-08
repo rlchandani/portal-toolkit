@@ -70,6 +70,6 @@ class OtaPolicyTest {
 
     @Test fun feedIsTheToolkitLatestRelease() {
         assertEquals("https://github.com/rlchandani/portal-toolkit/releases/latest/download/portal-toolkit-latest.json", OtaPolicy.FEED_URL)
-        assertEquals("4f9a3b1d0c86028e831add351642a6167d06e9d3ed6ded6dcf5a790a560b45d6", OtaPolicy.PINNED_CERT_SHA256)
+        assertEquals("e24bdc86f409906e9db72807989760c6bbad43675f176553339f8fe299bb5f15", OtaPolicy.PINNED_CERT_SHA256)
     }
 }

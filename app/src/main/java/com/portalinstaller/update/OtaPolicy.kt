@@ -26,7 +26,7 @@ data class ArchiveFacts(val packageName: String, val versionCode: Int, val signe
 object OtaPolicy {
     const val REPO = "rlchandani/portal-toolkit"
     const val FEED_URL = "https://github.com/$REPO/releases/latest/download/portal-toolkit-latest.json"
-    const val PINNED_CERT_SHA256 = "4f9a3b1d0c86028e831add351642a6167d06e9d3ed6ded6dcf5a790a560b45d6"
+    const val PINNED_CERT_SHA256 = "e24bdc86f409906e9db72807989760c6bbad43675f176553339f8fe299bb5f15"
     const val MAX_APK_BYTES = 200L * 1024 * 1024
     const val MAX_MANIFEST_BYTES = 16L * 1024
     const val MAX_REDIRECTS = 5

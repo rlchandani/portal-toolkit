@@ -31,4 +31,36 @@ class CompanionHouseholdTest {
         assertEquals(64, hex.length)
         assertEquals("000102030405", hex.take(12))
     }
+
+    private val other = ByteArray(32) { (it + 7).toByte() }
+    private fun remote(fp: String?) = JSONObject().put("ok", true).put("configured", fp != null)
+        .put("fingerprint", fp ?: JSONObject.NULL)
+
+    @Test fun aNewPhoneAdoptsThePortalsKeyInsteadOfReplacingIt() {
+        val portalFp = CompanionHousehold.fingerprint(other)
+        assertEquals(HouseholdPlan.ADOPT, CompanionHousehold.plan(remote(portalFp), local = null, confirmed = false))
+        // Even if this phone already minted a key of its own before pairing.
+        assertEquals(HouseholdPlan.ADOPT, CompanionHousehold.plan(remote(portalFp), local = key, confirmed = false))
+    }
+
+    @Test fun aConfirmedPhoneKeepsProvisioningItsKey() {
+        assertEquals(HouseholdPlan.PUSH, CompanionHousehold.plan(remote("deadbeef"), local = key, confirmed = true))
+        assertEquals(HouseholdPlan.PUSH, CompanionHousehold.plan(remote(null), local = key, confirmed = true))
+    }
+
+    @Test fun aPortalWithoutAKeyGetsOursAndAMatchIsInSync() {
+        assertEquals(HouseholdPlan.PUSH, CompanionHousehold.plan(remote(null), local = null, confirmed = false))
+        val ours = CompanionHousehold.fingerprint(key)
+        assertEquals(HouseholdPlan.IN_SYNC, CompanionHousehold.plan(remote(ours), local = key, confirmed = false))
+        assertEquals(HouseholdPlan.IN_SYNC, CompanionHousehold.plan(remote(ours), local = key, confirmed = true))
+    }
+
+    @Test fun anAdoptedKeyMustMatchTheFingerprintThePortalAdvertised() {
+        val portalFp = CompanionHousehold.fingerprint(other)
+        val reply = JSONObject().put("ok", true).put("key", CompanionHousehold.hex(other))
+        assertTrue(other.contentEquals(CompanionHousehold.adoptedKey(reply, portalFp)))
+        assertEquals(null, CompanionHousehold.adoptedKey(reply, "deadbeef"))
+        assertEquals(null, CompanionHousehold.adoptedKey(JSONObject().put("key", "zz"), portalFp))
+        assertEquals(null, CompanionHousehold.adoptedKey(JSONObject().put("key", CompanionHousehold.hex(other).take(40)), portalFp))
+    }
 }

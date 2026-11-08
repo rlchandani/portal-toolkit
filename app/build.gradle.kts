@@ -1,3 +1,17 @@
+import java.util.Properties
+
+/**
+ * Release signing key for wireless (OTA) updates, kept outside the repo (never committed):
+ * $PORTAL_TOOLKIT_KEYSTORE_PROPERTIES or ~/.portal-toolkit-signing/keystore.properties with
+ * storeFile, storePassword, keyAlias, keyPassword. When present, debug and release builds are both
+ * signed with it, so every build installs over the OTA one. Without it (e.g. CI) builds fall back
+ * to the machine's debug key and cannot update an installed release-signed app.
+ */
+val toolkitKeystoreProps: File = (System.getenv("PORTAL_TOOLKIT_KEYSTORE_PROPERTIES")
+    ?: "${System.getProperty("user.home")}/.portal-toolkit-signing/keystore.properties").let(::File)
+val toolkitSigning: Properties? = toolkitKeystoreProps.takeIf { it.isFile }
+    ?.let { f -> Properties().apply { f.inputStream().use(::load) } }
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -12,13 +26,28 @@ android {
         applicationId = "com.portalinstaller"
         minSdk = 26
         targetSdk = 35
-        versionCode = 34
-        versionName = "1.8.11-household-preview"
+        versionCode = 35
+        versionName = "1.8.12-household-preview"
         testInstrumentationRunner = "com.portalinstaller.AwakeTestRunner"
     }
 
+    signingConfigs {
+        toolkitSigning?.let { props ->
+            create("household") {
+                storeFile = File(props.getProperty("storeFile"))
+                storePassword = props.getProperty("storePassword")
+                keyAlias = props.getProperty("keyAlias")
+                keyPassword = props.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
+        debug {
+            if (toolkitSigning != null) signingConfig = signingConfigs.getByName("household")
+        }
         release {
+            if (toolkitSigning != null) signingConfig = signingConfigs.getByName("household")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

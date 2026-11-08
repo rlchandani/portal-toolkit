@@ -18,7 +18,7 @@ set -euo pipefail
 
 readonly REPO="rlchandani/portal-toolkit"
 readonly PACKAGE="com.portalinstaller"
-readonly PINNED_SHA256="4f9a3b1d0c86028e831add351642a6167d06e9d3ed6ded6dcf5a790a560b45d6"
+readonly PINNED_SHA256="e24bdc86f409906e9db72807989760c6bbad43675f176553339f8fe299bb5f15"
 readonly APK_ASSET="portal-toolkit.apk"
 readonly JSON_ASSET="portal-toolkit-latest.json"
 readonly TAG_PREFIX="toolkit-v"
@@ -117,8 +117,9 @@ step "Gate"
   --no-daemon -q -Dorg.gradle.jvmargs=-Xmx4g
 
 step "Build and verify the APK"
-./gradlew :app:assembleDebug --no-daemon -q -Dorg.gradle.jvmargs=-Xmx4g
-built="app/build/outputs/apk/debug/app-debug.apk"
+# Release build (not debuggable), signed with the household release key, like Hearth.
+./gradlew :app:assembleRelease --no-daemon -q -Dorg.gradle.jvmargs=-Xmx4g
+built="app/build/outputs/apk/release/app-release.apk"
 [[ -f "$built" ]] || fail "Missing $built"
 cp "$built" "$work/$APK_ASSET"
 check_signer "$work/$APK_ASSET"
