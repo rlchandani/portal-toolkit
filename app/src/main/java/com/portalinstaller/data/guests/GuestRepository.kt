@@ -26,6 +26,8 @@ import org.json.JSONObject
 /** One paired Portal; [snapshot] null when it didn't answer, [outdated] when it has no guest route. */
 data class GuestRoom(val id: String, val name: String, val snapshot: GuestSnapshot?, val outdated: Boolean = false) {
     val online: Boolean get() = snapshot != null
+    /** Answers, but runs a Calder from before the step-by-step setup: Guest mode works, the card can't be saved. */
+    val needsUpdate: Boolean get() = snapshot?.needsUpdate == true
 }
 
 data class GuestState(
@@ -38,8 +40,8 @@ data class GuestState(
     val error: String? = null,
 ) {
     val targets: List<GuestRoom> get() = if (target == null) rooms else rooms.filter { it.id == target }
-    /** The card shown for editing: the chosen Portal's, or the first answering Portal's for "All". */
-    val shown: GuestSnapshot? get() = targets.firstNotNullOfOrNull { it.snapshot }
+    /** The card shown for editing: the chosen Portal's, or the first up-to-date Portal's for "All". */
+    val shown: GuestSnapshot? get() = targets.mapNotNull { it.snapshot }.let { s -> s.firstOrNull { !it.needsUpdate } ?: s.firstOrNull() }
 }
 
 /**
@@ -73,13 +75,20 @@ class GuestRepository(
     fun selectTarget(id: String?) = mutable.update { it.copy(target = id, message = null) }
     fun clearMessage() = mutable.update { it.copy(message = null) }
 
-    suspend fun save(card: GuestCard, password: String) = write("Saved", GuestWire.saveBody(card, password))
+    /** Sent only to Portals that understand the v2 card; older ones are named in the message instead. */
+    suspend fun save(card: GuestCard, password: String, doorCode: DoorCodeChange) =
+        write("Saved", GuestWire.saveBody(card, password, doorCode), skipOutdated = true)
     suspend fun start(start: GuestStart) = write("Guest mode started", GuestWire.startBody(start))
     suspend fun end() = write("Guest mode ended", GuestWire.endBody())
 
-    private suspend fun write(verb: String, body: JSONObject) {
-        val targets = state.value.targets
-        if (targets.isEmpty() || state.value.busy) return
+    private suspend fun write(verb: String, body: JSONObject, skipOutdated: Boolean = false) {
+        val skipped = if (skipOutdated) state.value.targets.filter { it.needsUpdate } else emptyList()
+        val targets = state.value.targets - skipped.toSet()
+        if (state.value.busy) return
+        if (targets.isEmpty()) {
+            if (skipped.isNotEmpty()) mutable.update { it.copy(message = GuestCopy.done(verb, emptyList(), emptyList(), outdated = skipped.map { r -> r.name })) }
+            return
+        }
         mutable.update { it.copy(busy = true, message = null) }
         val results = coroutineScope {
             targets.map { room -> async { room to sessions[room.id]?.let { call(it, body) } } }.awaitAll()
@@ -89,7 +98,8 @@ class GuestRepository(
             s.copy(busy = false,
                 rooms = s.rooms.map { r -> updated[r.id]?.let { reply -> room(r, reply) } ?: r },
                 message = GuestCopy.done(verb, names(results) { it is Reply.Ok },
-                    names(results) { it is Reply.Failed || it is Reply.Outdated }, names(results) { it is Reply.Rejected }))
+                    names(results) { it is Reply.Failed || it is Reply.Outdated }, names(results) { it is Reply.Rejected },
+                    skipped.map { it.name }))
         }
     }
 

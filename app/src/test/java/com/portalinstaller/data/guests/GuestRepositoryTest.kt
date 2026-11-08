@@ -37,7 +37,8 @@ class GuestRepositoryTest {
         override suspend fun execute(request: CompanionRequest): CompanionResponse { calls += request; return handler(request) }
     }
 
-    private fun snapshot(ssid: String, active: Boolean = false) = CompanionResponse(200, JSONObject().put("ok", true)
+    private fun snapshot(ssid: String, active: Boolean = false, version: Int? = 2) = CompanionResponse(200, JSONObject().put("ok", true)
+        .apply { version?.let { put("version", it) } }
         .put("card", JSONObject().put("ssid", ssid).put("security", "wpa"))
         .put("hasPassword", true).put("ready", true)
         .put("mode", JSONObject().put("active", active).put("until", JSONObject.NULL)).toString())
@@ -89,9 +90,10 @@ class GuestRepositoryTest {
         val repo = repo(http)
         repo.refresh()
         repo.selectTarget("k-id")
-        repo.save(GuestCard(ssid = "Net"), password = "hunter2-secret")
+        repo.save(GuestCard(ssid = "Net"), password = "hunter2-secret", doorCode = DoorCodeChange.Set("4821"))
         assertEquals("hunter2-secret", JSONObject(http.calls.last().body!!).getString("password"))
-        assertTrue(logs.none { it.contains("hunter2") })
+        assertEquals("4821", JSONObject(http.calls.last().body!!).getString("doorCode"))
+        assertTrue(logs.none { it.contains("hunter2") || it.contains("4821") })
         assertFalse(repo.state.value.toString().contains("hunter2"))
         assertEquals("Couldn’t reach Kitchen.", repo.state.value.message)
     }
@@ -116,8 +118,22 @@ class GuestRepositoryTest {
         val repo = repo(http)
         repo.refresh()
         repo.selectTarget("h-id")
-        repo.save(GuestCard(ssid = "Net"), password = "")
+        repo.save(GuestCard(ssid = "Net"), password = "", doorCode = DoorCodeChange.Keep)
         assertEquals("Hall didn’t accept the change. Update Calder there and try again.", repo.state.value.message)
         assertFalse(JSONObject(http.calls.last().body!!).has("password"))
+    }
+
+    @Test fun anOldPortalStillRunsGuestModeButIsNotSentTheNewCard() = runTest {
+        val http = Http { r -> if (r.url.startsWith("http://h")) snapshot("Old", version = null) else snapshot("New") }
+        val repo = repo(http)
+        repo.refresh()
+        assertTrue(repo.state.value.rooms.first { it.name == "Hall" }.needsUpdate)
+        assertEquals("New", repo.state.value.shown?.card?.ssid) // the up-to-date Portal's card is edited
+        repo.save(GuestCard(ssid = "Net"), password = "", doorCode = DoorCodeChange.Keep)
+        val saves = http.calls.filter { it.method == "POST" }
+        assertEquals(listOf("http://k:8723/remote/guests"), saves.map { it.url })
+        assertEquals("Saved on Kitchen. Update Calder on Hall to use the new guest setup.", repo.state.value.message)
+        repo.start(GuestStart.UntilEnded)
+        assertEquals(3, http.calls.count { it.method == "POST" })
     }
 }
