@@ -12,8 +12,8 @@ android {
         applicationId = "com.portalinstaller"
         minSdk = 26
         targetSdk = 35
-        versionCode = 26
-        versionName = "1.8.3-household-preview"
+        versionCode = 27
+        versionName = "1.8.4-household-preview"
         testInstrumentationRunner = "com.portalinstaller.AwakeTestRunner"
     }
 
