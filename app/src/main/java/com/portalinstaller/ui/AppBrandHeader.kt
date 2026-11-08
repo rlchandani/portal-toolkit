@@ -51,14 +51,14 @@ internal fun AppBrandHeader() {
 
         Row(verticalAlignment = Alignment.Bottom) {
             Text(
-                text = "Portal",
+                text = "Calder",
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Normal,
                 color = MaterialTheme.colorScheme.primary.copy(alpha = 0.92f)
             )
             Spacer(modifier = Modifier.width(6.dp))
             Text(
-                text = "Toolkit",
+                text = "Pocket",
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary

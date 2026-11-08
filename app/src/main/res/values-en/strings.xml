@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Portal Toolkit</string>
+    <string name="app_name">Calder Pocket</string>
     <string name="usb_checking_devices">Checking USB devices...</string>
     <string name="snackbar_install_success">Install successful!</string>
     <string name="snackbar_photos_success">Sent %1$d photos successfully!</string>
@@ -64,7 +64,7 @@
     <string name="logcat_crash_detected">Crash detected (FATAL EXCEPTION).</string>
     <string name="logcat_jump">Jump</string>
     <string name="logcat_empty">Start streaming to see logs.</string>
-    <string name="logcat_export_subject">Portal Toolkit logcat</string>
+    <string name="logcat_export_subject">Calder Pocket logcat</string>
     <string name="connect_over_wifi">Connect over Wi-Fi</string>
     <string name="wireless_setup_title">Set up Wireless ADB</string>
     <string name="wireless_setup_description">USB is only needed for initial setup.</string>

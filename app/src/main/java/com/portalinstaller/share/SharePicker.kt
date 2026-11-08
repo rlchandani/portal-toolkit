@@ -88,7 +88,7 @@ internal fun SharePicker(hub: ShareHub, payload: SharePayload, preparing: Boolea
     Text("Send to", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 20.dp, bottom = 8.dp))
     when {
         list == null -> Text("Looking for your Portals…", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        list.isEmpty() -> Text("Pair a Portal in Portal Toolkit first. Nothing was sent.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        list.isEmpty() -> Text("Pair a Portal in Calder Pocket first. Nothing was sent.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         else -> RoomList(list, selected, reach, LastShareRoom.get(context)) { selected = it }
     }
 
@@ -146,8 +146,8 @@ private fun Banner(blocked: List<ShareRoom>, reach: Map<String, Reach>, total: I
     val reasons = blocked.mapNotNull { (reach[it.id] as? Reach.Held)?.reason ?: (reach[it.id] as? Reach.Refused)?.reason }.distinct()
     val allHeld = blocked.all { reach[it.id] is Reach.Held }
     val tail = when {
-        allHeld && blocked.size == total -> "Toolkit will wait and send when it can. Nothing is sent until then."
-        allHeld -> "That room will get it when Toolkit can reach it."
+        allHeld && blocked.size == total -> "Calder Pocket will wait and send when it can. Nothing is sent until then."
+        allHeld -> "That room will get it when Calder Pocket can reach it."
         blocked.size == total -> "Nothing can be sent right now."
         else -> "Only the reachable room will get it."
     }

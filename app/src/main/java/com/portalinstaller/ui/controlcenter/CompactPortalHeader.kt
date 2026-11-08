@@ -109,7 +109,7 @@ internal fun CompactPortalHeader(
                 ) {
                     Column(Modifier.weight(1f)) {
                         Text(
-                            activeDevice?.name ?: "Immortal",
+                            activeDevice?.name ?: "Calder",
                             style = MaterialTheme.typography.titleSmall.copy(lineHeight = 18.sp),
                             maxLines = nameMaxLines,
                             overflow = TextOverflow.Ellipsis,

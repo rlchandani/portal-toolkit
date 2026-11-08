@@ -185,7 +185,7 @@ internal fun LayoutEditorPanel(
         SectionTitle("Widgets")
         GroupCard {
             val widgets = draft.optJSONArray("widgets") ?: JSONArray()
-            if (widgets.length() == 0) Text("Add an Immortal widget to get started.",
+            if (widgets.length() == 0) Text("Add a Calder widget to get started.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
             LayoutReorderRows(
                 count = widgets.length(), resetKey = "widgets", enabled = enabled,
@@ -218,7 +218,7 @@ internal fun LayoutEditorPanel(
             Box {
                 OutlinedButton(onClick = { adding = true },
                     enabled = enabled && widgets.length() < 64 && !orderFull && !slotsFull,
-                    modifier = Modifier.fillMaxWidth()) { Text("Add Immortal widget") }
+                    modifier = Modifier.fillMaxWidth()) { Text("Add Calder widget") }
                 PremiumDropdownMenu(expanded = adding, onDismissRequest = { adding = false }) {
                     LayoutPanelDraft.kinds.forEach { (kind, title) ->
                         DropdownMenuItem(text = { Text(title) }, onClick = {

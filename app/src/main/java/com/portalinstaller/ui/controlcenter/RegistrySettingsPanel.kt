@@ -91,7 +91,7 @@ internal fun RegistrySettingsPanel(
         }
         if (count == 0) EmptyMessage(
             if (query.isBlank()) "No settings available" else "No matching settings",
-            if (query.isBlank()) "Connect to an Immortal Portal to load its controls."
+            if (query.isBlank()) "Connect to a Calder Portal to load its controls."
             else "Try another term or include Advanced settings.")
     }
 }
