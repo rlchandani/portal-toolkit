@@ -181,6 +181,11 @@ internal fun ControlGlyph(
                 line(20f,4f,20f,10f);line(15f,10f,20f,10f)
             }
             "chevron" -> { line(8f,5f,15f,12f); line(15f,12f,8f,19f) }
+            "music" -> {
+                line(9f,17f,9f,5f); line(9f,5f,19f,3f); line(19f,3f,19f,15f)
+                drawCircle(tint,2.5f*u,point(6.5f,17f),style=stroke)
+                drawCircle(tint,2.5f*u,point(16.5f,15f),style=stroke)
+            }
             else -> {
                 drawCircle(tint,8*u,point(12f,12f),style=stroke)
                 drawCircle(tint,1.5f*u,point(12f,12f))

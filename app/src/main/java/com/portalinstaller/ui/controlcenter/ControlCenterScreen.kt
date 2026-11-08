@@ -366,6 +366,8 @@ fun ControlCenterScreen() {
                 // These screens scroll themselves; nesting them in the page LazyColumn crashes
                 // (infinite max height), so they render in place of it.
                 if (shown == CenterTab.LIST.name) HouseholdListScreen(Modifier.fillMaxSize())
+                else if (shown == CenterDetail.MUSIC.name)
+                    com.portalinstaller.ui.music.MusicPageScreen { detail = CenterDetail.NONE }
                 else if (shown == CenterDetail.ROUTINES.name)
                     com.portalinstaller.ui.routines.RoutinesScreen(vm.routines, state.deviceName) { detail = CenterDetail.NONE }
                 else
@@ -436,7 +438,7 @@ fun ControlCenterScreen() {
                                         val guests = remember { com.portalinstaller.data.guests.GuestRepository.create(context) }
                                         com.portalinstaller.ui.guests.GuestScreen(guests)
                                     }
-                                    CenterDetail.ROUTINES -> Unit // rendered above, outside this column
+                                    CenterDetail.ROUTINES, CenterDetail.MUSIC -> Unit // rendered above, outside this column
                                     CenterDetail.NONE -> Unit
                                 }
                             }
@@ -489,6 +491,7 @@ fun ControlCenterScreen() {
                                     }
                                     SectionTitle("Manage")
                                     GroupCard {
+                                        ActionRow("Music", "Now playing, volume and queue on your Portals.", "music") { detail = CenterDetail.MUSIC }
                                         ActionRow("Home layout", "Arrange and resize your widgets.", "layout", state.supports("layout")) { detail = CenterDetail.LAYOUT }
                                         ActionRow("Scenes", "Everyday routines and schedules.", "scenes", state.supports("scenes")) { detail = CenterDetail.SCENES }
                                         ActionRow("Jarvis", "Model and wake settings.", "jarvis", state.supports("jarvis")) { detail = CenterDetail.JARVIS }
