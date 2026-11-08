@@ -51,7 +51,7 @@ internal fun GuestPasswordStep(draft: GuestDraft, many: Boolean, onChange: (Gues
         onChange(draft.copy(card = draft.card.copy(hidePassword = it)))
     }
     GuestNote("Calder stores it encrypted and never shares it." +
-        if (many) " It’s sent to each Portal; Calder Pocket doesn’t keep it." else " Calder Pocket doesn’t keep it.")
+        if (many) " It’s sent to each Portal; Portal Toolkit doesn’t keep it." else " Portal Toolkit doesn’t keep it.")
 }
 
 /** Step 4: the only free text, prefilled, with samples to tap. */

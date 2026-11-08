@@ -79,7 +79,7 @@ object RoutineText {
                 "done" -> Status(Kind.DONE, "Done today at $at", run)
                 else -> Status(Kind.CLOSED, when (run.endedBy) {
                     "auto" -> "Closed itself at $at, ${run.done} of ${run.total} done"
-                    "phone" -> "Closed from Calder Pocket at $at"
+                    "phone" -> "Closed from Portal Toolkit at $at"
                     else -> "Closed on $room at $at"
                 }, run)
             }

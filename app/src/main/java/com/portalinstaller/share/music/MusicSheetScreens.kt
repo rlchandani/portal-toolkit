@@ -71,7 +71,7 @@ internal fun MusicPicker(pick: MusicPick, lastUsed: String?, onPick: (MusicPick)
     val options = pick.options
     when {
         options == null -> Text("Looking for your Portals…", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        options.isEmpty() -> Text("Pair a Portal in Calder Pocket first. Nothing was sent.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        options.isEmpty() -> Text("Pair a Portal in Portal Toolkit first. Nothing was sent.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         else -> MusicRoomList(options, pick.selected, pick.statuses, lastUsed) { onPick(pick.select(it)) }
     }
     SectionLabel("When")

@@ -71,7 +71,7 @@ fun GuestScreen(repository: GuestRepository, modifier: Modifier = Modifier) {
         GuestModeCard(state, onStart = { scope.launch { repository.start(it) } }, onEnd = { scope.launch { repository.end() } })
         val shown = state.shown
         if (shown == null) {
-            if (!state.loading) EmptyMessage(unreachableTitle(state), "Open Calder Pocket on home Wi-Fi, and update Calder on the Portal if needed.")
+            if (!state.loading) EmptyMessage(unreachableTitle(state), "Open Portal Toolkit on home Wi-Fi, and update Calder on the Portal if needed.")
         } else {
             SectionTitle("Set up the guest card")
             if (shown.needsUpdate) {

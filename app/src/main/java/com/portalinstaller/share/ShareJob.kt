@@ -104,7 +104,7 @@ data class ShareJob(
     /** After the process died mid-transfer, nobody knows whether the Portal saved it. Say so. */
     fun recoverAfterRestart(): ShareJob = mapStates { room, _, s ->
         if (s.status == ItemStatus.SENDING || s.status == ItemStatus.CONFIRMING)
-            s.copy(status = ItemStatus.UNCONFIRMED, reason = "Calder Pocket stopped while sending. Check again to see if ${room.name} saved it.")
+            s.copy(status = ItemStatus.UNCONFIRMED, reason = "Portal Toolkit stopped while sending. Check again to see if ${room.name} saved it.")
         else s
     }
 

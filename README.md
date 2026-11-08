@@ -1,6 +1,6 @@
-# Calder Pocket — formerly Portal Toolkit
+# Portal Toolkit
 
-Calder Pocket (formerly Portal Toolkit) is an Android app for managing Meta/Facebook Portal devices directly from a phone.
+Portal Toolkit is an Android app for managing Meta/Facebook Portal devices directly from a phone.
 
 The Calder (formerly Immortal) control center pairs over local Wi-Fi for everyday controls, photo
 uploads, settings, home layouts, routines, catalog apps, and Jarvis management.

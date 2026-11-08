@@ -90,7 +90,7 @@ private fun GuestNetworkPicker(selected: String, onPick: (NearbyNetwork) -> Unit
         Access.ASK, Access.DENIED -> GuestAccessNote(
             if (access == Access.DENIED) "Without it, use “My network isn't listed” below." else null,
             "Allow", onClick = { launcher.launch(scanner.permissions) })
-        Access.BLOCKED -> GuestAccessNote("Location permission is off for Calder Pocket.", "Open app settings") {
+        Access.BLOCKED -> GuestAccessNote("Location permission is off for Portal Toolkit.", "Open app settings") {
             context.startSafely(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null)))
         }
         Access.LOCATION_OFF -> GuestAccessNote("Location is off. Turn it on to see nearby networks.", "Turn on location", reason = false) {

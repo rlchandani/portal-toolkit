@@ -39,7 +39,7 @@ object ShareIntentParser {
             if (uris.size > MAX_IMAGES) return ShareParse.Rejected("Share at most $MAX_IMAGES photos at a time.")
             return ShareParse.Ok(SharePayload.Images(uris))
         }
-        if (action != ACTION_SEND || !mime.startsWith("text/")) return ShareParse.Rejected("Calder Pocket can share photos, text and links.")
+        if (action != ACTION_SEND || !mime.startsWith("text/")) return ShareParse.Rejected("Portal Toolkit can share photos, text and links.")
         val body = text?.toString()?.replace("\u0000", "")?.trim().orEmpty()
         if (body.isEmpty()) return ShareParse.Rejected("The shared text is empty.")
         link(body, subject)?.let { return ShareParse.Ok(it) }

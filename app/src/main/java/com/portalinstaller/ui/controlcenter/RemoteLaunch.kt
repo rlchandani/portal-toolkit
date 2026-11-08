@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * "Open remote" from the share sheet: opens Calder Pocket on the Remote tab for one paired Portal.
+ * "Open remote" from the share sheet: opens Portal Toolkit on the Remote tab for one paired Portal.
  * Only a device id travels in the (explicit, in-app) intent; the session stays in its store.
  */
 object RemoteLaunch {

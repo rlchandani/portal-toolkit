@@ -78,7 +78,7 @@ enum class DinnerRowStatus(val wire: String?, val text: String, val good: Boolea
     QUIET("quiet", "Shown quietly, quiet hours", good = true),
     BLOCKED("blocked", "Calls are turned off there", failed = true),
     NO_ANSWER("noanswer", "No answer, not delivered", failed = true),
-    NOT_SET_UP("notsetup", "Not sent. Open Calder Pocket near the Portals", failed = true),
+    NOT_SET_UP("notsetup", "Not sent. Open Portal Toolkit near the Portals", failed = true),
     /** Phone-side: that Portal didn't answer and the phone can't reach it either. */
     OFFLINE(null, "Offline, not delivered", failed = true),
     /** Phone-side: no paired Portal reachable from here (away from home Wi-Fi). */

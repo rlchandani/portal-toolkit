@@ -70,7 +70,7 @@ object ShareCopy {
             val heldDest = ShareRooms.destination(job.rooms.filter { r -> job.items.any { job.state(r.id, it.id).status == ItemStatus.HELD } })
             val prefix = if (sm.confirmed > 0) "" else "Nothing has been sent yet. "
             return ShareHeadline("Waiting to send",
-                "${if (reason.isBlank()) "" else "$reason "}${prefix}Calder Pocket sends $these as soon as it can reach $heldDest, and tells you when the Portal confirms.")
+                "${if (reason.isBlank()) "" else "$reason "}${prefix}Portal Toolkit sends $these as soon as it can reach $heldDest, and tells you when the Portal confirms.")
         }
         if (sm.allConfirmed) return ShareHeadline(resultTitle(job), when (job.kind) {
             ShareKind.PHOTOS -> "${if (job.rooms.size > 1) "Each Portal" else "The Portal"} confirmed ${if (job.items.size == 1) "it" else "every one"}. They show next in the slideshow."

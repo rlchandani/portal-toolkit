@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Calder Pocket</string>
+    <string name="app_name">Portal Toolkit</string>
     <string name="usb_checking_devices">Se verifica dispozitivele USB...</string>
     <string name="snackbar_install_success">Instalare reusita!</string>
     <string name="snackbar_photos_success">Trimise %1$d poze cu succes!</string>
@@ -64,7 +64,7 @@
     <string name="logcat_crash_detected">Crash detectat (FATAL EXCEPTION).</string>
     <string name="logcat_jump">Salt</string>
     <string name="logcat_empty">Porneste streaming-ul pentru a vedea log-urile.</string>
-    <string name="logcat_export_subject">Logcat Calder Pocket</string>
+    <string name="logcat_export_subject">Logcat Portal Toolkit</string>
     <string name="connect_over_wifi">Conectare prin Wi-Fi</string>
     <string name="wireless_setup_title">Configureaza ADB wireless</string>
     <string name="wireless_setup_description">USB este necesar doar pentru configurarea initiala.</string>
