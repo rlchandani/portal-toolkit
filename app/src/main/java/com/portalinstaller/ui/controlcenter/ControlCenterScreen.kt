@@ -422,6 +422,11 @@ fun ControlCenterScreen() {
                                         val dinner = remember { com.portalinstaller.data.dinner.DinnerRepository.create(context) }
                                         com.portalinstaller.ui.dinner.DinnerScreen(dinner)
                                     }
+                                    CenterDetail.GUESTS -> {
+                                        val context = androidx.compose.ui.platform.LocalContext.current
+                                        val guests = remember { com.portalinstaller.data.guests.GuestRepository.create(context) }
+                                        com.portalinstaller.ui.guests.GuestScreen(guests)
+                                    }
                                     CenterDetail.ROUTINES -> Unit // rendered above, outside this column
                                     CenterDetail.NONE -> Unit
                                 }
@@ -482,6 +487,7 @@ fun ControlCenterScreen() {
                                         ActionRow("Activity", "Progress and results.", "refresh", state.supports("operations")) { detail = CenterDetail.OPERATIONS }
                                         ActionRow("Call everyone", "Chime and say a message in every room.", "scenes") { detail = CenterDetail.DINNER }
                                         ActionRow("Routines", "Picture checklists for mornings and bedtime.", "scenes") { detail = CenterDetail.ROUTINES }
+                                        ActionRow("Guest card", "Wi-Fi QR and house basics for visitors.", "home") { detail = CenterDetail.GUESTS }
                                     }
                                     MediaPanel(state, vm)
                                     com.portalinstaller.ui.routines.RoutinesHomeCards(vm.routines, state.deviceName) { detail = CenterDetail.ROUTINES }
