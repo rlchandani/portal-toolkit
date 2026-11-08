@@ -28,7 +28,7 @@ readonly BUILD_TOOLS="${ANDROID_BUILD_TOOLS:-/opt/homebrew/share/android-command
 readonly APKSIGNER="${BUILD_TOOLS}/apksigner"
 readonly AAPT2="${BUILD_TOOLS}/aapt2"
 readonly MANIFEST_SCHEMA=1
-readonly DOWNLOAD_ATTEMPTS=6
+readonly DOWNLOAD_ATTEMPTS=18  # GitHub can take over a minute to point latest/ at a new release
 readonly DOWNLOAD_WAIT_SECONDS=10
 export JAVA_HOME="${JAVA_HOME:-$HOME/Library/Java/JavaVirtualMachines/jbr-21.0.11/Contents/Home}"
 
