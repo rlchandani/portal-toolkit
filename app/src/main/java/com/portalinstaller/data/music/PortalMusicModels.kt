@@ -45,6 +45,12 @@ internal data class PortalPlayer(
     val quietUntil: String?,
     val volume: PlaybackVolume?,
     val receivedAtMs: Long,
+    /** This Hearthpane reports a sleep timer (and so accepts `{cmd:"sleep"}`). */
+    val sleepSupported: Boolean = false,
+    /** The Portal's wall-clock time music stops, or null when no timed sleep is set. */
+    val sleepUntilMs: Long? = null,
+    val sleepEndOfSong: Boolean = false,
+    val nightCap: NightCap? = null,
 ) {
     val playing: Boolean get() = state == PlayerState.PLAYING
 
@@ -55,6 +61,18 @@ internal data class PortalPlayer(
     }
 
     fun withVolume(next: PlaybackVolume?): PortalPlayer = copy(volume = next)
+}
+
+/** "Quieter music during quiet hours": while [active], music volume stops at [maxLevel]. */
+internal data class NightCap(val active: Boolean, val maxLevel: Int)
+
+/** The sleep timer choices, as minutes on the wire (0 = off, -1 = end of song). */
+internal enum class SleepChoice(val minutes: Int, val title: String) {
+    OFF(0, "Off"),
+    MIN_15(15, "15 min"),
+    MIN_30(30, "30 min"),
+    MIN_60(60, "60 min"),
+    END_OF_SONG(-1, "End of song"),
 }
 
 /** What the Music page knows about one room. */
@@ -106,6 +124,18 @@ internal sealed interface MusicCommand {
     data class PlayNext(val entryId: Long) : MusicCommand {
         override fun body(playAnyway: Boolean) = cmd("playnext").put("entryId", entryId)
     }
+    /** Plays a search result or a recently played song now, replacing what's playing. */
+    data class PlayTrack(val song: SongRef) : MusicCommand {
+        override val startsPlayback = true
+        override fun body(playAnyway: Boolean) = song.into(cmd("playtrack")).put("playAnyway", playAnyway)
+    }
+    /** Queues a song right after the current one ([next]) or at the end. */
+    data class QueueTrack(val song: SongRef, val next: Boolean) : MusicCommand {
+        override fun body(playAnyway: Boolean) = song.into(cmd("queuetrack")).put("position", if (next) "next" else "end")
+    }
+    data class Sleep(val choice: SleepChoice) : MusicCommand {
+        override fun body(playAnyway: Boolean) = cmd("sleep").put("minutes", choice.minutes)
+    }
 
     private companion object {
         fun cmd(name: String): JSONObject = JSONObject().put("cmd", name)
@@ -145,6 +175,8 @@ internal object PortalMusicParser {
     const val MAX_MS = 7L * 24 * 60 * 60 * 1000
     private const val MAX_TEXT = 200
     private const val MAX_QUEUE = 200
+    /** STREAM_MUSIC never has more steps than this; anything larger is a bad answer. */
+    private const val MAX_LEVEL = 100
 
     fun player(json: JSONObject, receivedAtMs: Long): PortalPlayer {
         val p = json.optJSONObject("player") ?: json
@@ -172,7 +204,16 @@ internal object PortalMusicParser {
             quietUntil = text(p, "quietUntil"),
             volume = volume(p.optJSONObject("volume")),
             receivedAtMs = receivedAtMs,
+            sleepSupported = p.has("sleepUntilMs") || p.has("sleepEndOfSong"),
+            sleepUntilMs = if (p.isNull("sleepUntilMs")) null else p.optLong("sleepUntilMs", 0).takeIf { it > 0 },
+            sleepEndOfSong = p.optBoolean("sleepEndOfSong"),
+            nightCap = p.optJSONObject("nightCap")?.let { nightCap(it) },
         )
+    }
+
+    private fun nightCap(json: JSONObject): NightCap? {
+        val level = json.optInt("maxLevel", -1).takeIf { it in 0..MAX_LEVEL } ?: return null
+        return NightCap(json.optBoolean("active"), level)
     }
 
     /** Reuses the Remote tab's validated volume parsing (`np.volume` and `player.volume` share a shape). */
@@ -207,6 +248,6 @@ internal object PortalMusicParser {
         )
     }
 
-    private fun text(json: JSONObject, key: String): String? =
+    internal fun text(json: JSONObject, key: String): String? =
         if (!json.has(key) || json.isNull(key)) null else json.optString(key).trim().take(MAX_TEXT).ifEmpty { null }
 }

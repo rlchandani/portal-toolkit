@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import com.portalinstaller.data.companion.playbackTime
 import com.portalinstaller.data.music.MusicCommand
 import com.portalinstaller.data.music.MusicCopy
+import com.portalinstaller.data.music.MusicTimeText
 import com.portalinstaller.data.music.PortalPlayer
 import com.portalinstaller.data.music.RoomMusic
 import com.portalinstaller.data.music.VolumeChange
@@ -56,6 +57,7 @@ internal fun MusicRoomCard(
     clock: () -> Long,
     onCommand: (MusicCommand) -> Unit,
     onVolume: (VolumeChange) -> Unit,
+    wallClock: () -> Long = System::currentTimeMillis,
 ) {
     GroupCard(Modifier.testTag("music-room-card")) {
         Text(name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
@@ -66,9 +68,13 @@ internal fun MusicRoomCard(
             is RoomMusic.Legacy -> Note(MusicCopy.update(name))
             is RoomMusic.Ready -> NowPlaying(music.player, pending, clock, onCommand)
         }
+        if (music is RoomMusic.Ready && music.player.sleepSupported && music.player.current != null) {
+            SleepTimerControl(music.player, enabled = !pending, wallClock = wallClock) { onCommand(MusicCommand.Sleep(it)) }
+        }
         if (music is RoomMusic.Ready || music is RoomMusic.Legacy) {
             MusicVolumeControls(name, music.volume, enabled = !pending, onVolume = onVolume)
         }
+        if (music is RoomMusic.Ready) MusicTimeText.nightCap(music.player.nightCap)?.let { Note(it) }
     }
 }
 
