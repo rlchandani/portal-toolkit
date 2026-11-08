@@ -24,7 +24,7 @@ class GuestModelsTest {
         .put("hasPassword", true).put("hasDoorCode", true).put("ready", true)
         .put("mode", JSONObject().put("active", active).put("until", until))
 
-    /** What a Calder release from before the setup redesign answers. */
+    /** What a Hearthpane release from before the setup redesign answers. */
     private fun v1Json() = JSONObject().put("ok", true)
         .put("card", JSONObject().put("ssid", "Old Net").put("security", "wpa").put("welcome", "Hi!")
             .put("doorCode", "4821").put("checkout", "11:00 on Sunday").put("houseNote", "Bins").put("emergency", "555"))
@@ -122,7 +122,7 @@ class GuestModelsTest {
         assertEquals("Saved on Kitchen and Hall.", GuestCopy.done("Saved", listOf("Kitchen", "Hall"), emptyList()))
         assertEquals("Saved on Kitchen. Couldn’t reach Hall.", GuestCopy.done("Saved", listOf("Kitchen"), listOf("Hall")))
         assertEquals("Couldn’t reach Kitchen, Hall and Den.", GuestCopy.done("Saved", emptyList(), listOf("Kitchen", "Hall", "Den")))
-        assertEquals("Saved on Kitchen. Update Calder on Hall to use the new guest setup.",
+        assertEquals("Saved on Kitchen. Update Hearthpane on Hall to use the new guest setup.",
             GuestCopy.done("Saved", listOf("Kitchen"), emptyList(), outdated = listOf("Hall")))
     }
 }

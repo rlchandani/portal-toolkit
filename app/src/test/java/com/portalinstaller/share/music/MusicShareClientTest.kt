@@ -45,7 +45,7 @@ class MusicShareClientTest {
         assertEquals(SendResult.Quiet("7:00 AM"), client { ok(JSONObject().put("status", "quiet").put("quietUntil", "7:00 AM")) }.send("la", request))
         assertEquals(SendResult.Declined("busy"), client { ok(JSONObject().put("status", "declined").put("reason", "busy")) }.send("la", request))
         assertEquals(SendResult.Offline, client { throw IOException("no route") }.send("la", request))
-        assertEquals(SendResult.Failed("Update Calder on Living Area to play shared music."),
+        assertEquals(SendResult.Failed("Update Hearthpane on Living Area to play shared music."),
             client { CompanionResponse(404, """{"ok":false,"error":"not_found"}""") }.send("la", request))
         assertEquals(SendResult.Failed(MusicShareClient.UNPAIRED), client { error("unused") }.send("fa", request))
     }

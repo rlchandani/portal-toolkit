@@ -65,7 +65,7 @@ fun RoutinesScreen(controller: RoutinesController, room: String, onBack: () -> U
             }
             OfflineBanner(state.connected, state.stale, room)
             when {
-                snapshot == null && state.unsupported -> Message("Update Calder on $room", "This Portal doesn’t have picture routines yet.")
+                snapshot == null && state.unsupported -> Message("Update Hearthpane on $room", "This Portal doesn’t have picture routines yet.")
                 snapshot == null -> Message("Loading routines", "Routines on $room will appear here.")
                 snapshot.routines.isEmpty() -> EmptyState(room) { editing = RoutineDraft.new(RoutineTemplates.create(it)) }
                 else -> {

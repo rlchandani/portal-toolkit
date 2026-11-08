@@ -129,7 +129,7 @@ class MusicShareClient(
             .put("playAnyway", r.playAnyway).put("shareId", r.shareId)
 
         private fun failure(e: CompanionException, room: String): SendResult = when {
-            e.error.status == 404 -> SendResult.Failed("Update Calder on $room to play shared music.")
+            e.error.status == 404 -> SendResult.Failed("Update Hearthpane on $room to play shared music.")
             e.error.code == "unauthorized" -> SendResult.Failed("Pair this phone with $room again.")
             e.error.code == "mix_not_supported" -> SendResult.Failed("Mixes can't play on a Portal.")
             else -> SendResult.Failed("$room couldn’t play it. Nothing was played.")

@@ -50,7 +50,7 @@ internal fun GuestPasswordStep(draft: GuestDraft, many: Boolean, onChange: (Gues
     GuestSwitchRow("Hide password on the card until tapped", draft.card.hidePassword) {
         onChange(draft.copy(card = draft.card.copy(hidePassword = it)))
     }
-    GuestNote("Calder stores it encrypted and never shares it." +
+    GuestNote("Hearthpane stores it encrypted and never shares it." +
         if (many) " It’s sent to each Portal; Portal Toolkit doesn’t keep it." else " Portal Toolkit doesn’t keep it.")
 }
 

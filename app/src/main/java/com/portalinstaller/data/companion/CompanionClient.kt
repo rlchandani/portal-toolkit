@@ -289,7 +289,7 @@ class CompanionClient(private val transport: CompanionTransport = OkHttpCompanio
             val message = when (code) {
                 "bad_pin" -> "PIN was rejected or expired. Show a fresh PIN on the Portal."
                 "unauthorized" -> "Pair this phone with the Portal again."
-                "no_accessibility", "no_gestures" -> "Enable Calder's accessibility service on the Portal."
+                "no_accessibility", "no_gestures" -> "Enable Hearthpane's accessibility service on the Portal."
                 else -> "Portal rejected the request: $code (HTTP ${response.status})."
             }
             throw CompanionException(CompanionError(code, message, response.status, sanitized(json)))

@@ -71,11 +71,11 @@ fun GuestScreen(repository: GuestRepository, modifier: Modifier = Modifier) {
         GuestModeCard(state, onStart = { scope.launch { repository.start(it) } }, onEnd = { scope.launch { repository.end() } })
         val shown = state.shown
         if (shown == null) {
-            if (!state.loading) EmptyMessage(unreachableTitle(state), "Open Portal Toolkit on home Wi-Fi, and update Calder on the Portal if needed.")
+            if (!state.loading) EmptyMessage(unreachableTitle(state), "Open Portal Toolkit on home Wi-Fi, and update Hearthpane on the Portal if needed.")
         } else {
             SectionTitle("Set up the guest card")
             if (shown.needsUpdate) {
-                EmptyMessage("Update Calder on ${targetName(state)}", "Update Calder on the Portal to use the new guest setup. Guest mode still works.")
+                EmptyMessage("Update Hearthpane on ${targetName(state)}", "Update Hearthpane on the Portal to use the new guest setup. Guest mode still works.")
             } else {
                 GuestSetup(shown, targetName(state), state.busy, state.targets.count { !it.needsUpdate } > 1) { draft ->
                     scope.launch { repository.save(draft.card, draft.password, draft.doorCodeChange) }
@@ -116,7 +116,7 @@ private fun GuestModeCard(state: GuestState, onStart: (GuestStart) -> Unit, onEn
 }
 
 private fun roomLabel(room: GuestRoom): String = when {
-    room.outdated || room.needsUpdate -> "${room.name} (update Calder)"
+    room.outdated || room.needsUpdate -> "${room.name} (update Hearthpane)"
     !room.online -> "${room.name} (offline)"
     room.snapshot?.active == true -> "${room.name} · Guests"
     else -> room.name
@@ -126,4 +126,4 @@ internal fun targetName(state: GuestState): String =
     if (state.target == null) "all Portals" else state.targets.firstOrNull()?.name ?: "Portal"
 
 private fun unreachableTitle(state: GuestState): String =
-    if (state.targets.any { it.outdated }) "Update Calder on ${targetName(state)}" else "Couldn’t reach ${targetName(state)}"
+    if (state.targets.any { it.outdated }) "Update Hearthpane on ${targetName(state)}" else "Couldn’t reach ${targetName(state)}"

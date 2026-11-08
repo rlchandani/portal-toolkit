@@ -46,7 +46,7 @@ object ShareFailures {
             e.status == 507 || e.code in setOf("storage_full", "insufficient_storage", "no_space") -> "$room is out of storage. Free up space, then retry."
             e.status == 401 || e.code == "unauthorized" -> "$room needs to be paired with this phone again."
             e.code == "sharing_off" -> "Sharing is turned off on $room."
-            e.status == 404 -> "$room needs a Calder update to receive shares."
+            e.status == 404 -> "$room needs a Hearthpane update to receive shares."
             e.status == 413 || e.code == "body_too_large" -> "This is too big for $room."
             e.code == "invalid_image" -> "$room couldn’t open this image."
             e.code == "incomplete_upload" -> "The connection to $room dropped before the whole file arrived."

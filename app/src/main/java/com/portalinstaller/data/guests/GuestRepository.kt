@@ -26,7 +26,7 @@ import org.json.JSONObject
 /** One paired Portal; [snapshot] null when it didn't answer, [outdated] when it has no guest route. */
 data class GuestRoom(val id: String, val name: String, val snapshot: GuestSnapshot?, val outdated: Boolean = false) {
     val online: Boolean get() = snapshot != null
-    /** Answers, but runs a Calder from before the step-by-step setup: Guest mode works, the card can't be saved. */
+    /** Answers, but runs a Hearthpane from before the step-by-step setup: Guest mode works, the card can't be saved. */
     val needsUpdate: Boolean get() = snapshot?.needsUpdate == true
 }
 

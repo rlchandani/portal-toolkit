@@ -62,7 +62,7 @@ data class GuestSnapshot(
     val ready: Boolean,
     val active: Boolean,
     val untilMs: Long?,
-    /** 1 for a Calder release from before the step-by-step setup. */
+    /** 1 for a Hearthpane release from before the step-by-step setup. */
     val version: Int,
 ) {
     val needsUpdate: Boolean get() = version < GuestWire.VERSION
@@ -168,8 +168,8 @@ object GuestCopy {
     ): String = listOfNotNull(
         ok.takeIf { it.isNotEmpty() }?.let { "$verb on ${names(it)}." },
         failed.takeIf { it.isNotEmpty() }?.let { "Couldn’t reach ${names(it)}." },
-        rejected.takeIf { it.isNotEmpty() }?.let { "${names(it)} didn’t accept the change. Update Calder there and try again." },
-        outdated.takeIf { it.isNotEmpty() }?.let { "Update Calder on ${names(it)} to use the new guest setup." },
+        rejected.takeIf { it.isNotEmpty() }?.let { "${names(it)} didn’t accept the change. Update Hearthpane there and try again." },
+        outdated.takeIf { it.isNotEmpty() }?.let { "Update Hearthpane on ${names(it)} to use the new guest setup." },
     ).joinToString(" ")
 
     private fun names(list: List<String>): String =

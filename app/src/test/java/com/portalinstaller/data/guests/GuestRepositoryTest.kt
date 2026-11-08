@@ -119,7 +119,7 @@ class GuestRepositoryTest {
         repo.refresh()
         repo.selectTarget("h-id")
         repo.save(GuestCard(ssid = "Net"), password = "", doorCode = DoorCodeChange.Keep)
-        assertEquals("Hall didn’t accept the change. Update Calder there and try again.", repo.state.value.message)
+        assertEquals("Hall didn’t accept the change. Update Hearthpane there and try again.", repo.state.value.message)
         assertFalse(JSONObject(http.calls.last().body!!).has("password"))
     }
 
@@ -132,7 +132,7 @@ class GuestRepositoryTest {
         repo.save(GuestCard(ssid = "Net"), password = "", doorCode = DoorCodeChange.Keep)
         val saves = http.calls.filter { it.method == "POST" }
         assertEquals(listOf("http://k:8723/remote/guests"), saves.map { it.url })
-        assertEquals("Saved on Kitchen. Update Calder on Hall to use the new guest setup.", repo.state.value.message)
+        assertEquals("Saved on Kitchen. Update Hearthpane on Hall to use the new guest setup.", repo.state.value.message)
         repo.start(GuestStart.UntilEnded)
         assertEquals(3, http.calls.count { it.method == "POST" })
     }

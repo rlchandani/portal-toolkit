@@ -304,7 +304,7 @@ internal class CompanionGroupController(
                 is CompanionException -> when {
                     unconfirmed -> error.error.message
                     error.error.status == 401 || error.error.status == 403 -> "Pairing or permission rejected. Reconnect this Portal."
-                    error.error.status == 404 -> "Unsupported on this Portal. Update Calder and retry."
+                    error.error.status == 404 -> "Unsupported on this Portal. Update Hearthpane and retry."
                     else -> "Portal rejected the request (${error.error.code})."
                 }
                 is IllegalArgumentException -> error.message ?: "Unsupported request."

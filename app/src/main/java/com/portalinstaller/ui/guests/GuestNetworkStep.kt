@@ -57,7 +57,7 @@ import com.portalinstaller.data.guests.GuestDraft
 import com.portalinstaller.data.guests.GuestNetworks
 import com.portalinstaller.data.guests.NearbyNetwork
 
-internal const val WIFI_PERMISSION_REASON = "Calder needs location permission to list nearby Wi-Fi networks"
+internal const val WIFI_PERMISSION_REASON = "Hearthpane needs location permission to list nearby Wi-Fi networks"
 
 private enum class Access { ASK, DENIED, BLOCKED, LOCATION_OFF, READY }
 

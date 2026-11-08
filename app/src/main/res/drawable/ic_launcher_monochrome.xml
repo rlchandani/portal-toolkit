@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Hearthpane mark for Android 13+ themed icons. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+  <path android:fillColor="#FFFFFFFF" android:pathData="M45,33 H63 A11,11 0 0 1 74,44 V53 A20,20 0 0 1 54,73 A20,20 0 0 1 34,53 V44 A11,11 0 0 1 45,33 Z"/>
+</vector>

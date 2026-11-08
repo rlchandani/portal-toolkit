@@ -37,7 +37,7 @@ object MusicShareRules {
         RoomState.QUIET -> status.quietUntil?.let { "Quiet hours until $it" } ?: "Quiet hours"
         RoomState.ROUTINE -> "Busy with a routine or call"
         RoomState.OFFLINE -> "Not answering"
-        RoomState.UNSUPPORTED -> "Update Calder to play shared music"
+        RoomState.UNSUPPORTED -> "Update Hearthpane to play shared music"
     }
 
     fun hint(action: MusicAction, targets: List<MusicTarget>): String {

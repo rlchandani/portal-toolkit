@@ -100,7 +100,7 @@ class CompanionNativeUiTest {
         compose.onNode(hasSetTextAction() and hasText("Search settings"))
             .performTextReplacement("companion-qa-no-match")
         compose.onNodeWithText("Device tools").performScrollTo().performClick()
-        val returnLabel = "‹ Calder control center"
+        val returnLabel = "‹ Hearthpane control center"
         waitForText(returnLabel)
         val statusTop = ViewCompat.getRootWindowInsets(compose.activity.window.decorView)
             ?.getInsets(WindowInsetsCompat.Type.statusBars())?.top ?: 0
