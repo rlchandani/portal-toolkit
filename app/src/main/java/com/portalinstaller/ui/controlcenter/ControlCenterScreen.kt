@@ -211,7 +211,7 @@ fun ControlCenterScreen() {
                     if (vm.state.value.activeDeviceId == capturedDevice && vm.state.value.sessionGeneration == generation) pendingRestore = RestoreCandidate(capturedDevice, generation, it)
                     else snackbars.showSnackbar("Portal selection changed. Choose the snapshot again.")
                 },
-                onFailure = { snackbars.showSnackbar("Choose a valid Immortal snapshot under 2 MB.") })
+                onFailure = { snackbars.showSnackbar("Choose a valid Calder snapshot under 2 MB.") })
         }
     }
 
@@ -303,7 +303,7 @@ fun ControlCenterScreen() {
     if (advancedTools) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
             TextButton(onClick = { advancedTools = false }, modifier = Modifier.fillMaxWidth()) {
-                Text("‹ Immortal control center")
+                Text("‹ Calder control center")
             }
             Box(Modifier.weight(1f)) { MainScreen() }
         }
@@ -452,7 +452,7 @@ fun ControlCenterScreen() {
                                     GroupCard {
                                         Text(if (state.devices.isEmpty()) "Connect your first Portal" else "Choose a Portal to reconnect",
                                             style = MaterialTheme.typography.titleMedium)
-                                        Text("Enable Phone remote in Immortal, then use the address and six-digit PIN shown on your Portal.")
+                                        Text("Enable Phone remote in Calder, then use the address and six-digit PIN shown on your Portal.")
                                         Button(onClick = { pairDialog = true }) { Text("Add a Portal") }
                                         state.devices.forEach { saved ->
                                             ActionRow(saved.name, saved.endpoint, "home") { vm.selectDevice(saved.id) }
@@ -549,7 +549,7 @@ fun ControlCenterScreen() {
                         CenterTab.APPS -> {
                             item {
                                 PageSections {
-                                    PageTitle("Apps", "Launch apps and manage the Immortal catalog.")
+                                    PageTitle("Apps", "Launch apps and manage the Calder catalog.")
                                     OutlinedTextField(appQuery, onValueChange = { appQuery = it }, label = { Text("Find an app") },
                                         singleLine = true, modifier = Modifier.fillMaxWidth())
                                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -667,7 +667,7 @@ private fun PairPortalDialog(
     AlertDialog(onDismissRequest = onDismiss, title = { Text("Pair a Portal") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("In Immortal, enable Phone remote and show a pairing PIN. Paste its pairing link or enter the address below.")
+                Text("In Calder, enable Phone remote and show a pairing PIN. Paste its pairing link or enter the address below.")
                 OutlinedTextField(address, onValueChange = onAddress, singleLine = true,
                     label = { Text("Address or pairing link") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri))
                 OutlinedTextField(pin, onValueChange = { pin = it.filter(Char::isDigit).take(6) },

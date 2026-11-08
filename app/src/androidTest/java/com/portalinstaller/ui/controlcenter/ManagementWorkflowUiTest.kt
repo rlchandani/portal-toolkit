@@ -167,9 +167,9 @@ class ManagementWorkflowUiTest {
         val saves = mutableListOf<JSONObject>()
         fixture { LayoutEditorPanel(original, false, saves::add, {}) }
 
-        clickText("Add Immortal widget")
+        clickText("Add Calder widget")
         chooseMenu("Today")
-        clickText("Add Immortal widget")
+        clickText("Add Calder widget")
         chooseMenu("Today")
         clickText("Save layout")
 
@@ -234,7 +234,7 @@ class ManagementWorkflowUiTest {
 
         widgetControl("com.example.provider", "Increase width").scrollClick()
         widgetButton("Weather", "Remove widget").scrollClick()
-        clickText("Add Immortal widget")
+        clickText("Add Calder widget")
         chooseMenu("Today")
         restoration.emulateSavedInstanceStateRestore()
         compose.onNodeWithText("Save layout").assertIsEnabled()
@@ -270,7 +270,7 @@ class ManagementWorkflowUiTest {
         compose.onNodeWithText("Working…").assertIsNotEnabled()
         compose.onNodeWithText("Discard changes").assertIsNotEnabled()
         compose.onNodeWithText("Preview on Portal").assertIsNotEnabled()
-        compose.onNodeWithText("Add Immortal widget").assertIsNotEnabled()
+        compose.onNodeWithText("Add Calder widget").assertIsNotEnabled()
         widgetControl("com.example.provider", "Increase height").assertIsNotEnabled()
         widgetButton("Weather", "Remove widget").assertIsNotEnabled()
         widgetButton("com.example.provider", "Move down").assertIsNotEnabled()
@@ -279,7 +279,7 @@ class ManagementWorkflowUiTest {
             received = layoutFixture().apply { remove("gridSlots") }
         }
         compose.onNodeWithText("Save layout").assertIsNotEnabled()
-        compose.onNodeWithText("Add Immortal widget").assertIsNotEnabled()
+        compose.onNodeWithText("Add Calder widget").assertIsNotEnabled()
         widgetButton("Weather", "Remove widget").assertIsNotEnabled()
         assertTrue(saves.isEmpty())
         assertEquals(0, previews)

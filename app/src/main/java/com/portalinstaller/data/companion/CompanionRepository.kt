@@ -552,7 +552,7 @@ class CompanionRepository(
     fun listAllPhotos(): Job {
         val view = state.value
         if (!view.supports("photoLibrary")) return failedJob(
-            IllegalStateException("Update Immortal on this Portal to browse all photo folders."))
+            IllegalStateException("Update Calder on this Portal to browse all photo folders."))
         val revision = nextPhotoRevision()
         return request { selected ->
             if (refreshPhotos(selected, view.photoFolder, true, revision))
@@ -746,7 +746,7 @@ class CompanionRepository(
                 JSONObject().put("ok", true).put("path", folder).put("files", JSONArray())
             }
             if (recursive && !response.optBoolean("recursive")) throw IllegalStateException(
-                "This Portal did not return a complete photo-library listing. Update Immortal and retry.")
+                "This Portal did not return a complete photo-library listing. Update Calder and retry.")
             synchronized(lock) {
                 if (!ownsPhoto(selected, revision)) return false
                 update(selected) { it.copy(photoFolder = folder, photos = CompanionPhotos.parse(response),
