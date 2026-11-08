@@ -67,6 +67,8 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.navigation:navigation-compose:2.8.5")
     implementation("androidx.datastore:datastore-preferences:1.1.1")
+    // Portal Toolkit's own wireless updates: daily check and the foreground download worker.
+    implementation("androidx.work:work-runtime-ktx:2.10.0")
 
     // Dadb: direct ADB connection over TCP/IP without the ADB binary or server.
     // https://github.com/mobile-dev-inc/dadb
