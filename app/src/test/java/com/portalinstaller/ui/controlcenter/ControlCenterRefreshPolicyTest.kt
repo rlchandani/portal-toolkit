@@ -44,6 +44,7 @@ class ControlCenterRefreshPolicyTest {
             CenterDetail.JARVIS to listOf(CenterRefresh.JARVIS),
             CenterDetail.SNAPSHOTS to emptyList(),
             CenterDetail.OPERATIONS to listOf(CenterRefresh.OPERATIONS),
+            CenterDetail.GUESTS to emptyList(),
         )
         details.forEach { (detail, expected) ->
             CenterTab.entries.forEach { tab ->
