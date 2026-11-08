@@ -20,6 +20,9 @@ interface CompanionSessionStore {
     suspend fun save(sessions: List<CompanionSession>)
     suspend fun loadSelectedIds(): Set<String>? = null
     suspend fun saveSelectedIds(ids: Set<String>) {}
+    /** The Portal last opened in Control Center, restored on launch; null when none. */
+    suspend fun loadActiveId(): String? = null
+    suspend fun saveActiveId(id: String?) {}
 }
 
 /** Android production factory always uses private noBackupFilesDir, separate from ADB records. */
@@ -81,6 +84,26 @@ class FileCompanionSessionStore(private val directory: File) : CompanionSessionS
         } catch (_: Exception) {
             throw IOException("Saved target selection is unreadable. Choose targets again in the top Portal menu.")
         }
+    }
+
+    /** Unreadable or missing means "none": the user simply picks a Portal again. */
+    override suspend fun loadActiveId(): String? {
+        val active = File(directory, "companion-active.json")
+        if (!active.exists()) return null
+        return try {
+            JSONObject(active.readText()).takeIf { it.optInt("version") == 1 }?.optString("id")?.ifBlank { null }
+        } catch (_: Exception) { null }
+    }
+
+    override suspend fun saveActiveId(id: String?) {
+        val active = File(directory, "companion-active.json")
+        if (id == null) { active.delete(); return }
+        check(directory.isDirectory || directory.mkdirs())
+        val temp = File.createTempFile("companion-active-", ".tmp", directory)
+        try {
+            temp.writeText(JSONObject().put("version", 1).put("id", id).toString())
+            Files.move(temp.toPath(), active.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+        } finally { temp.delete() }
     }
 
     override suspend fun saveSelectedIds(ids: Set<String>) {

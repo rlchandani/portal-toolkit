@@ -83,6 +83,7 @@ class CompanionRepository(
             val saved = withContext(io) { store.load() }
             synchronized(lock) { sessions = saved }
             provisionHousehold(saved)
+            restoreActivePortal(saved)
             mutableState.update { it.copy(devices = saved.map { session -> session.device }) }
             try {
                 val selectedIds = withContext(io) { store.loadSelectedIds() }
@@ -206,13 +207,20 @@ class CompanionRepository(
                         error = CompanionError("unknown_device", "Select a saved Portal or pair a new one.")) }
                 }
             } else {
+                persistActivePortal(id)
                 mutableState.update { it.copy(photoFolder = session.device.photoFolder, photoBrowseAll = session.device.photoBrowseAll) }
                 runTicket(Ticket(session, selectedGeneration)) { refreshTicket(it) }
             }
         }
     }
 
+    /** The user chose to disconnect: also forget it as the Portal to reopen on launch. */
     fun disconnect() {
+        persistActivePortal(null)
+        resetSelection()
+    }
+
+    private fun resetSelection() {
         val nextGeneration = beginSelection()
         mutableState.update { ControlCenterState(devices = it.devices, discovered = it.discovered, discovering = it.discovering,
             selectedTargetIds = it.selectedTargetIds, groupOperations = it.groupOperations, targetSelectionSaving = it.targetSelectionSaving,
@@ -951,7 +959,25 @@ class CompanionRepository(
         discovery?.stop()
         mutableState.update { it.copy(discovering = false) }
     }
-    fun close() { stopDiscovery(); disconnect(); scope.cancel() }
+    fun close() { stopDiscovery(); resetSelection(); scope.cancel() } // keeps the remembered Portal
+
+    /** Reopens the Portal last used, if it is still paired and nothing was chosen meanwhile. */
+    private fun restoreActivePortal(saved: List<CompanionSession>) {
+        scope.launch(io) {
+            val id = try { store.loadActiveId() } catch (e: Exception) {
+                android.util.Log.w(ACTIVE_TAG, "last Portal unreadable; starting unselected", e); null
+            } ?: return@launch
+            if (saved.any { it.device.id == id } && state.value.activeDeviceId == null) selectDevice(id)
+        }
+    }
+
+    private fun persistActivePortal(id: String?) {
+        scope.launch(io) {
+            try { store.saveActiveId(id) }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (e: Exception) { android.util.Log.w(ACTIVE_TAG, "could not remember the last Portal", e) }
+        }
+    }
 
     /**
      * Best effort: makes each Portal in [targets] hold this phone's household key so Portals can
@@ -980,6 +1006,7 @@ class CompanionRepository(
 
     companion object {
         private const val HOUSEHOLD_TAG = "PortalHousehold"
+        private const val ACTIVE_TAG = "PortalActive"
 
         fun create(context: Context): CompanionRepository = CompanionRepository(CompanionClient(), FileCompanionSessionStore.create(context),
             discovery = NsdCompanionDiscovery(context.applicationContext), preloadManagement = false,
