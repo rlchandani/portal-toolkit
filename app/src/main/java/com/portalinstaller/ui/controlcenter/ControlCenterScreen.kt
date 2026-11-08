@@ -418,7 +418,7 @@ fun ControlCenterScreen() {
                                             ActionRow("Export snapshot", "Save a JSON file on this phone.", "backup", state.connected && !state.busy) {
                                                 exportDevice = state.activeDeviceId
                                                 exportGeneration = state.sessionGeneration
-                                                export.launch("immortal-${System.currentTimeMillis()}.json")
+                                                export.launch("hearthpane-snapshot-${System.currentTimeMillis()}.json")
                                             }
                                             ActionRow("Restore snapshot", "Review before applying to this Portal.", "backup", state.connected && !state.busy) {
                                                 importDevice = state.activeDeviceId

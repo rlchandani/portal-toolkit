@@ -39,6 +39,18 @@ object ShareFailures {
         else -> ItemState(ItemStatus.FAILED, reason = reason(error, room))
     }
 
+    /**
+     * Why the shared files couldn't be read on this phone (before anything is sent). Android's own
+     * text ("Permission Denial … content://…") never reaches the screen; our validation copy does.
+     */
+    fun readProblem(error: Throwable): String = when (error) {
+        is SecurityException -> "Portal Toolkit wasn’t allowed to open this file. Share it again from the app it’s in. Nothing was sent."
+        is IllegalArgumentException -> error.message ?: READ_FAILED
+        else -> READ_FAILED
+    }
+
+    private const val READ_FAILED = "These files can’t be read. Nothing was sent."
+
     fun reason(error: Throwable, room: String): String {
         if (error is IllegalArgumentException) return error.message ?: "This file can’t be shared."
         val e = (error as? CompanionException)?.error ?: return "Couldn’t reach $room."

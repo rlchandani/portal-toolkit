@@ -70,7 +70,7 @@ fun ShareSheetHost(hub: ShareHub, payload: SharePayload?, openJobId: String?, on
             val job = runCatching { withContext(Dispatchers.IO) { buildJob(context, hub, id, from, option.rooms, edited) } }
             preparing = false
             job.onSuccess { hub.runner.start(it); jobId = it.id }
-                .onFailure { problem = it.message ?: "These files can’t be read. Nothing was sent." }
+                .onFailure { problem = ShareFailures.readProblem(it) }
         }
     }
 
