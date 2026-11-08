@@ -95,7 +95,7 @@ private fun buildJob(context: android.content.Context, hub: ShareHub, id: String
 }
 
 @Composable
-private fun SheetScaffold(onDismiss: () -> Unit, content: @Composable () -> Unit) {
+internal fun SheetScaffold(onDismiss: () -> Unit, content: @Composable () -> Unit) {
     Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f))
         .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss),
         contentAlignment = Alignment.BottomCenter) {

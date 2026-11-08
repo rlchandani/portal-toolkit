@@ -42,6 +42,10 @@ class ShareHub private constructor(context: Context) {
         persist = { jobs -> scope.launch(disk) { runCatching { store.save(jobs) }.onFailure { Log.w(TAG, "share queue save failed", it) } } },
         events = notifier, initial = runCatching { store.load() }.getOrDefault(emptyList()))
 
+    /** "Play on a Portal": talks to each paired Portal's `/remote/musicshare` directly. */
+    val music = com.portalinstaller.share.music.MusicShareClient(CompanionClient(),
+        sessionFor = { id -> pairedSessions().firstOrNull { it.device.id == id } })
+
     /** Paired Portals as rooms, in pairing order. Tokens stay inside the companion session store. */
     suspend fun rooms(): List<ShareRoom> = pairedSessions().map { ShareRoom(it.device.id, it.device.name) }
 
