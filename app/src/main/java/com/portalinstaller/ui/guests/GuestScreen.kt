@@ -73,9 +73,13 @@ fun GuestScreen(repository: GuestRepository, modifier: Modifier = Modifier) {
         if (shown == null) {
             if (!state.loading) EmptyMessage(unreachableTitle(state), "Open Calder Pocket on home Wi-Fi, and update Calder on the Portal if needed.")
         } else {
-            SectionTitle("Wi-Fi and house basics")
-            GuestForm(shown, targetName(state), state.busy, state.targets.size > 1) { card, password ->
-                scope.launch { repository.save(card, password) }
+            SectionTitle("Set up the guest card")
+            if (shown.needsUpdate) {
+                EmptyMessage("Update Calder on ${targetName(state)}", "Update Calder on the Portal to use the new guest setup. Guest mode still works.")
+            } else {
+                GuestSetup(shown, targetName(state), state.busy, state.targets.count { !it.needsUpdate } > 1) { draft ->
+                    scope.launch { repository.save(draft.card, draft.password, draft.doorCodeChange) }
+                }
             }
         }
     }
@@ -94,7 +98,7 @@ private fun GuestModeCard(state: GuestState, onStart: (GuestStart) -> Unit, onEn
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         if (online.any { it.snapshot?.ready == false }) {
-            Text("Add the Wi-Fi details below so the card can show a QR code.", style = MaterialTheme.typography.bodySmall,
+            Text("Set up the Wi-Fi below so the card can show a QR code.", style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -112,7 +116,7 @@ private fun GuestModeCard(state: GuestState, onStart: (GuestStart) -> Unit, onEn
 }
 
 private fun roomLabel(room: GuestRoom): String = when {
-    room.outdated -> "${room.name} (update Calder)"
+    room.outdated || room.needsUpdate -> "${room.name} (update Calder)"
     !room.online -> "${room.name} (offline)"
     room.snapshot?.active == true -> "${room.name} · Guests"
     else -> room.name

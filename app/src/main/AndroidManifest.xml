@@ -9,6 +9,16 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!-- Guest card setup: list nearby Wi-Fi networks and the connected one to pick from.
+         Android ties Wi-Fi scan results and the connected SSID to location (fine + coarse are
+         requested together since API 31); API 33+ also asks for nearby Wi-Fi devices. Requested
+         only when the network picker opens; never used to derive location. -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" />
+
     <!-- Google Photos import uses the session-based Picker API: the user selects
          photos in Google's own hosted UI (Custom Tab), so NO media-read permission
          (READ_MEDIA_IMAGES / READ_EXTERNAL_STORAGE) is required. INTERNET above is
