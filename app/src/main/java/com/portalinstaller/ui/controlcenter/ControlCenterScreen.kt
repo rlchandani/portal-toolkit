@@ -448,6 +448,8 @@ fun ControlCenterScreen() {
                         CenterTab.HOME -> item {
                             PageSections {
                                 PageTitle("Your Portal", "Everything you need, within reach.")
+                                com.portalinstaller.ui.update.AppUpdateBanner()
+                                com.portalinstaller.ui.update.PortalUpdatesCard()
                                 ManageAppsCard(onOpenApps = { tab = CenterTab.APPS; detail = CenterDetail.NONE })
                                 if (state.connection == CompanionConnection.CONNECTING) {
                                     GroupCard {
@@ -632,7 +634,7 @@ fun ControlCenterScreen() {
                                         onActiveApply = { domain, body -> vm.writeActiveSettings(domain, body) }) }
                                         ?: EmptyMessage("Portal settings unavailable", "Connect to load its complete settings registry.")
                                 },
-                                phonePreferences = { PhonePreferences() },
+                                phonePreferences = { PhonePreferences(); com.portalinstaller.ui.update.AppUpdateSettingsRow() },
                                 onTools = { advancedTools = true }, onPair = { pairDialog = true })
                         }
                     }
