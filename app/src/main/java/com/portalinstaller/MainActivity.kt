@@ -18,6 +18,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         // Remote control and mirroring remain usable until the user leaves this window.
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        com.portalinstaller.ui.controlcenter.RemoteLaunch.accept(intent)
         val settingsStore = AppContainer.from(this).settingsStore
         setContent {
             val themeMode by settingsStore.themeMode.collectAsStateWithLifecycle(
@@ -30,5 +31,10 @@ class MainActivity : AppCompatActivity() {
                 ControlCenterScreen()
             }
         }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        com.portalinstaller.ui.controlcenter.RemoteLaunch.accept(intent)
     }
 }

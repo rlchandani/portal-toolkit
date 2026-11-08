@@ -215,6 +215,15 @@ fun ControlCenterScreen() {
         }
     }
 
+    val remoteRequest by RemoteLaunch.pending.collectAsStateWithLifecycle()
+    LaunchedEffect(remoteRequest, state.devices) {
+        val id = remoteRequest ?: return@LaunchedEffect
+        if (state.devices.none { it.id == id }) return@LaunchedEffect
+        if (state.activeDeviceId != id) vm.selectDevice(id)
+        detail = CenterDetail.NONE
+        tab = CenterTab.REMOTE
+        RemoteLaunch.consume(id)
+    }
     LaunchedEffect(state.error) {
         state.error?.let { snackbars.showSnackbar(it.message); vm.clearError() }
     }

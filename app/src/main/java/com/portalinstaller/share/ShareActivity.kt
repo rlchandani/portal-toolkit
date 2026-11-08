@@ -14,6 +14,13 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import com.portalinstaller.share.music.MusicLink
+import com.portalinstaller.share.music.MusicLinks
+import com.portalinstaller.share.music.MusicShareHost
 import com.portalinstaller.ui.theme.PortalTheme
 import com.portalinstaller.util.AppLanguageManager
 
@@ -30,6 +37,8 @@ open class ShareActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         val hub = ShareHub.get(this)
         val jobId = intent.getStringExtra(EXTRA_JOB)?.takeIf { opensJobs && hub.runner.job(it) != null }
+        val music = if (jobId == null) musicLink(intent) else null
+        if (music != null) return showMusic(hub, music)
         val payload = if (jobId != null) null else when (val parsed = parse(intent)) {
             is ShareParse.Ok -> parsed.payload
             is ShareParse.Rejected -> { Toast.makeText(this, parsed.message, Toast.LENGTH_LONG).show(); finish(); return }
@@ -37,6 +46,23 @@ open class ShareActivity : AppCompatActivity() {
         setContent {
             PortalTheme(darkTheme = androidx.compose.foundation.isSystemInDarkTheme()) {
                 ShareSheetHost(hub = hub, payload = payload, openJobId = jobId, onClose = ::finish)
+            }
+        }
+    }
+
+    /** A shared YouTube / YouTube Music link opens "Play on a Portal" instead of the note/link sheet. */
+    private fun musicLink(intent: Intent): MusicLink? {
+        if (intent.action != Intent.ACTION_SEND || intent.type?.lowercase()?.startsWith("text/") != true) return null
+        return MusicLinks.find(intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString())
+    }
+
+    private fun showMusic(hub: ShareHub, link: MusicLink) {
+        val subject = intent.getStringExtra(Intent.EXTRA_SUBJECT)
+        setContent {
+            PortalTheme(darkTheme = androidx.compose.foundation.isSystemInDarkTheme()) {
+                var asLink by remember { mutableStateOf(false) }
+                if (asLink) ShareSheetHost(hub, SharePayload.Link(link.url, subject?.take(ShareIntentParser.MAX_TITLE_CHARS)), null, ::finish)
+                else MusicShareHost(hub, link, subject, onSendAsLink = { asLink = true }, onClose = ::finish)
             }
         }
     }
