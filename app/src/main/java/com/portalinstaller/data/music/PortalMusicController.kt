@@ -85,6 +85,9 @@ internal class PortalMusicController(
 
     fun name(roomId: String): String = paired[roomId]?.device?.name ?: "the Portal"
 
+    /** The paired session for [roomId], shared with the page's search and history. */
+    fun session(roomId: String): CompanionSession? = paired[roomId]
+
     /** Sends [command] to [roomIds]; asks first when one is in quiet hours and it would start sound. */
     suspend fun command(command: MusicCommand, roomIds: List<String>, playAnyway: Boolean = false) {
         val ids = roomIds.filter { paired.containsKey(it) && it !in state.value.pending }
@@ -99,7 +102,7 @@ internal class PortalMusicController(
         }
         setPending(ids, false)
         val quiet = results.filter { it.second is CommandResult.Quiet }.map { it.first }
-        results.forEach { (id, result) -> report(id, result) }
+        results.forEach { (id, result) -> report(id, command, result) }
         if (quiet.isNotEmpty()) askPlay(command, quiet, quiet,
             results.firstNotNullOfOrNull { (it.second as? CommandResult.Quiet)?.until })
         settleThenRefresh(ids)
@@ -152,8 +155,9 @@ internal class PortalMusicController(
         refresh(ids)
     }
 
-    private fun report(roomId: String, result: CommandResult) = when (result) {
-        CommandResult.Done, is CommandResult.Quiet -> Unit
+    private fun report(roomId: String, command: MusicCommand, result: CommandResult) = when (result) {
+        CommandResult.Done -> if (command is MusicCommand.QueueTrack) notify(MusicCopy.queued(name(roomId), command.next)) else Unit
+        is CommandResult.Quiet -> Unit
         CommandResult.Opening -> notify(MusicCopy.opening(name(roomId)))
         is CommandResult.Declined -> notify(result.reason)
         is CommandResult.Failed -> notify(result.message)

@@ -187,6 +187,38 @@ class PortalMusicControllerTest {
         assertEquals("k-id", c.state.value.selected)
     }
 
+    @Test fun playingASearchResultInQuietHoursAsksFirst() = runTest {
+        val http = Http { r -> if (r.method == "POST") ok() else player(quiet = true) }
+        val c = controller(http, kitchen)
+        c.load(null)
+        val song = SongRef("vid00000009", "Hello", "Adele", null)
+        c.command(MusicCommand.PlayTrack(song), listOf("k-id"))
+        assertTrue(http.posts("ytmusic").isEmpty())
+        c.answerQuiet(yes = true)
+        val body = JSONObject(http.posts("ytmusic").single().body!!)
+        assertEquals("playtrack", body.getString("cmd"))
+        assertEquals("vid00000009", body.getString("videoId"))
+        assertTrue(body.getBoolean("playAnyway"))
+    }
+
+    @Test fun queueingASongIsConfirmedAndNeverAsks() = runTest {
+        val http = Http { r -> if (r.method == "POST") ok() else player(quiet = true) }
+        val c = controller(http, kitchen)
+        c.load(null)
+        c.command(MusicCommand.QueueTrack(SongRef("vid00000009", "Hello", "Adele", null), next = true), listOf("k-id"))
+        assertNull(c.state.value.ask)
+        assertEquals(MusicCopy.queued("Kitchen", next = true), c.state.value.notice?.text)
+    }
+
+    @Test fun sleepTimerAndNewCommandsOnAnOlderPortalAskForAnUpdate() = runTest {
+        val http = Http { r -> if (r.method == "POST") notFound() else player() }
+        val c = controller(http, kitchen)
+        c.load(null)
+        c.command(MusicCommand.Sleep(SleepChoice.MIN_30), listOf("k-id"))
+        assertEquals(30, JSONObject(http.posts("ytmusic").single().body!!).getInt("minutes"))
+        assertEquals(MusicCopy.update("Kitchen"), c.state.value.notice?.text)
+    }
+
     @Test fun requestsNeverCarryTheTokenInTheUrl() = runTest {
         val http = Http { player() }
         controller(http, kitchen).load(null)
