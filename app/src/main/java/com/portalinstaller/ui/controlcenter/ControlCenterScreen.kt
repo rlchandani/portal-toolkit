@@ -356,6 +356,7 @@ fun ControlCenterScreen() {
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+            com.portalinstaller.ui.doorbell.DoorbellBannerHost()
             if (detail == CenterDetail.NONE && tab in listOf(CenterTab.SETTINGS, CenterTab.PHOTOS)) {
                 ManagePortalsBar(state, photos = tab == CenterTab.PHOTOS)
             }
