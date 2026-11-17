@@ -180,6 +180,10 @@ internal fun ControlGlyph(
                 drawArc(tint,35f,290f,false,point(4f,4f),Size(16*u,16*u),style=stroke)
                 line(20f,4f,20f,10f);line(15f,10f,20f,10f)
             }
+            "timer" -> {
+                drawCircle(tint,8*u,point(12f,13f),style=stroke)
+                line(12f,13f,12f,8.5f); line(12f,13f,15f,15f); line(10f,2.5f,14f,2.5f)
+            }
             "chevron" -> { line(8f,5f,15f,12f); line(15f,12f,8f,19f) }
             "music" -> {
                 line(9f,17f,9f,5f); line(9f,5f,19f,3f); line(19f,3f,19f,15f)
