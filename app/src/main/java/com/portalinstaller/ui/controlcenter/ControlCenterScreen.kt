@@ -371,6 +371,8 @@ fun ControlCenterScreen() {
                     com.portalinstaller.ui.music.MusicPageScreen { detail = CenterDetail.NONE }
                 else if (shown == CenterDetail.TIMERS.name)
                     com.portalinstaller.ui.timers.TimersPageScreen { detail = CenterDetail.NONE }
+                else if (shown == CenterDetail.CHORES.name)
+                    com.portalinstaller.ui.chores.ChoresPageScreen { detail = CenterDetail.NONE }
                 else if (shown == CenterDetail.ROUTINES.name)
                     com.portalinstaller.ui.routines.RoutinesScreen(vm.routines, state.deviceName) { detail = CenterDetail.NONE }
                 else
@@ -441,7 +443,7 @@ fun ControlCenterScreen() {
                                         val guests = remember { com.portalinstaller.data.guests.GuestRepository.create(context) }
                                         com.portalinstaller.ui.guests.GuestScreen(guests)
                                     }
-                                    CenterDetail.ROUTINES, CenterDetail.MUSIC, CenterDetail.TIMERS -> Unit // rendered above, outside this column
+                                    CenterDetail.ROUTINES, CenterDetail.MUSIC, CenterDetail.TIMERS, CenterDetail.CHORES -> Unit // rendered above, outside this column
                                     CenterDetail.NONE -> Unit
                                 }
                             }
@@ -505,6 +507,7 @@ fun ControlCenterScreen() {
                                         ActionRow("Timers", "Start and stop timers in every room.", "timer") { detail = CenterDetail.TIMERS }
                                         ActionRow("Call everyone", "Chime and say a message in every room.", "scenes") { detail = CenterDetail.DINNER }
                                         ActionRow("Routines", "Picture checklists for mornings and bedtime.", "scenes") { detail = CenterDetail.ROUTINES }
+                                        ActionRow("Chores", "Stars for kids, goals and your OK.", "scenes") { detail = CenterDetail.CHORES }
                                         ActionRow("Guest card", "Wi-Fi QR and house basics for visitors.", "home") { detail = CenterDetail.GUESTS }
                                     }
                                     MediaPanel(state, vm)
