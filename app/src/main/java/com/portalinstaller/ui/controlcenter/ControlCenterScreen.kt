@@ -368,6 +368,8 @@ fun ControlCenterScreen() {
                 if (shown == CenterTab.LIST.name) HouseholdListScreen(Modifier.fillMaxSize())
                 else if (shown == CenterDetail.MUSIC.name)
                     com.portalinstaller.ui.music.MusicPageScreen { detail = CenterDetail.NONE }
+                else if (shown == CenterDetail.TIMERS.name)
+                    com.portalinstaller.ui.timers.TimersPageScreen { detail = CenterDetail.NONE }
                 else if (shown == CenterDetail.ROUTINES.name)
                     com.portalinstaller.ui.routines.RoutinesScreen(vm.routines, state.deviceName) { detail = CenterDetail.NONE }
                 else
@@ -438,7 +440,7 @@ fun ControlCenterScreen() {
                                         val guests = remember { com.portalinstaller.data.guests.GuestRepository.create(context) }
                                         com.portalinstaller.ui.guests.GuestScreen(guests)
                                     }
-                                    CenterDetail.ROUTINES, CenterDetail.MUSIC -> Unit // rendered above, outside this column
+                                    CenterDetail.ROUTINES, CenterDetail.MUSIC, CenterDetail.TIMERS -> Unit // rendered above, outside this column
                                     CenterDetail.NONE -> Unit
                                 }
                             }
@@ -499,6 +501,7 @@ fun ControlCenterScreen() {
                                         ActionRow("Jarvis", "Model and wake settings.", "jarvis", state.supports("jarvis")) { detail = CenterDetail.JARVIS }
                                         ActionRow("Snapshots", "Save and restore your setup.", "backup", state.supports("snapshot")) { detail = CenterDetail.SNAPSHOTS }
                                         ActionRow("Activity", "Progress and results.", "refresh", state.supports("operations")) { detail = CenterDetail.OPERATIONS }
+                                        ActionRow("Timers", "Start and stop timers in every room.", "timer") { detail = CenterDetail.TIMERS }
                                         ActionRow("Call everyone", "Chime and say a message in every room.", "scenes") { detail = CenterDetail.DINNER }
                                         ActionRow("Routines", "Picture checklists for mornings and bedtime.", "scenes") { detail = CenterDetail.ROUTINES }
                                         ActionRow("Guest card", "Wi-Fi QR and house basics for visitors.", "home") { detail = CenterDetail.GUESTS }
