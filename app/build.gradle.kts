@@ -80,6 +80,9 @@ android {
             excludes += "/META-INF/NOTICE.txt"
             excludes += "/META-INF/DEPENDENCIES"
         }
+        // Calls: libwebrtc ships for four ABIs (~10 MB each). Phones are arm64/armv7; x86_64 stays for the
+        // QA emulator. 32-bit x86 has no target, so its copy is dropped.
+        jniLibs { excludes += "lib/x86/libjingle_peerconnection_so.so" }
     }
 }
 
@@ -109,6 +112,11 @@ dependencies {
     implementation("com.google.android.gms:play-services-auth:21.3.0")
     implementation("androidx.browser:browser:1.8.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+
+    // Calls with the Portals on the home Wi-Fi: Google's libwebrtc, prebuilt (Apache-2.0, no GMS), the
+    // same build the Portal uses. ProcessLifecycleOwner keeps polling to while the app is open.
+    implementation("io.getstream:stream-webrtc-android:1.3.10")
+    implementation("androidx.lifecycle:lifecycle-process:2.8.7")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")

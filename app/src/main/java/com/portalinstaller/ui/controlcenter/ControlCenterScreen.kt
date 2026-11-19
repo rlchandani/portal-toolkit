@@ -373,6 +373,8 @@ fun ControlCenterScreen() {
                     com.portalinstaller.ui.timers.TimersPageScreen { detail = CenterDetail.NONE }
                 else if (shown == CenterDetail.CHORES.name)
                     com.portalinstaller.ui.chores.ChoresPageScreen { detail = CenterDetail.NONE }
+                else if (shown == CenterDetail.CALLS.name)
+                    com.portalinstaller.ui.calls.CallsPageScreen { detail = CenterDetail.NONE }
                 else if (shown == CenterDetail.ROUTINES.name)
                     com.portalinstaller.ui.routines.RoutinesScreen(vm.routines, state.deviceName) { detail = CenterDetail.NONE }
                 else
@@ -443,7 +445,8 @@ fun ControlCenterScreen() {
                                         val guests = remember { com.portalinstaller.data.guests.GuestRepository.create(context) }
                                         com.portalinstaller.ui.guests.GuestScreen(guests)
                                     }
-                                    CenterDetail.ROUTINES, CenterDetail.MUSIC, CenterDetail.TIMERS, CenterDetail.CHORES -> Unit // rendered above, outside this column
+                                    CenterDetail.ROUTINES, CenterDetail.MUSIC, CenterDetail.TIMERS, CenterDetail.CHORES,
+                                    CenterDetail.CALLS -> Unit // rendered above, outside this column
                                     CenterDetail.NONE -> Unit
                                 }
                             }
@@ -498,6 +501,7 @@ fun ControlCenterScreen() {
                                     }
                                     SectionTitle("Manage")
                                     GroupCard {
+                                        ActionRow("Calls", "Video call a Portal in your home.", "video") { detail = CenterDetail.CALLS }
                                         ActionRow("Music", "Now playing, volume and queue on your Portals.", "music") { detail = CenterDetail.MUSIC }
                                         ActionRow("Home layout", "Arrange and resize your widgets.", "layout", state.supports("layout")) { detail = CenterDetail.LAYOUT }
                                         ActionRow("Scenes", "Everyday routines and schedules.", "scenes", state.supports("scenes")) { detail = CenterDetail.SCENES }

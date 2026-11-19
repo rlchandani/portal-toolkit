@@ -15,5 +15,6 @@ class PortalApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
+        com.portalinstaller.data.calls.PhoneCalls.install(this)
     }
 }
