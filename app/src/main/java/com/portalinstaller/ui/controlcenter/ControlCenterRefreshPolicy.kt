@@ -7,7 +7,7 @@
 package com.portalinstaller.ui.controlcenter
 
 internal enum class CenterTab(val label: String, val glyph: String) {
-    HOME("Home", "home"), REMOTE("Remote", "remote"), PHOTOS("Photos", "photos"),
+    HOME("Home", "home"), HOUSE("House", "house"), REMOTE("Remote", "remote"), PHOTOS("Photos", "photos"),
     LIST("List", "list"), APPS("Apps", "apps"), SETTINGS("Settings", "settings")
 }
 
@@ -32,6 +32,7 @@ internal fun visiblePageRefreshes(tab: CenterTab, detail: CenterDetail, showCata
             CenterTab.APPS -> listOf(if (showCatalog) CenterRefresh.CATALOG else CenterRefresh.APPS)
             CenterTab.HOME, CenterTab.REMOTE -> emptyList()
             CenterTab.LIST -> emptyList() // the list screen owns its sync
+            CenterTab.HOUSE -> emptyList() // Control Center polls its Portal itself
         }
     }
 

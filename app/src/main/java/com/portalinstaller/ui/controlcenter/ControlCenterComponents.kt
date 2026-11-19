@@ -185,6 +185,13 @@ internal fun ControlGlyph(
                 line(12f,13f,12f,8.5f); line(12f,13f,15f,15f); line(10f,2.5f,14f,2.5f)
             }
             "chevron" -> { line(8f,5f,15f,12f); line(15f,12f,8f,19f) }
+            "house" -> {
+                val roof = Path().apply { moveTo(3*u, 11*u); lineTo(12*u, 4*u); lineTo(21*u, 11*u) }
+                drawPath(roof, tint, style = stroke)
+                line(5f,10f,5f,21f); line(5f,21f,19f,21f); line(19f,21f,19f,10f)
+                drawCircle(tint, 2.4f*u, point(12f,13.5f), style = stroke)
+                line(11f,17f,13f,17f)
+            }
             "video" -> {
                 drawRoundRect(tint, point(2f,6f), Size(13*u,12*u),
                     androidx.compose.ui.geometry.CornerRadius(2.5f*u), style = stroke)

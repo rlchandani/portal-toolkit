@@ -35,6 +35,8 @@
         tools:ignore="QueryAllPackagesPermission" />
 
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Control Center: fingerprint/face confirm before unlocking, opening the garage or disarming. -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!-- Wireless self-updates from GitHub Releases: install our own newer, pinned-signature APK,

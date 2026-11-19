@@ -43,6 +43,8 @@ addresses may be entered explicitly. This app does not create an Internet relay.
 ## Daily controls
 
 - **Home:** slideshow, home layout, scenes, Jarvis, snapshots, activity, media.
+- **House:** Home Assistant through a paired Portal: the live map, rooms, device controls,
+  Security, Cameras, the Tesla screen, alerts and scenes. See [Control Center on the phone](control-center-phone.md).
 - **Remote:** pointer movement, tap, scrolling, keyboard, Back/Home, media/volume.
   Gestures and text require Immortal's accessibility service on the Portal.
   Select a text field on the Portal before sending text from the phone.
