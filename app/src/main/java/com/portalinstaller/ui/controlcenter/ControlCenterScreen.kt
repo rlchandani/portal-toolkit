@@ -367,6 +367,7 @@ fun ControlCenterScreen() {
                 // These screens scroll themselves; nesting them in the page LazyColumn crashes
                 // (infinite max height), so they render in place of it.
                 if (shown == CenterTab.LIST.name) HouseholdListScreen(Modifier.fillMaxSize())
+                else if (shown == CenterTab.HOUSE.name) com.portalinstaller.ui.house.HouseScreen(Modifier.fillMaxSize())
                 else if (shown == CenterDetail.MUSIC.name)
                     com.portalinstaller.ui.music.MusicPageScreen { detail = CenterDetail.NONE }
                 else if (shown == CenterDetail.TIMERS.name)
@@ -449,7 +450,7 @@ fun ControlCenterScreen() {
                             }
                         }
                     } else when (CenterTab.valueOf(shown)) {
-                        CenterTab.LIST -> Unit // rendered above, outside this column
+                        CenterTab.LIST, CenterTab.HOUSE -> Unit // rendered above, outside this column
                         CenterTab.HOME -> item {
                             PageSections {
                                 PageTitle("Your Portal", "Everything you need, within reach.")

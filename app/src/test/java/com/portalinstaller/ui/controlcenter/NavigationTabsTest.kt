@@ -5,7 +5,7 @@ import org.junit.Test
 
 class NavigationTabsTest {
     @Test fun barShowsTheHouseholdListAndReachesAppsFromHomeInstead() {
-        assertEquals(listOf(CenterTab.HOME, CenterTab.REMOTE, CenterTab.PHOTOS, CenterTab.LIST, CenterTab.SETTINGS), navigationTabs)
+        assertEquals(listOf(CenterTab.HOME, CenterTab.HOUSE, CenterTab.REMOTE, CenterTab.PHOTOS, CenterTab.LIST, CenterTab.SETTINGS), navigationTabs)
     }
 
     @Test fun listTabLetsItsScreenOwnRefresh() {

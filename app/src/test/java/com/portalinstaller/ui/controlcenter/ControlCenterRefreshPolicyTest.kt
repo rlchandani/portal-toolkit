@@ -20,6 +20,7 @@ class ControlCenterRefreshPolicyTest {
     private val pages = listOf(
         Page(CenterTab.HOME),
         Page(CenterTab.REMOTE),
+        Page(CenterTab.HOUSE),
         Page(CenterTab.PHOTOS, requests = listOf(CenterRefresh.SOURCES, CenterRefresh.PHOTOS, CenterRefresh.SETTINGS)),
         Page(CenterTab.APPS, requests = listOf(CenterRefresh.APPS)),
         Page(CenterTab.APPS, catalog = true, requests = listOf(CenterRefresh.CATALOG)),

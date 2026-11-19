@@ -185,6 +185,13 @@ internal fun ControlGlyph(
                 line(12f,13f,12f,8.5f); line(12f,13f,15f,15f); line(10f,2.5f,14f,2.5f)
             }
             "chevron" -> { line(8f,5f,15f,12f); line(15f,12f,8f,19f) }
+            "house" -> {
+                val roof = Path().apply { moveTo(3*u, 11*u); lineTo(12*u, 4*u); lineTo(21*u, 11*u) }
+                drawPath(roof, tint, style = stroke)
+                line(5f,10f,5f,21f); line(5f,21f,19f,21f); line(19f,21f,19f,10f)
+                drawCircle(tint, 2.4f*u, point(12f,13.5f), style = stroke)
+                line(11f,17f,13f,17f)
+            }
             "music" -> {
                 line(9f,17f,9f,5f); line(9f,5f,19f,3f); line(19f,3f,19f,15f)
                 drawCircle(tint,2.5f*u,point(6.5f,17f),style=stroke)

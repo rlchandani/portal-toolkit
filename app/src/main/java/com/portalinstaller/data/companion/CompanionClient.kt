@@ -268,13 +268,26 @@ class CompanionClient(private val transport: CompanionTransport = OkHttpCompanio
             ?: throw CompanionException(CompanionError("invalid_thumbnail", "Portal returned an invalid thumbnail."))
     }
 
+    /** A feature route that answers a POST with a picture (Control Center camera snapshots). */
+    suspend fun postImage(session: CompanionSession, route: String, body: JSONObject, limit: Long): ByteArray {
+        require(route.matches(ROUTE)) { "Invalid remote route." }
+        val response = transport.execute(CompanionRequest("POST", "${session.device.endpoint}/remote/$route", session.token,
+            body.toString(), binary = true, maxResponseBytes = limit))
+        if (response.status !in 200..299) {
+            executeResponse(response)
+            throw CompanionException(CompanionError("image_failed", "Could not load the picture.", response.status))
+        }
+        return response.bytes?.takeIf { it.isNotEmpty() && it.size <= limit }
+            ?: throw CompanionException(CompanionError("invalid_image", "Portal returned an invalid picture."))
+    }
+
     private fun photoUrl(session: CompanionSession, route: String, query: Map<String, String>): String =
         "${session.device.endpoint}/remote/$route".toHttpUrl().newBuilder().apply {
             query.forEach { (key, value) -> addQueryParameter(key, value) }
         }.build().toString()
 
     private suspend fun request(endpoint: String, token: String?, route: String, body: JSONObject? = null): JSONObject {
-        require(route.matches(Regex("[a-z]+(?:/[a-z]+)*"))) { "Invalid remote route." }
+        require(route.matches(ROUTE)) { "Invalid remote route." }
         return executeJson(CompanionRequest(if (body == null) "GET" else "POST", "$endpoint/remote/$route", token, body?.toString()))
     }
 
@@ -301,6 +314,8 @@ class CompanionClient(private val transport: CompanionTransport = OkHttpCompanio
     }
 
     internal companion object {
+        private val ROUTE = Regex("[a-z]+(?:/[a-z]+)*")
+
         /** Server failure metadata is preserved; secret-shaped fields are never surfaced. */
         fun sanitized(json: JSONObject, sourceCredentials: Boolean = false): JSONObject {
             fun clean(value: Any?): Any? = when (value) {
