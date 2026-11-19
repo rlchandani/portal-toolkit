@@ -185,6 +185,11 @@ internal fun ControlGlyph(
                 line(12f,13f,12f,8.5f); line(12f,13f,15f,15f); line(10f,2.5f,14f,2.5f)
             }
             "chevron" -> { line(8f,5f,15f,12f); line(15f,12f,8f,19f) }
+            "video" -> {
+                drawRoundRect(tint, point(2f,6f), Size(13*u,12*u),
+                    androidx.compose.ui.geometry.CornerRadius(2.5f*u), style = stroke)
+                line(15f,10f,22f,6.5f); line(22f,6.5f,22f,17.5f); line(22f,17.5f,15f,14f)
+            }
             "music" -> {
                 line(9f,17f,9f,5f); line(9f,5f,19f,3f); line(19f,3f,19f,15f)
                 drawCircle(tint,2.5f*u,point(6.5f,17f),style=stroke)
