@@ -36,6 +36,51 @@ class HouseCodecTest {
         assertEquals("on", first.entity("light.a")?.state)
     }
 
+    private fun scenes(vararg names: String) = JSONArray(names.map { JSONObject().put("id", "scene.$it").put("name", it).put("tone", "warm").put("icon", "sun") })
+
+    @Test fun aSectionLeftOutBecauseItsVersionIsCurrentIsKept() {
+        val first = HouseCodec.merge(null, answer(1, true, e("light.a", "on")).put("scenes", scenes("Evening"))
+            .put("rooms", JSONArray()).put("tesla", JSONObject.NULL)
+            .put("sv", JSONObject().put("alerts", "a1").put("scenes", "s1").put("rooms", "r1").put("tesla", "t0")))
+        assertEquals(listOf("Evening"), first.scenes.map { it.name })
+        assertEquals(mapOf("alerts" to "a1", "scenes" to "s1", "rooms" to "r1", "tesla" to "t0"), first.sectionVersions)
+        // Only the entity delta and the alerts moved: scenes stay as held.
+        val delta = JSONObject().put("ok", true).put("rev", 2).put("minute", 10).put("conn", JSONObject().put("phase", "live"))
+            .put("full", false).put("entities", JSONArray().put(e("light.a", "off"))).put("removed", JSONArray())
+            .put("alerts", JSONArray()).put("sv", JSONObject().put("alerts", "a2").put("scenes", "s1").put("rooms", "r1").put("tesla", "t0"))
+        val second = HouseCodec.merge(first, delta)
+        assertEquals(listOf("Evening"), second.scenes.map { it.name })
+        assertEquals("off", second.entity("light.a")?.state)
+        assertEquals("a2", second.sectionVersions["alerts"])
+    }
+
+    @Test fun anOlderPortalWithoutVersionsStillReplacesEverySection() {
+        val first = HouseCodec.merge(null, answer(1, true).put("scenes", scenes("Evening")).put("sv", JSONObject().put("scenes", "s1")))
+        val older = HouseCodec.merge(first, answer(2, false))
+        assertEquals("no scenes key from an older Portal means none", emptyList<String>(), older.scenes.map { it.name })
+        assertEquals(emptyMap<String, String>(), older.sectionVersions)
+    }
+
+    @Test fun aCarThatGoesAwayIsClearedByAnExplicitNull() {
+        val car = HouseCodec.merge(null, answer(1, true).put("tesla", JSONObject().put("label", "Model Y").put("headline", "Parked"))
+            .put("sv", JSONObject().put("tesla", "t1")))
+        assertEquals("Model Y", car.tesla?.label)
+        val gone = HouseCodec.merge(car, answer(2, false).put("tesla", JSONObject.NULL).put("sv", JSONObject().put("tesla", "t0")))
+        assertNull(gone.tesla)
+    }
+
+    @Test fun thePollBodyCarriesTheVersionsHeld() {
+        val fresh = HouseCodec.pollBody(null, null)
+        assertEquals(0L, fresh.getLong("since"))
+        assertEquals("a new phone says it knows versions, holding none", 0, fresh.getJSONObject("sv").length())
+        assertFalse(fresh.has("want"))
+        val held = HouseSnapshot(rev = 4, minute = 9, sectionVersions = mapOf("rooms" to "r1"))
+        val body = HouseCodec.pollBody(held, "tesla")
+        assertEquals(4L, body.getLong("since")); assertEquals(9L, body.getLong("minute"))
+        assertEquals("r1", body.getJSONObject("sv").getString("rooms"))
+        assertEquals("tesla", body.getString("want"))
+    }
+
     @Test fun fullAnswerReplacesEverything() {
         val a = HouseCodec.merge(null, answer(1, true, e("light.a", "on"), e("light.b", "on")))
         val b = HouseCodec.merge(a, answer(9, true, e("light.c", "on")))

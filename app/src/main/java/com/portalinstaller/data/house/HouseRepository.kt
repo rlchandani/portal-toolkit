@@ -107,7 +107,7 @@ class HouseRepository(
 
     private suspend fun read(session: CompanionSession, want: String?): Read = try {
         val held = mutable.value.snapshot?.takeIf { current?.device?.id == session.device.id }
-        val body = JSONObject().put("since", held?.rev ?: 0L).put("minute", held?.minute ?: -1L).apply { want?.let { put("want", it) } }
+        val body = HouseCodec.pollBody(held, want)
         Read.Ok(session, withTimeout(ANSWER_MS) { client.post(session, ROUTE, body) })
     } catch (e: TimeoutCancellationException) { Read.Skip(HouseReach.OFFLINE) }
     catch (e: CancellationException) { throw e }
