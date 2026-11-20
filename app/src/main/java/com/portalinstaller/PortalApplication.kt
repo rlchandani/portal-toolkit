@@ -16,5 +16,7 @@ class PortalApplication : Application() {
         super.onCreate()
         container = AppContainer(this)
         com.portalinstaller.data.calls.PhoneCalls.install(this)
+        // Calling 2b: background ringing comes back with the app if the owner turned it on.
+        if (com.portalinstaller.data.calls.CallStandby.load(this)) com.portalinstaller.data.calls.CallStandbyService.start(this)
     }
 }

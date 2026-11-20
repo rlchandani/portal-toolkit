@@ -47,6 +47,7 @@ class ControlCenterRefreshPolicyTest {
             CenterDetail.OPERATIONS to listOf(CenterRefresh.OPERATIONS),
             CenterDetail.GUESTS to emptyList(),
             CenterDetail.TIMERS to emptyList(),
+            CenterDetail.REMINDERS to emptyList(),
         )
         details.forEach { (detail, expected) ->
             CenterTab.entries.forEach { tab ->

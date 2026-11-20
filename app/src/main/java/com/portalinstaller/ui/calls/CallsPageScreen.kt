@@ -53,8 +53,8 @@ import kotlinx.coroutines.delay
 
 /**
  * Home › Calls (`phContacts`): this home's Portals with live presence, each with a video and an
- * audio call. Phones call rooms; only Portals drop in. Honest about reach: a Portal can ring this
- * phone only while Portal Toolkit is open.
+ * audio call and (Calling 2b) a video message. Phones call rooms; only Portals drop in. Messages
+ * from Portals, and the opt-in "Ring when Portal Toolkit is closed", sit below.
  */
 @Composable
 fun CallsPageScreen(onBack: () -> Unit) {
@@ -78,10 +78,12 @@ fun CallsPageScreen(onBack: () -> Unit) {
             else -> {
                 item { SectionTitle("This home") }
                 item { GroupCard { contacts.forEach { ContactRow(it, CallContacts.presence(it, now), dial) } } }
+                messagesSection(this, now)
+                item { SectionTitle("Ringing") }
+                item { BackgroundRingingCard() }
             }
         }
-        item { Note("Phones call rooms. Only Portals can drop in.") }
-        item { Note("Portals can ring this phone while Portal Toolkit is open. Ringing a phone in your pocket comes in a later update.") }
+        item { Note("Phones call rooms and can join group calls. Only Portals can drop in.") }
     }
 }
 
@@ -92,6 +94,12 @@ private fun ContactRow(contact: CallContact, presence: ContactPresence, dial: (C
         Column(Modifier.weight(1f)) {
             Text(contact.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, maxLines = 1)
             Text(presence.label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+        }
+        val context = LocalContext.current
+        // A message can be left whenever the Portal answers polls (quiet hours included: it never rings).
+        CallButton("msg", "Message ${contact.name}", contact.ref() != null && presence != ContactPresence.OFFLINE &&
+            presence != ContactPresence.CHECKING, MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurface) {
+            contact.ref()?.let { PhoneMessageActivity.compose(context, it) }
         }
         CallButton("phone", "Audio call ${contact.name}", presence.callable, MaterialTheme.colorScheme.surfaceVariant,
             MaterialTheme.colorScheme.onSurface) { dial(contact, false) }
@@ -117,7 +125,7 @@ private fun PresenceDot(p: ContactPresence, modifier: Modifier) {
 }
 
 @Composable
-private fun Note(text: String) {
+internal fun Note(text: String) {
     Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(horizontal = 6.dp))
 }
