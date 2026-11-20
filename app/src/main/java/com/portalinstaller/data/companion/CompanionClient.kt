@@ -113,9 +113,12 @@ class OkHttpCompanionTransport(
 }
 
 class CompanionClient(private val transport: CompanionTransport = OkHttpCompanionTransport()) {
-    suspend fun pair(endpoint: String, pin: String): JSONObject {
+    /** [label] names this phone in the Portal's Paired phones list; older Portals ignore it. */
+    suspend fun pair(endpoint: String, pin: String, label: String? = null): JSONObject {
         require(pin.matches(Regex("[0-9]{6}"))) { "Enter the six-digit PIN shown on the Portal." }
-        val result = request(endpoint, null, "pair", JSONObject().put("pin", pin))
+        val body = JSONObject().put("pin", pin)
+        CompanionPortalErrors.pairLabel(label)?.let { body.put("label", it) }
+        val result = request(endpoint, null, "pair", body)
         if (result.optString("token").isBlank()) throw CompanionException(CompanionError("missing_token", "Portal did not return a pairing session."))
         return result
     }
@@ -299,12 +302,7 @@ class CompanionClient(private val transport: CompanionTransport = OkHttpCompanio
         }
         if (response.status !in 200..299 || !json.optBoolean("ok")) {
             val code = json.optString("error", "request_failed")
-            val message = when (code) {
-                "bad_pin" -> "PIN was rejected or expired. Show a fresh PIN on the Portal."
-                "unauthorized" -> "Pair this phone with the Portal again."
-                "no_accessibility", "no_gestures" -> "Enable Hearthpane's accessibility service on the Portal."
-                else -> "Portal rejected the request: $code (HTTP ${response.status})."
-            }
+            val message = CompanionPortalErrors.message(code, response.status, json)
             throw CompanionException(CompanionError(code, message, response.status, sanitized(json)))
         }
         if (json.has("dispatched") && !json.optBoolean("dispatched") || json.has("applied") && json.opt("applied") == false) {

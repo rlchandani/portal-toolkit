@@ -134,7 +134,7 @@ class PhotoDeleteAcknowledgmentUiTest {
 
         confirmRenderedDelete()
 
-        compose.onNodeWithText("Pair this phone with the Portal again.")
+        compose.onNodeWithText("This phone's pairing ended. Pair again with a fresh PIN from the Portal.")
             .performScrollTo().assertIsDisplayed()
         compose.onNodeWithText(REVIEW_WARNING).assertDoesNotExist()
         assertPhotoRetained()
