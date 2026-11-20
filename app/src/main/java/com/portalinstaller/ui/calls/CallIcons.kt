@@ -107,6 +107,31 @@ internal fun CallIcon(name: String, tint: Color, size: Dp = 26.dp, modifier: Mod
                 drawArc(tint, 180f, 180f, false, p(8f, 4f), Size(8 * u, 9 * u), style = stroke)
                 line(8f, 8.5f, 8f, 10.5f); line(16f, 8.5f, 16f, 10.5f)
             }
+            // Calling 2b: "To Portal" (mock house icon), "To phone"/moved, messages, play, record.
+            "house" -> {
+                line(3f, 11f, 12f, 4f); line(12f, 4f, 21f, 11f)
+                drawPath(Path().apply { moveTo(5.5f * u, 9.5f * u); lineTo(5.5f * u, 20 * u); lineTo(18.5f * u, 20 * u); lineTo(18.5f * u, 9.5f * u) },
+                    tint, style = stroke)
+                drawRect(tint, p(10f, 15f), Size(4 * u, 5 * u), style = stroke)
+            }
+            "handoff" -> {
+                drawRoundRect(tint, p(9.5f, 2.5f), Size(9 * u, 19 * u), CornerRadius(2 * u), style = stroke)
+                line(12.5f, 18f, 15.5f, 18f); line(2.5f, 10f, 10.5f, 10f); line(7.5f, 7f, 10.5f, 10f); line(7.5f, 13f, 10.5f, 10f)
+            }
+            "msg" -> {
+                drawRoundRect(tint, p(2.5f, 5.5f), Size(14 * u, 13 * u), CornerRadius(3 * u), style = stroke)
+                drawPath(Path().apply { moveTo(16.5f * u, 10 * u); lineTo(21.5f * u, 7 * u); lineTo(21.5f * u, 17 * u); lineTo(16.5f * u, 14 * u) },
+                    tint, style = stroke)
+                drawCircle(tint, 2.2f * u, p(9.5f, 12f))
+            }
+            "play" -> drawPath(Path().apply { moveTo(7.5f * u, 4.6f * u); lineTo(20 * u, 12 * u); lineTo(7.5f * u, 19.4f * u); close() }, tint)
+            "back" -> { line(19f, 12f, 5f, 12f); line(11f, 6f, 5f, 12f); line(11f, 18f, 5f, 12f) }
+            "rec" -> drawCircle(tint, 7 * u, p(12f, 12f))
+            "trash" -> {
+                line(4f, 7f, 20f, 7f); line(9.5f, 7f, 9.5f, 4.5f); line(9.5f, 4.5f, 14.5f, 4.5f); line(14.5f, 4.5f, 14.5f, 7f)
+                drawPath(Path().apply { moveTo(6.5f * u, 7 * u); lineTo(7.5f * u, 20.5f * u); lineTo(16.5f * u, 20.5f * u); lineTo(17.5f * u, 7 * u) },
+                    tint, style = stroke)
+            }
             else -> drawCircle(tint, 8 * u, p(12f, 12f), style = stroke)
         }
     }

@@ -35,11 +35,15 @@ import org.webrtc.audio.JavaAudioDeviceModule
  * verified answer. Front camera through Camera2, VOICE_COMMUNICATION mic with the phone's
  * hardware echo canceller, HW H.264/VP8. All WebRTC work runs on one thread; [release] tears
  * everything down. Nothing is recorded or saved.
+ *
+ * Calling 2b: one peer connection per Portal in the call (keyed by session id), all sharing the
+ * one camera and mic; [close] drops a single Portal. At 3+ people every send drops to half
+ * resolution and a lower bitrate, as on the Portal, so a phone in a group stays cool.
  */
 class PhoneCallMedia(context: Context, private val events: Events) {
     interface Events {
-        fun onConnected()
-        fun onDisconnected()
+        fun onConnected(peer: String)
+        fun onDisconnected(peer: String)
     }
 
     private val app = context.applicationContext
@@ -47,18 +51,28 @@ class PhoneCallMedia(context: Context, private val events: Events) {
     val egl: EglBase = EglBase.create()
     /** The UI points these at its renderers (null target = not shown). */
     val local = ForwardingSink()
+    /** The first Portal's picture (1:1 screens); group tiles use [remote] per peer. */
     val remote = ForwardingSink()
+    private val remotes = java.util.concurrent.ConcurrentHashMap<String, ForwardingSink>()
+    @Volatile private var first: String? = null
+
+    /** The sink for [peer]'s picture (stable for the call; frames flow once its track arrives). */
+    fun remote(peer: String): ForwardingSink = remotes.getOrPut(peer) { ForwardingSink() }
+
+    /** Which peer [remote] shows (the call's first Portal; it changes when the first one leaves). */
+    fun primary(peer: String) { first = peer; remote.target = null }
 
     private var adm: JavaAudioDeviceModule? = null
     private var factory: PeerConnectionFactory? = null
-    private var pc: PeerConnection? = null
+    private val pcs = HashMap<String, PeerConnection>()
+    private var people = 2
     private var videoSource: org.webrtc.VideoSource? = null
     private var audioSource: org.webrtc.AudioSource? = null
     private var videoTrack: VideoTrack? = null
     private var audioTrack: org.webrtc.AudioTrack? = null
     private var capturer: CameraVideoCapturer? = null
     private var helper: SurfaceTextureHelper? = null
-    private var gathered: (() -> Unit)? = null
+    private val gathered = HashMap<String, () -> Unit>()
     private var savedAudioMode: Int? = null
     @Volatile private var released = false
 
@@ -71,23 +85,49 @@ class PhoneCallMedia(context: Context, private val events: Events) {
         runCatching { app.getSystemService(AudioManager::class.java)?.isSpeakerphoneOn = on }
     }
 
-    /** The offer SDP (LAN host candidates only, gathering complete) or null. */
-    fun createOffer(done: (String?) -> Unit) = post {
+    /** The offer SDP to [key] (LAN host candidates only, gathering complete) or null. */
+    fun createOffer(key: String, done: (String?) -> Unit) = post {
         val f = factory ?: return@post done(null)
-        val peer = f.createPeerConnection(lanConfig(), observer) ?: return@post done(null)
-        pc = peer
+        pcs.remove(key)?.let { runCatching { it.dispose() } }
+        val peer = f.createPeerConnection(lanConfig(), observer(key)) ?: return@post done(null)
+        pcs[key] = peer
         val init = { RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.SEND_RECV, listOf(STREAM_ID)) }
         peer.addTransceiver(audioTrack, init())
         peer.addTransceiver(videoTrack, init())
+        applySendProfile(peer)
         peer.createOffer(sdpObserver(onCreate = { desc ->
-            peer.setLocalDescription(sdpObserver(onSet = { post { whenGathered(peer, done) } }, onFail = { done(null) }), desc)
+            peer.setLocalDescription(sdpObserver(onSet = { post { whenGathered(key, peer, done) } }, onFail = { done(null) }), desc)
         }, onFail = { done(null) }), MediaConstraints())
     }
 
-    fun applyAnswer(sdp: String, done: (Boolean) -> Unit) = post {
-        val peer = pc ?: return@post done(false)
+    fun applyAnswer(key: String, sdp: String, done: (Boolean) -> Unit) = post {
+        val peer = pcs[key] ?: return@post done(false)
         peer.setRemoteDescription(sdpObserver(onSet = { done(true) }, onFail = { done(false) }),
             SessionDescription(SessionDescription.Type.ANSWER, sdp))
+    }
+
+    /** One Portal left the call: close only its link (camera and mic stay for the others). */
+    fun close(key: String) = post {
+        gathered.remove(key)
+        pcs.remove(key)?.let { runCatching { it.dispose() } }
+        remotes.remove(key)?.target = null
+    }
+
+    /** People in the call (this phone included): 3+ sends half resolution at a lower bitrate. */
+    fun groupSize(n: Int) = post {
+        if (n == people) return@post
+        people = n
+        pcs.values.forEach(::applySendProfile)
+    }
+
+    private fun applySendProfile(peer: PeerConnection) {
+        val sender = peer.senders.firstOrNull { it.track()?.kind() == "video" } ?: return
+        val params = sender.parameters
+        params.encodings.forEach {
+            it.scaleResolutionDownBy = if (people >= 3) GROUP_SCALE else 1.0
+            it.maxBitrateBps = if (people >= 3) GROUP_MAX_BPS else SOLO_MAX_BPS
+        }
+        runCatching { sender.parameters = params }
     }
 
     fun release() {
@@ -97,14 +137,16 @@ class PhoneCallMedia(context: Context, private val events: Events) {
         remote.target = null
         thread.execute {
             runCatching { stopCamera() }
-            runCatching { pc?.dispose() }
+            pcs.values.forEach { runCatching { it.dispose() } }
+            pcs.clear()
+            remotes.values.forEach { it.target = null }
             runCatching { videoTrack?.dispose(); audioTrack?.dispose() }
             runCatching { videoSource?.dispose(); audioSource?.dispose() }
             runCatching { factory?.dispose() }
             runCatching { adm?.release() }
             runCatching { egl.release() }
             restoreAudio()
-            pc = null; factory = null; adm = null
+            factory = null; adm = null
             Log.i(TAG, "media released")
         }
         thread.shutdown()
@@ -163,26 +205,34 @@ class PhoneCallMedia(context: Context, private val events: Events) {
         helper = null
     }
 
-    private fun whenGathered(peer: PeerConnection, done: (String?) -> Unit) {
+    private fun whenGathered(key: String, peer: PeerConnection, done: (String?) -> Unit) {
         val finish = { done(peer.localDescription?.description?.let(CallSdp::lanOnly)?.takeIf(CallSdp::hasLanCandidate)) }
         if (peer.iceGatheringState() == PeerConnection.IceGatheringState.COMPLETE) { finish(); return }
-        gathered = finish
-        thread.schedule({ gathered?.let { gathered = null; it() } }, GATHER_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+        gathered[key] = finish
+        thread.schedule({ post { gathered.remove(key)?.invoke() } }, GATHER_TIMEOUT_MS, TimeUnit.MILLISECONDS)
     }
 
-    private val observer = object : PeerObserver() {
+    private fun observer(key: String) = object : PeerObserver() {
         override fun onIceGatheringChange(state: PeerConnection.IceGatheringState?) {
-            if (state == PeerConnection.IceGatheringState.COMPLETE) post { gathered?.let { gathered = null; it() } }
+            if (state == PeerConnection.IceGatheringState.COMPLETE) post { gathered.remove(key)?.invoke() }
         }
         override fun onConnectionChange(newState: PeerConnection.PeerConnectionState?) {
             when (newState) {
-                PeerConnection.PeerConnectionState.CONNECTED -> events.onConnected()
-                PeerConnection.PeerConnectionState.DISCONNECTED, PeerConnection.PeerConnectionState.FAILED -> events.onDisconnected()
+                PeerConnection.PeerConnectionState.CONNECTED -> events.onConnected(key)
+                PeerConnection.PeerConnectionState.DISCONNECTED, PeerConnection.PeerConnectionState.FAILED -> events.onDisconnected(key)
                 else -> Unit
             }
         }
         override fun onTrack(transceiver: RtpTransceiver?) {
-            (transceiver?.receiver?.track() as? VideoTrack)?.addSink(remote)
+            (transceiver?.receiver?.track() as? VideoTrack)?.addSink(PeerSink(key))
+        }
+    }
+
+    /** Frames from one peer: to its own tile, and to [remote] while it is the call's first Portal. */
+    private inner class PeerSink(private val key: String) : VideoSink {
+        override fun onFrame(frame: org.webrtc.VideoFrame) {
+            remote(key).onFrame(frame)
+            if (first == key) remote.onFrame(frame)
         }
     }
 
@@ -219,6 +269,9 @@ class PhoneCallMedia(context: Context, private val events: Events) {
         private const val CAPTURE_HEIGHT = 720
         private const val CAPTURE_FPS = 30
         private const val GATHER_TIMEOUT_MS = 2_500L
+        private const val GROUP_SCALE = 2.0
+        private const val GROUP_MAX_BPS = 700_000
+        private const val SOLO_MAX_BPS = 2_500_000
 
         /** Home Wi-Fi only: no STUN or TURN, UDP, one gathering pass. */
         fun lanConfig(): PeerConnection.RTCConfiguration = PeerConnection.RTCConfiguration(emptyList()).apply {

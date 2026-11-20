@@ -18,8 +18,9 @@ import org.webrtc.SurfaceViewRenderer
  * self view, stacked above the remote SurfaceView and mirrored like a mirror.
  */
 @Composable
-internal fun CallVideo(media: PhoneCallMedia, local: Boolean, modifier: Modifier = Modifier) {
-    val sink = if (local) media.local else media.remote
+internal fun CallVideo(media: PhoneCallMedia, local: Boolean, modifier: Modifier = Modifier, peer: String? = null) {
+    // Group tiles show one Portal each ([peer]); 1:1 shows the first Portal.
+    val sink = if (local) media.local else peer?.let(media::remote) ?: media.remote
     AndroidView(
         factory = { ctx ->
             SurfaceViewRenderer(ctx).apply {

@@ -24,8 +24,45 @@ enum class PhoneEndReason(val title: String) {
     DECLINED("Call declined"), REMOTE_DECLINED("They’re busy right now"), NO_ANSWER("No answer"),
     MISSED("Missed call"), BUSY("Already in a call"), QUIET("Quiet hours there"),
     CALLS_OFF("This Portal doesn’t take calls from phones"),
-    UNREACHABLE("Couldn’t reach the Portal"), FAILED("The call couldn’t connect"), NETWORK_LOST("The Wi-Fi dropped");
+    UNREACHABLE("Couldn’t reach the Portal"), FAILED("The call couldn’t connect"), NETWORK_LOST("The Wi-Fi dropped"),
+    /** Calling 2b: this phone handed the call to a Portal ("To Portal"). */
+    MOVED("Call moved");
 }
+
+/** One more Portal in a group call with this phone (Calling 2b). The phone always offers to it. */
+enum class LegPhase { JOINING, LIVE, RECONNECTING; val connected get() = this != JOINING }
+
+data class PhoneLeg(
+    val portal: PortalRef,
+    val phase: LegPhase,
+    val sinceMs: Long,
+    val connectedMs: Long? = null,
+    val remoteCameraOn: Boolean = true,
+    val remoteMicOn: Boolean = true,
+    /** This leg is the Portal the call is moving to. */
+    val moving: Boolean = false,
+)
+
+/**
+ * A call being handed between this person's devices. [to]: we are moving it to that Portal
+ * (session id); [from]: it is moving here from that Portal. [ringing]: the target hasn't said yes.
+ */
+data class PhoneMove(
+    val to: String? = null,
+    val from: String? = null,
+    val ringing: Boolean = false,
+    val sinceMs: Long = 0L,
+    val targetLiveMs: Long? = null,
+    val announced: Boolean = false,
+    /** Source side: the Portal we are moving to (its session id is [to]). */
+    val target: PortalRef? = null,
+)
+
+/** Something worth a line in the call ("Den left", "Kitchen didn’t pick up · the call stays here"). */
+data class PhoneNotice(val name: String, val text: String, val atMs: Long)
+
+/** The Portals a group ring names, as the Portal said them (ids are the same on every Portal). */
+data class MemberRef(val portalId: String, val name: String)
 
 data class PhoneCall(
     val id: String,
@@ -40,7 +77,32 @@ data class PhoneCall(
     val connectedMs: Long? = null,
     val remoteCameraOn: Boolean = true,
     val remoteMicOn: Boolean = true,
-)
+    /** Group calls: the other Portals beyond [portal] (at most [PhoneGroup.MAX_LEGS]). */
+    val legs: List<PhoneLeg> = emptyList(),
+    /** Incoming group ring: the Portals already in the call; we offer to each on Answer. */
+    val invited: List<PortalRef> = emptyList(),
+    /** Who added us ("Living room added you to a call with Kitchen"). */
+    val inviter: String? = null,
+    val move: PhoneMove? = null,
+    /** The Portal this call moved here from: only it may ask for the call back ("Move it back here"). */
+    val cameFrom: String? = null,
+    /** The other side answered by itself (Grandma mode): no adding, no moving. */
+    val remoteAutoAnswered: Boolean = false,
+    val notice: PhoneNotice? = null,
+) {
+    val people: Int get() = 2 + legs.size
+    val group: Boolean get() = legs.isNotEmpty()
+    fun leg(sessionId: String): PhoneLeg? = legs.firstOrNull { it.portal.sessionId == sessionId }
+    fun isMember(sessionId: String): Boolean = portal.sessionId == sessionId || leg(sessionId) != null
+    fun isMemberPortal(portalId: String): Boolean = portal.portalId == portalId || legs.any { it.portal.portalId == portalId }
+    /** Everyone we talk to: the first Portal, then the legs. */
+    val members: List<PortalRef> get() = listOf(portal) + legs.map { it.portal }
+}
+
+object PhoneGroup {
+    const val MAX_PEOPLE = 4
+    const val MAX_LEGS = MAX_PEOPLE - 2
+}
 
 data class EndedPhoneCall(
     val id: String,
@@ -50,23 +112,38 @@ data class EndedPhoneCall(
     val connectedMs: Long?,
     val endedMs: Long,
     val quietEndMin: Int? = null,
+    /** [PhoneEndReason.MOVED]: the Portal that carries the call on. */
+    val movedTo: PortalRef? = null,
 )
 
-data class PhoneCallState(val call: PhoneCall? = null, val ended: EndedPhoneCall? = null)
+/** "Move it back here" was tapped: the Portal's move ring for [callId] is answered without another tap until [untilMs]. */
+data class PendingPull(val callId: String, val sessionId: String, val untilMs: Long)
+
+data class PhoneCallState(val call: PhoneCall? = null, val ended: EndedPhoneCall? = null, val pull: PendingPull? = null)
 
 sealed interface PhoneCallEvent {
     data class Dial(val id: String, val portal: PortalRef, val video: Boolean, val now: Long) : PhoneCallEvent
     /** The Portal's immediate answer to our ring (null reply: the request failed). */
     data class RingSent(val id: String, val reply: PortalReply?, val quietEndMin: Int?, val now: Long) : PhoneCallEvent
-    /** [portalId]: that session's Portal id from its poll (a ring names only the room). */
-    data class FromPortal(val sessionId: String, val portalId: String, val message: PortalMessage, val now: Long) : PhoneCallEvent
+    /**
+     * [portalId]: that session's Portal id from its poll (a ring names only the room).
+     * [directory]: every paired Portal by its id, so a group ring's members map to our sessions.
+     */
+    data class FromPortal(val sessionId: String, val portalId: String, val message: PortalMessage, val now: Long,
+                          val directory: Map<String, PortalRef> = emptyMap()) : PhoneCallEvent
     data class Answer(val audioOnly: Boolean, val now: Long) : PhoneCallEvent
     data class Decline(val now: Long) : PhoneCallEvent
     data class HangUp(val now: Long) : PhoneCallEvent
-    /** Our signed offer got a verified answer (true) or not. */
-    data class OfferDone(val id: String, val ok: Boolean, val now: Long) : PhoneCallEvent
-    data class MediaUp(val id: String, val now: Long) : PhoneCallEvent
-    data class MediaDown(val id: String, val now: Long) : PhoneCallEvent
+    /** Our signed offer got a verified answer (true) or not. [sessionId]: which Portal (null = the first). */
+    data class OfferDone(val id: String, val ok: Boolean, val now: Long, val sessionId: String? = null) : PhoneCallEvent
+    data class MediaUp(val id: String, val now: Long, val sessionId: String? = null) : PhoneCallEvent
+    data class MediaDown(val id: String, val now: Long, val sessionId: String? = null) : PhoneCallEvent
+    /** "To Portal": move this call to [portal]; we leave once it is connected to everyone. */
+    data class MoveTo(val portal: PortalRef, val now: Long) : PhoneCallEvent
+    /** The target Portal's immediate answer to our move ring (null: the request failed). */
+    data class MoveRingSent(val id: String, val sessionId: String, val reply: PortalReply?, val now: Long) : PhoneCallEvent
+    /** After a move to a Portal: ask it for the call back ("Move it back here"). */
+    data class PullBack(val now: Long) : PhoneCallEvent
     data class Tick(val now: Long) : PhoneCallEvent
     data object ToggleMic : PhoneCallEvent
     data object ToggleCamera : PhoneCallEvent
@@ -77,7 +154,20 @@ sealed interface PhoneCallEvent {
 sealed interface PhoneCallEffect {
     data class SendRing(val call: PhoneCall) : PhoneCallEffect
     data class SendReply(val callId: String, val portal: PortalRef, val reply: PortalReply) : PhoneCallEffect
-    data class SendEnd(val callId: String, val portal: PortalRef, val reason: EndWire) : PhoneCallEffect
+    /** [movedTo]: the Portal id the call moved to (we are leaving because of a move). */
+    data class SendEnd(val callId: String, val portal: PortalRef, val reason: EndWire, val movedTo: String? = null) : PhoneCallEffect
+    /** Offer to one more Portal in the call (camera and mic are already open). */
+    data class StartLeg(val callId: String, val portal: PortalRef) : PhoneCallEffect
+    data class ClosePeer(val sessionId: String) : PhoneCallEffect
+    /** Vouch to [to] that [newcomer] joined (it will offer to them). */
+    data class SendJoin(val callId: String, val to: PortalRef, val newcomer: PortalRef) : PhoneCallEffect
+    /** Move target: tell the Portal we are taking over from that everyone is connected. */
+    data class SendMoved(val callId: String, val to: PortalRef) : PhoneCallEffect
+    /** "To Portal": ring [to] to take this call over, naming the Portals already in it. */
+    data class SendMoveRing(val call: PhoneCall, val to: PortalRef, val members: List<PortalRef>) : PhoneCallEffect
+    /** "Move it back here": ask [to] to move the call back to this phone. */
+    data class SendPull(val callId: String, val to: PortalRef) : PhoneCallEffect
+    /** Our camera/mic state, to every Portal in the call. */
     data class SendMedia(val call: PhoneCall) : PhoneCallEffect
     /** Open camera (if [PhoneCall.cameraOn]) and mic, build the offer and POST it. */
     data class StartMedia(val call: PhoneCall) : PhoneCallEffect
@@ -108,6 +198,10 @@ object PhoneCallTimings {
     const val POLL_IN_CALL_MS = 1_000L
     /** A Portal that didn't answer a poll for this long shows as Offline. */
     const val OFFLINE_AFTER_MS = 6_000L
+    /** Once the device a call moves to is connected, the old one leaves after at most this. */
+    const val MOVE_SETTLE_MS = 8_000L
+    /** "Move it back here": the Portal's move ring is taken without a second tap for this long. */
+    const val PULL_BACK_MS = 20_000L
 
     fun pollDelayMs(state: PhoneCallState): Long = if (state.call != null) POLL_IN_CALL_MS else POLL_IDLE_MS
 }

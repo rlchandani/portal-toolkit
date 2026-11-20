@@ -44,6 +44,12 @@
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- Calling 2b, opt-in "Ring when Portal Toolkit is closed": a connectedDevice service that talks
+         to the Portals on the home network (connectedDevice needs CHANGE_NETWORK_STATE or a peer). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
+    <!-- Lets the owner (optionally) exempt Portal Toolkit from deep Doze so rings aren't delayed. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <!-- Calls with the Portals on the home Wi-Fi. Camera and mic are asked for at the first call and
          open only after Answer; nothing is recorded. The full-screen intent shows an incoming call
@@ -98,6 +104,17 @@
             android:theme="@style/Theme.PortalInstaller" android:showWhenLocked="true" android:turnScreenOn="true"
             android:launchMode="singleTop" android:excludeFromRecents="true" />
         <receiver android:name=".data.calls.CallActionReceiver" android:exported="false" />
+        <!-- Calling 2b: video messages (record / watch), background ringing and its restart after boot. -->
+        <activity android:name=".ui.calls.PhoneMessageActivity" android:exported="false"
+            android:theme="@style/Theme.PortalInstaller" android:excludeFromRecents="true" />
+        <service android:name=".data.calls.CallStandbyService" android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
+        <receiver android:name=".data.calls.CallStandbyBootReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
         <!-- Portal Toolkit updates: the installer's result, and WorkManager's foreground service typed for the download. -->
         <receiver android:name=".update.UpdateResultReceiver" android:exported="false" />

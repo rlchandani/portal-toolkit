@@ -31,8 +31,11 @@ class CallClientException(message: String, val status: Int? = null) : IOExceptio
  * (or IOException from the network) instead of returning anything unverified.
  */
 class CallClient(private val http: CallHttp, private val signer: CallSigner) {
-    suspend fun poll(endpoint: CallEndpoint, phoneName: String): PollResult {
-        val payload = call(endpoint, CallWire.POLL, CallWire.pollBody(phoneName), CallSigner.RESPONSE_DOMAIN, POLL_TIMEOUT_MS)
+    /** [waitMs] > 0: a background long-poll that parks at the Portal until a message arrives (Calling 2b). */
+    suspend fun poll(endpoint: CallEndpoint, phoneName: String, aliases: Map<String, String> = emptyMap(), background: Boolean = false,
+                     waitMs: Long = 0L): PollResult {
+        val body = CallWire.pollBody(phoneName, aliases, background, waitMs)
+        val payload = call(endpoint, CallWire.POLL, body, CallSigner.RESPONSE_DOMAIN, POLL_TIMEOUT_MS + waitMs.coerceIn(0, CallWire.MAX_WAIT_MS))
         return CallWire.parsePoll(payload, CallSigner.phoneId(endpoint.token)) ?: throw CallClientException("bad poll reply")
     }
 
