@@ -19,8 +19,8 @@ import org.junit.Test
  *
  * | Portal                    | `GET /remote/sources` secret slot | Phone shows   | Unchanged save sends |
  * |---------------------------|-----------------------------------|---------------|----------------------|
- * | old (<= 1.271)            | plaintext                         | "•••• saved"  | no secret field      |
- * | new (1.272+)              | "••••••••" + flags + key hint     | "••••XY saved"| no secret field      |
+ * | old (<= 1.272)            | plaintext                         | "•••• saved"  | no secret field      |
+ * | new (1.273+)              | "••••••••" + flags + key hint     | "••••XY saved"| no secret field      |
  * | either, nothing saved     | ""                                | nothing       | no secret field      |
  * | either, user typed secret | -                                 | -             | the typed value      |
  *

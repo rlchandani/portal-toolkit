@@ -9,7 +9,7 @@ package com.portalinstaller.data.companion
 import org.json.JSONObject
 
 /**
- * Photo-source secrets on the phone. The Portal's read never needs to (and from Hearthpane 1.272
+ * Photo-source secrets on the phone. The Portal's read never needs to (and from Hearthpane 1.273
  * does not) return them: an older Portal returns plaintext, a newer one a mask plus flags, and
  * [CompanionClient.sanitized] reduces both to `…Configured` flags (keeping an Immich key hint).
  * The form shows "•••• saved" for a saved secret and sends a secret only when the user typed one,
