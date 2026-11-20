@@ -468,6 +468,18 @@ fun ControlCenterScreen() {
                                             style = MaterialTheme.typography.titleMedium)
                                         LinearProgressIndicator(Modifier.fillMaxWidth())
                                     }
+                                } else if (state.connection == CompanionConnection.UNAUTHORIZED && state.activeDevice != null) {
+                                    // A removed phone, or one unused for 180 days, gets 401: offer the fix.
+                                    GroupCard {
+                                        Text("Pair ${state.deviceName} again",
+                                            style = MaterialTheme.typography.titleMedium)
+                                        Text("This phone's pairing ended. It was removed on the Portal, or not used for a long time. " +
+                                            "On the Portal, open Settings › Phone Remote › Show pairing code, then pair again.")
+                                        Button(onClick = {
+                                            pairAddress = state.activeDevice?.endpoint.orEmpty()
+                                            pairDialog = true
+                                        }, enabled = !state.busy) { Text("Pair again") }
+                                    }
                                 } else if (state.connection == CompanionConnection.OFFLINE && state.activeDevice != null) {
                                     GroupCard {
                                         Text("${state.deviceName} is offline",

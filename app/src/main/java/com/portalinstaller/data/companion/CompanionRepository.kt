@@ -48,6 +48,8 @@ class CompanionRepository(
     private val preloadManagement: Boolean = true,
     /** Household key source; null disables provisioning (tests, previews). */
     private val household: HouseholdKeySource? = null,
+    /** How this phone is listed in the Portal's Paired phones (e.g. the device model). */
+    private val pairLabel: String? = null,
 ) {
     private val mutableState = MutableStateFlow(ControlCenterState())
     val state: StateFlow<ControlCenterState> = mutableState.asStateFlow()
@@ -145,7 +147,7 @@ class CompanionRepository(
             try {
                 loadFailure?.let { throw it }
                 val normalized = CompanionEndpoint.normalize(endpoint)
-                val paired = withContext(io) { client.pair(normalized, pin) }
+                val paired = withContext(io) { client.pair(normalized, pin, pairLabel) }
                 if (synchronized(lock) { generation != selectedGeneration }) return@launch
                 val previous = synchronized(lock) { sessions.firstOrNull { it.device.endpoint == normalized } }
                 val provisional = CompanionDevice(previous?.device?.id ?: "legacy:${UUID.randomUUID()}", name?.takeIf { it.isNotBlank() } ?: paired.optString("name", "Portal"), normalized,
@@ -499,7 +501,9 @@ class CompanionRepository(
                 details = CompanionClient.sanitized(result, sourceCredentials = true).put("rejectedKeys", JSONArray(missing))))
         }
     }
-    fun fetchImmichAlbums(url: String, key: String): Job = command("immich/albums", JSONObject().put("url", url).put("key", key))
+    /** A blank [key] lets the Portal use its saved key for its saved server. */
+    fun fetchImmichAlbums(url: String, key: String): Job = command("immich/albums",
+        JSONObject().put("url", url).also { body -> CompanionSourceSecrets.typed(key)?.let { body.put("key", it) } })
     fun updateLayout(layout: JSONObject, expectedRevision: String? = null): Job = command("layout", JSONObject().put("layout", JSONObject(layout.toString())).apply { expectedRevision?.let { put("expectedRevision", it) } }, listOf("layout"))
     fun exportSnapshot(): Job = request { refreshRoute(it, "snapshot") }
     suspend fun exportSnapshotResult(): JSONObject? {
@@ -1008,6 +1012,6 @@ class CompanionRepository(
 
         fun create(context: Context): CompanionRepository = CompanionRepository(CompanionClient(), FileCompanionSessionStore.create(context),
             discovery = NsdCompanionDiscovery(context.applicationContext), preloadManagement = false,
-            household = PrefsHouseholdKeySource(context))
+            household = PrefsHouseholdKeySource(context), pairLabel = android.os.Build.MODEL)
     }
 }

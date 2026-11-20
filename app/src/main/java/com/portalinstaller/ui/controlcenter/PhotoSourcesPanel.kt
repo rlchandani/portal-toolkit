@@ -29,6 +29,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.portalinstaller.data.companion.CompanionPhotos
+import com.portalinstaller.data.companion.CompanionSourceSecrets
 import com.portalinstaller.ui.common.ChoiceDropdown
 import com.portalinstaller.ui.common.ChoiceOption
 import com.portalinstaller.ui.common.InlineSettingRow
@@ -95,12 +96,12 @@ internal fun PhotoSourcesPanel(
     val drafts = rememberSaveable(sources.toString(), saver = sourceDraftSaver) { mutableStateMapOf<String, String>().apply {
         fieldsFor("folder").plus(fieldsFor("immich")).plus(fieldsFor("dav"))
             .plus(fieldsFor("smb")).plus(fieldsFor("album")).plus(fieldsFor("web")).forEach { field ->
-                put(field.key, sources.optString(field.key,
+                // A secret draft always starts empty: whatever the Portal read held is never pre-filled.
+                put(field.key, if (field.secret) "" else sources.optString(field.key,
                     if (field.key == "folderPath") "/sdcard/Pictures/Immortal" else ""))
             }
     } }
-    fun configured(key: String): Boolean = sources.optBoolean("${key}Configured") ||
-        sources.optBoolean("has${key.replaceFirstChar(Char::titlecase)}")
+    fun configured(key: String): Boolean = CompanionSourceSecrets.configured(sources, key)
     fun sameEndpoint(): Boolean = when (selected) {
         "immich" -> drafts["immichUrl"].orEmpty().trim() == sources.optString("immichUrl")
         "smb" -> listOf("smbHost", "smbShare", "smbUser").all { drafts[it].orEmpty().trim() == sources.optString(it) }
@@ -108,7 +109,7 @@ internal fun PhotoSourcesPanel(
         else -> true
     }
     fun usableSecret(key: String): Boolean =
-        drafts[key].orEmpty().isNotBlank() || configured(key) && sameEndpoint()
+        CompanionSourceSecrets.typed(drafts[key].orEmpty()) != null || configured(key) && sameEndpoint()
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         SectionTitle("Photo source")
         GroupCard {
@@ -126,7 +127,13 @@ internal fun PhotoSourcesPanel(
                     value = drafts[field.key].orEmpty(), onValueChange = { drafts[field.key] = it },
                     label = { Text(field.title) }, modifier = Modifier.fillMaxWidth(),
                     singleLine = true, enabled = !working,
-                    placeholder = { if (field.secret && configured(field.key) && sameEndpoint()) Text("Keep saved credential") },
+                    placeholder = {
+                        val saved = CompanionSourceSecrets.savedLabel(sources, field.key)
+                        if (field.secret && saved != null && sameEndpoint()) Text(saved)
+                    },
+                    supportingText = if (field.secret && configured(field.key) && sameEndpoint()) {
+                        { Text("Leave empty to keep the saved one.") }
+                    } else null,
                     visualTransformation = if (field.secret) PasswordVisualTransformation() else VisualTransformation.None)
             }
             if (selected == "folder") {
@@ -140,12 +147,11 @@ internal fun PhotoSourcesPanel(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Button(onClick = {
-                    val body = JSONObject()
+                    // Secrets go only when typed: blank (or a stray mask) keeps the Portal's saved one.
+                    val fields = fieldsFor(selected)
+                    val body = CompanionSourceSecrets.body(fields.map { it.key },
+                        fields.filter { it.secret }.map { it.key }.toSet(), drafts)
                     if (selected == "default") body.put("source", "default")
-                    fieldsFor(selected).forEach {
-                        val draft = drafts[it.key].orEmpty()
-                        if (!it.secret || draft.isNotEmpty()) body.put(it.key, if (it.secret) draft else draft.trim())
-                    }
                     onSave(body)
                 }, enabled = !working && when (selected) {
                     "folder" -> runCatching { CompanionPhotos.folder(drafts["folderPath"].orEmpty()) }.isSuccess
