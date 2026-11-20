@@ -50,6 +50,14 @@ object HouseWords {
         people.takeIf { it.isNotEmpty() }?.joinToString(", "),
     ).joinToString(" · ").ifBlank { "No lights or sensors" }
 
+    /** Who's in a room for its line: the names the Portal allowed, else "someone here" while it's occupied. */
+    fun roomPeople(view: HouseRoomView?): List<String> = when {
+        view == null -> emptyList()
+        view.people.isNotEmpty() -> view.people.map { it.name }
+        view.occupancy > 0f -> listOf("someone here")
+        else -> emptyList()
+    }
+
     fun pretty(s: String): String = s.replace('_', ' ').replaceFirstChar { it.uppercase() }
 
     private fun trim(v: Double): String = if (v % 1.0 == 0.0) v.toLong().toString() else "%.1f".format(v)

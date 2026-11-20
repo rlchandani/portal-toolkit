@@ -69,11 +69,19 @@ data class HouseScene(val id: String, val name: String, val tone: String, val ic
 @Immutable
 data class HouseGlow(val fx: Float, val fy: Float, val rgb: Int, val strength: Float)
 
-/** A room's live summary from the Portal (Hearthpane's `CcRoomView`). */
+/** A person the Portal placed in a room (only when the household shows names and they allowed it). */
+@Immutable
+data class HouseRoomPerson(val key: String, val name: String, val initial: String, val rgb: Int)
+
+/**
+ * A room's live summary from the Portal (Hearthpane's `CcRoomView`). [occupancy] 0..1 is the Portal's
+ * fused "someone is here" (0 = nobody, or the household turned it off); [people] are named chips the
+ * Portal's privacy policy already allowed. An older Portal sends neither.
+ */
 @Immutable
 data class HouseRoomView(val id: String, val floor: String, val lightsOn: Int, val lights: Int, val temp: Double?,
                          val humidity: Int?, val motion: Boolean, val open: Int, val powerW: Double?, val climate: String?,
-                         val glows: List<HouseGlow>)
+                         val glows: List<HouseGlow>, val occupancy: Float = 0f, val people: List<HouseRoomPerson> = emptyList())
 
 @Immutable
 data class HouseCarRow(val icon: String, val label: String, val value: String, val tone: String)
