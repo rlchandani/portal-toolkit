@@ -67,6 +67,7 @@ class HouseRepositoryTest {
         r.poll(); r.poll()
         assertEquals(0L, JSONObject(http.calls[0].body!!).getLong("since"))
         assertEquals(7L, JSONObject(http.calls[1].body!!).getLong("since"))
+        assertTrue("every poll offers section versions", JSONObject(http.calls[0].body!!).has("sv"))
     }
 
     @Test fun olderHearthpaneAsksForAnUpdate() = runTest {

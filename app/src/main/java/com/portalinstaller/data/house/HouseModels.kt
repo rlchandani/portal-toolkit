@@ -115,6 +115,8 @@ data class HouseSnapshot(
     val scenes: List<HouseScene> = emptyList(),
     val rooms: List<HouseRoomView> = emptyList(),
     val tesla: HouseTesla? = null,
+    /** The Portal's version of each derived section held here (`sv`); empty for an older Portal. */
+    val sectionVersions: Map<String, String> = emptyMap(),
 ) {
     fun entity(id: String): HouseEntity? = entities[id]
     fun room(id: String): HouseRoomView? = rooms.firstOrNull { it.id == id }
