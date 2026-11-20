@@ -31,7 +31,9 @@ object PhoneGroupMachine {
         return when {
             move?.to == s && leg == null -> fromTarget(state, call, msg, e.now)
             leg != null -> fromLeg(state, call, leg, msg, e.directory, e.now)
-            msg is PortalMessage.Pull && call.cameFrom == s -> pulled(state, call, e.directory[e.portalId], e.now)
+            msg is PortalMessage.Pull && call.cameFrom == s ->
+                if (e.now - (call.cameFromMs ?: Long.MIN_VALUE / 2) in 0..PhoneCallTimings.PULL_WINDOW_MS) pulled(state, call, e.directory[e.portalId], e.now)
+                else PhoneCallStep(state)
             msg is PortalMessage.Moved && move?.to == s -> moved(state, call, e.now)
             s != call.portal.sessionId -> PhoneCallStep(state)
             msg is PortalMessage.Moved -> moved(state, call, e.now)
@@ -207,7 +209,8 @@ object PhoneGroupMachine {
         val next = call.copy(legs = call.legs - leg, notice = PhoneNotice(leg.portal.name,
             if (moveOff) "${leg.portal.name} didn’t pick up · the call stays here" else text, now),
             move = if (moveOff) null else call.move?.takeUnless { it.from == leg.portal.sessionId },
-            cameFrom = if (call.move?.from == leg.portal.sessionId) leg.portal.sessionId else call.cameFrom)
+            cameFrom = if (call.move?.from == leg.portal.sessionId) leg.portal.sessionId else call.cameFrom,
+            cameFromMs = if (call.move?.from == leg.portal.sessionId) now else call.cameFromMs)
         val effects = buildList {
             if (tell) add(Fx.SendEnd(call.id, leg.portal, reason))
             add(Fx.ClosePeer(leg.portal.sessionId))
@@ -225,7 +228,8 @@ object PhoneGroupMachine {
             remoteMicOn = heir.remoteMicOn, legs = call.legs - heir, notice = PhoneNotice(old.name, text, now),
             // The Portal we moved from just left: the move is done, and only it may ask for the call back.
             move = call.move?.takeUnless { it.from == old.sessionId },
-            cameFrom = if (call.move?.from == old.sessionId) old.sessionId else call.cameFrom)
+            cameFrom = if (call.move?.from == old.sessionId) old.sessionId else call.cameFrom,
+            cameFromMs = if (call.move?.from == old.sessionId) now else call.cameFromMs)
         return PhoneCallStep(state.copy(call = next), listOfNotNull(first, Fx.ClosePeer(old.sessionId)))
     }
 

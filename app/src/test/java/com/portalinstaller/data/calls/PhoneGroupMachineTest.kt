@@ -122,6 +122,7 @@ class PhoneGroupMachineTest {
         assertEquals(living.sessionId, left.call!!.cameFrom)
         assertNull(left.call!!.move)
         assertEquals(left, reduce(left, from(kitchen, PortalMessage.Pull(id), t0 + 5_000)).state)
+        assertEquals("too late", left, reduce(left, from(living, PortalMessage.Pull(id), t0 + 4_001 + PhoneCallTimings.PULL_WINDOW_MS)).state)
         val pulled = reduce(left, from(living, PortalMessage.Pull(id), t0 + 5_000))
         val ringBack = pulled.effects.filterIsInstance<Fx.SendMoveRing>().single()
         assertEquals(living, ringBack.to)

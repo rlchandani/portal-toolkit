@@ -86,6 +86,8 @@ data class PhoneCall(
     val move: PhoneMove? = null,
     /** The Portal this call moved here from: only it may ask for the call back ("Move it back here"). */
     val cameFrom: String? = null,
+    /** When the call moved here: a pull counts only for [PhoneCallTimings.PULL_WINDOW_MS] after. */
+    val cameFromMs: Long? = null,
     /** The other side answered by itself (Grandma mode): no adding, no moving. */
     val remoteAutoAnswered: Boolean = false,
     val notice: PhoneNotice? = null,
@@ -202,6 +204,8 @@ object PhoneCallTimings {
     const val MOVE_SETTLE_MS = 8_000L
     /** "Move it back here": the Portal's move ring is taken without a second tap for this long. */
     const val PULL_BACK_MS = 20_000L
+    /** The Portal a call moved from may ask for it back only this soon after the move. */
+    const val PULL_WINDOW_MS = 120_000L
 
     fun pollDelayMs(state: PhoneCallState): Long = if (state.call != null) POLL_IN_CALL_MS else POLL_IDLE_MS
 }
