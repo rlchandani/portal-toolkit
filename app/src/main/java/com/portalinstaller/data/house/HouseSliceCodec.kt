@@ -52,7 +52,21 @@ internal object HouseSliceCodec {
         o.dbl("temp"), o.int("humidity"), o.optBoolean("motion"), o.optInt("open"), o.dbl("powerW"), o.str("climate"),
         objects(o.optJSONArray("glows")).map { g ->
             HouseGlow(g.optDouble("fx", 0.5).toFloat(), g.optDouble("fy", 0.5).toFloat(), g.optInt("rgb"), g.optDouble("k", 1.0).toFloat())
-        })
+        },
+        occupancy = o.optDouble("occ", 0.0).toFloat().takeIf { it.isFinite() }?.coerceIn(0f, 1f) ?: 0f,
+        people = objects(o.optJSONArray("ppl")).mapNotNull(::person).take(MAX_ROOM_PEOPLE))
+
+    /** One placed person; anything malformed is dropped (the Portal already decided who may appear). */
+    private fun person(p: JSONObject): HouseRoomPerson? {
+        val name = p.optString("n").trim().take(MAX_NAME).takeIf { it.isNotEmpty() } ?: return null
+        val initial = p.optString("i").trim().take(2).ifEmpty { name.take(1).uppercase() }
+        return HouseRoomPerson(p.optString("k").take(MAX_KEY), name, initial, p.optInt("c") and RGB_MASK)
+    }
+
+    private const val MAX_ROOM_PEOPLE = 4
+    private const val MAX_NAME = 20
+    private const val MAX_KEY = 80
+    private const val RGB_MASK = 0xFFFFFF
 }
 
 /** The Tesla screen's answer (pure). */

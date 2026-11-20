@@ -68,7 +68,7 @@ internal fun LazyListScope.houseMap(
     items(model.rooms, key = { "room:${it.first}" }) { (id, name) ->
         val first = model.rooms.first().first == id
         val last = model.rooms.last().first == id
-        RoomRow(name, s.room(id)?.let { v -> HouseWords.roomLine(v, emptyList()) } ?: "", s.room(id)?.lightsOn ?: 0,
+        RoomRow(name, s.room(id)?.let { v -> HouseWords.roomLine(v, HouseWords.roomPeople(v)) } ?: "", s.room(id)?.lightsOn ?: 0,
             s.room(id)?.lights ?: 0, enabled, roomShape(first, last), { onRoom(id) }) { on -> onRoomLights(id, on) }
     }
 }

@@ -52,8 +52,10 @@ internal enum class HouseLens(val label: String) { LIVE("Live"), CLIMATE("Climat
 
 /**
  * The live map card (mock `.pplan`): floor tabs, Live / Climate lenses, rooms glowing with their
- * lights' real colours, amber open doors and windows, blue motion. Tap a room for its sheet.
- * Drawn on one canvas from the Portal's room summaries; nothing here reads the network.
+ * lights' real colours, amber open doors and windows, blue motion, and — as the Portal allows — a soft
+ * ring where someone is and recognised people's chips. Tap a room for its sheet. Drawn on one static
+ * canvas from the Portal's room summaries, plus [HousePulseLayer] only while someone is home; nothing
+ * here reads the network.
  */
 @Composable
 internal fun HouseMapCard(floors: List<HouseFloor>, floorId: String?, lens: HouseLens, s: HouseSnapshot,
@@ -63,8 +65,11 @@ internal fun HouseMapCard(floors: List<HouseFloor>, floorId: String?, lens: Hous
     val measurer = rememberTextMeasurer()
     val label = MaterialTheme.colorScheme.onSurface
     val fit = remember(floor) { PlanFit.of(floor) }
+    val chips = rememberChips(floor, s)
+    val pulses = rememberPulses(floor, s)
+    val ring = colors.planBg
     Box(Modifier.fillMaxWidth().height(MAP_HEIGHT.dp).clip(HouseShapes.card).background(colors.planBg)
-        .semantics { contentDescription = "Floor plan, ${floor.name}, ${floor.rooms.size} rooms" }) {
+        .semantics { contentDescription = planDescription(floor, s) }) {
         Canvas(Modifier.fillMaxSize().padding(start = 6.dp, end = 6.dp, top = 44.dp, bottom = 6.dp)
             .pointerInput(floor) { detectTapGestures { p -> fit.roomAt(floor, p, size.width.toFloat(), size.height.toFloat())?.let(onRoom) } }) {
             val f = fit.frame(size.width, size.height)
@@ -76,7 +81,9 @@ internal fun HouseMapCard(floors: List<HouseFloor>, floorId: String?, lens: Hous
                 drawLine(if (open) colors.amber else colors.roomLine, a, b, if (open) 5f * density else 3f * density)
             }
             floor.rooms.forEach { r -> drawLabel(measurer, r, f, fit, s, lens, label) }
+            if (lens == HouseLens.LIVE) drawChips(measurer, chips, f, fit, ring)
         }
+        if (lens == HouseLens.LIVE) HousePulseLayer(pulses, fit, Modifier.fillMaxSize().padding(start = 6.dp, end = 6.dp, top = 44.dp, bottom = 6.dp))
         Row(Modifier.align(Alignment.TopStart).padding(8.dp).horizontalScroll(rememberScrollState())) {
             if (floors.size > 1) Segments(floors.map { it.id to it.name.take(SHORT_NAME) }, floor.id, onFloor)
             Box(Modifier.padding(start = 8.dp)) { Segments(HouseLens.entries.map { it.name to it.label }, lens.name) { onLens(HouseLens.valueOf(it)) } }
@@ -132,6 +139,19 @@ private fun DrawScope.drawLabel(m: TextMeasurer, r: HouseRoom, f: PlanFrame, fit
         overflow = TextOverflow.Ellipsis, maxLines = 2,
         constraints = androidx.compose.ui.unit.Constraints(maxWidth = (r.w * px - 6 * density).toInt().coerceAtLeast(1)))
     drawText(layout, topLeft = Offset(tl.x + 3 * density, tl.y + 2 * density))
+}
+
+/** "Floor plan, Ground, 6 rooms, someone in Kitchen, Maya in Living" (names only when the Portal sent them). */
+internal fun planDescription(floor: HouseFloor, s: HouseSnapshot): String {
+    val who = floor.rooms.mapNotNull { r ->
+        val v = s.room(r.id) ?: return@mapNotNull null
+        when {
+            v.people.isNotEmpty() -> "${v.people.joinToString(" and ") { it.name }} in ${r.name}"
+            v.occupancy > 0f -> "someone in ${r.name}"
+            else -> null
+        }
+    }
+    return (listOf("Floor plan, ${floor.name}, ${floor.rooms.size} rooms") + who).joinToString(", ")
 }
 
 /** Climate lens: 0 (cold) … 1 (warm) between 16 °C/61 °F and 24 °C/75 °F, as on the Portal. */

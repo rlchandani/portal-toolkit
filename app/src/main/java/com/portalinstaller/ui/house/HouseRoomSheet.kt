@@ -61,7 +61,7 @@ internal fun HouseRoomSheet(roomId: String, plan: HousePlan?, s: HouseSnapshot, 
         LazyColumn(contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 32.dp)) {
             item(key = "title") {
                 Text(room.name, fontFamily = FontFamily.Serif, fontSize = 24.sp, fontWeight = FontWeight.Medium)
-                Text(HouseWords.roomLine(s.room(roomId), emptyList()), Modifier.padding(bottom = 10.dp),
+                Text(HouseWords.roomLine(s.room(roomId), HouseWords.roomPeople(s.room(roomId))), Modifier.padding(bottom = 10.dp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             camera?.let { cam ->
