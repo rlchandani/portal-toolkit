@@ -374,6 +374,8 @@ fun ControlCenterScreen() {
                     com.portalinstaller.ui.timers.TimersPageScreen { detail = CenterDetail.NONE }
                 else if (shown == CenterDetail.CHORES.name)
                     com.portalinstaller.ui.chores.ChoresPageScreen { detail = CenterDetail.NONE }
+                else if (shown == CenterDetail.REMINDERS.name)
+                    com.portalinstaller.ui.reminders.RemindersPageScreen { detail = CenterDetail.NONE }
                 else if (shown == CenterDetail.CALLS.name)
                     com.portalinstaller.ui.calls.CallsPageScreen { detail = CenterDetail.NONE }
                 else if (shown == CenterDetail.ROUTINES.name)
@@ -447,7 +449,7 @@ fun ControlCenterScreen() {
                                         com.portalinstaller.ui.guests.GuestScreen(guests)
                                     }
                                     CenterDetail.ROUTINES, CenterDetail.MUSIC, CenterDetail.TIMERS, CenterDetail.CHORES,
-                                    CenterDetail.CALLS -> Unit // rendered above, outside this column
+                                    CenterDetail.REMINDERS, CenterDetail.CALLS -> Unit // rendered above, outside this column
                                     CenterDetail.NONE -> Unit
                                 }
                             }
@@ -513,6 +515,7 @@ fun ControlCenterScreen() {
                                         ActionRow("Call everyone", "Chime and say a message in every room.", "scenes") { detail = CenterDetail.DINNER }
                                         ActionRow("Routines", "Picture checklists for mornings and bedtime.", "scenes") { detail = CenterDetail.ROUTINES }
                                         ActionRow("Chores", "Stars for kids, goals and your OK.", "scenes") { detail = CenterDetail.CHORES }
+                                        ActionRow("Reminders", "For the household or one person, on every Portal.", "list") { detail = CenterDetail.REMINDERS }
                                         ActionRow("Guest card", "Wi-Fi QR and house basics for visitors.", "home") { detail = CenterDetail.GUESTS }
                                     }
                                     MediaPanel(state, vm)

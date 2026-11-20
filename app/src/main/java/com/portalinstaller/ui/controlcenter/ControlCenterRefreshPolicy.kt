@@ -14,7 +14,7 @@ internal enum class CenterTab(val label: String, val glyph: String) {
 /** Bottom-bar tabs. Apps is reached from the Manage apps card on Home, not the bar. */
 internal val navigationTabs: List<CenterTab> = CenterTab.entries.filter { it != CenterTab.APPS }
 
-internal enum class CenterDetail { NONE, LAYOUT, SCENES, JARVIS, SNAPSHOTS, OPERATIONS, DINNER, ROUTINES, GUESTS, MUSIC, TIMERS, CHORES, CALLS }
+internal enum class CenterDetail { NONE, LAYOUT, SCENES, JARVIS, SNAPSHOTS, OPERATIONS, DINNER, ROUTINES, GUESTS, MUSIC, TIMERS, CHORES, REMINDERS, CALLS }
 
 internal enum class CenterRefresh { STATUS, LAYOUT, SCENES, JARVIS, OPERATIONS, SOURCES, PHOTOS, SETTINGS, APPS, CATALOG }
 
@@ -25,7 +25,8 @@ internal fun visiblePageRefreshes(tab: CenterTab, detail: CenterDetail, showCata
         CenterDetail.JARVIS -> listOf(CenterRefresh.JARVIS)
         CenterDetail.OPERATIONS -> listOf(CenterRefresh.OPERATIONS)
         CenterDetail.SNAPSHOTS, CenterDetail.DINNER, CenterDetail.ROUTINES, CenterDetail.GUESTS,
-        CenterDetail.MUSIC, CenterDetail.TIMERS, CenterDetail.CHORES, CenterDetail.CALLS -> emptyList() // feature screens own their refresh
+        CenterDetail.MUSIC, CenterDetail.TIMERS, CenterDetail.CHORES, CenterDetail.REMINDERS,
+        CenterDetail.CALLS -> emptyList() // feature screens own their refresh
         CenterDetail.NONE -> when (tab) {
             CenterTab.PHOTOS -> listOf(CenterRefresh.SOURCES, CenterRefresh.PHOTOS, CenterRefresh.SETTINGS)
             CenterTab.SETTINGS -> listOf(CenterRefresh.SETTINGS)
